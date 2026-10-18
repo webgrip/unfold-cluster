@@ -20,7 +20,7 @@ One manual workflow run does all of it:
 1. OpenTofu creates the network, firewall and four servers from the Talos snapshot. They boot into Talos maintenance mode.
 2. OpenTofu generates the cluster's Talos secrets, applies a machine config to every node over the Talos API, and bootstraps etcd on `unfold-cp-1`.
 3. Talos installs its inline manifests on the control planes: Cilium as the network, the Hetzner cloud controller with its API token, the Flux operator, and a Flux instance that reconciles `kubernetes/clusters/main` from the public GitHub mirror.
-4. From then on Flux owns everything under `kubernetes/`. Cilium, the cloud controller and Flux itself are upgraded by changing their versions in `infra/bootstrap-manifests.tf` and applying.
+4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later. Cilium, the cloud controller and Flux itself are upgraded by changing their versions in `infra/bootstrap-manifests.tf` and applying.
 
 ## Machines
 
