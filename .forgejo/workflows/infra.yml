@@ -12,6 +12,12 @@ on:
     paths:
       - infra/**
       - .forgejo/workflows/infra.yml
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Type "apply" to create or change the Hetzner resources in the plan this run makes
+        required: true
+        default: plan-only
 
 concurrency:
   group: infra-state
@@ -72,6 +78,9 @@ jobs:
       - name: Plan
         run: tofu plan -lock-timeout=5m -out=infra.tfplan
 
-      - name: Apply the reviewed plan on main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Apply, only when asked for by hand on main
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
         run: tofu apply -lock-timeout=5m infra.tfplan
