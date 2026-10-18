@@ -31,7 +31,7 @@ output "talosconfig" {
 
 output "kubeconfig" {
   description = "Admin kubeconfig for the cluster. Read with: tofu output -raw kubeconfig"
-  value       = talos_cluster_kubeconfig.cluster.kubeconfig_raw
+  value       = one(talos_cluster_kubeconfig.cluster[*].kubeconfig_raw)
   sensitive   = true
 }
 
@@ -39,4 +39,9 @@ output "talos_machine_secrets" {
   description = "The cluster's Talos secrets bundle, for the owner's offline escrow. Read with: tofu output -raw talos_machine_secrets"
   value       = yamlencode(talos_machine_secrets.cluster.machine_secrets)
   sensitive   = true
+}
+
+output "headscale_ipv4" {
+  description = "Create the A record for headscale_hostname with this address, unproxied, before generating the tailnet key."
+  value       = hcloud_primary_ip.headscale.ip_address
 }

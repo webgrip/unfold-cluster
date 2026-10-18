@@ -34,6 +34,8 @@ env:
   TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
   TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
   TF_VAR_state_passphrase: ${{ secrets.STATE_PASSPHRASE }}
+  TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
+  TF_VAR_tailscale_authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
 jobs:
   plan-or-apply:
@@ -60,7 +62,7 @@ jobs:
       - name: Refuse to run without credentials
         run: |
           set -eu
-          for name in HCLOUD_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_talos_snapshot_id TF_VAR_admin_cidrs TF_VAR_state_passphrase; do
+          for name in HCLOUD_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_admin_cidrs TF_VAR_state_passphrase TF_VAR_admin_ssh_public_key; do
             eval "value=\${$name:-}"
             [ -n "$value" ] || { echo "::error::$name is not set for this repository"; exit 1; }
           done

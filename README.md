@@ -15,12 +15,25 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 
 ## From nothing to GitOps
 
-One manual workflow run does all of it:
+Two manual workflow runs, with one manual step between them:
 
-1. OpenTofu creates the network, firewall and four servers from the Talos snapshot. They boot into Talos maintenance mode.
-2. OpenTofu generates the cluster's Talos secrets, applies a machine config to every node over the Talos API, and bootstraps etcd on `unfold-cp-1`.
-3. Talos installs its inline manifests on the control planes: Cilium as the network, the Hetzner cloud controller with its API token, the Flux operator, and a Flux instance that reconciles `kubernetes/clusters/main` from the public GitHub mirror.
-4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later. Cilium, the cloud controller and Flux itself are upgraded by changing their versions in `infra/bootstrap-manifests.tf` and applying.
+1. **First apply.** With no `TAILSCALE_AUTHKEY` set, OpenTofu creates only the network, the firewalls and `unfold-headscale`, a small server running Headscale, the self-hosted coordination server of the admin tailnet. No cluster node exists yet.
+2. **Between the runs, by hand.**
+   1. In Cloudflare, create an A record for `headscale.webgrip.dev` pointing at the `headscale_ipv4` output, **DNS only** (grey cloud), because Headscale serves its own TLS and Tailscale's protocol does not pass Cloudflare's proxy.
+   2. Wait until `https://headscale.webgrip.dev/health` answers; Headscale fetches its certificate from Let's Encrypt on first contact.
+   3. Make the tailnet key:
+      ```sh
+      ssh admin@headscale.webgrip.dev
+      sudo headscale users create nodes
+      sudo headscale users list
+      sudo headscale preauthkeys create --user <ID of nodes from the list> --reusable --expiration 8760h
+      ```
+   4. Store the key as the repository secret `TAILSCALE_AUTHKEY`, and in the password manager.
+   5. Build the Talos snapshot from `talos/schematics/cloud.yaml` and set `TALOS_SNAPSHOT_ID`.
+3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator and a Flux instance that reconciles `kubernetes/clusters/main` from the public GitHub mirror.
+4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
+
+Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
 
 ## Machines
 
@@ -28,6 +41,7 @@ One manual workflow run does all of it:
 | --- | --- | --- | --- |
 | `unfold-cp-1` to `-3` | Cloud CPX22 | `10.64.0.11` to `.13` | control planes, one placement group |
 | `unfold-app-1` | Cloud CPX32 | `10.64.0.21` | Unfold, ploegd and their databases only (label and taint `node.webgrip.io/pool=unfold`) |
+| `unfold-headscale` | Cloud CPX02 | public only | Headscale, the admin tailnet's coordination server and relay |
 | `unfold-metal-1` | Robot AX41 | `10.64.1.31` on the vSwitch | agent Runs and CI, both under Kata; not in `infra/` yet |
 
 The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, which is why Cilium's MTU is 1350.
@@ -46,8 +60,10 @@ The workflow needs, on this repository in Forgejo:
 | variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
 | variable | `TALOS_SNAPSHOT_ID` | the Hetzner snapshot built from `talos/schematics/cloud.yaml` |
 | variable | `ADMIN_CIDRS` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
+| variable | `ADMIN_SSH_PUBLIC_KEY` | the owner's SSH public key, the only way into the Headscale server |
+| secret | `TAILSCALE_AUTHKEY` | the reusable Headscale pre-auth key; leave unset for the first apply |
 
-Without them the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
+Without the secrets and variables other than `TAILSCALE_AUTHKEY` and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
 ## Bootstrap secrets
 
@@ -64,4 +80,6 @@ The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu outpu
 
 * **Kubernetes API endpoint.** The cluster endpoint is `unfold-cp-1`'s private address. Talos's Layer 2 VIP does not work on Hetzner Cloud; the choice is Talos's Hetzner floating-IP VIP or a private load balancer.
 * **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, and that Cilium's MTU is right on the vSwitch path, are proven only by the first apply.
+* **CI is not on the tailnet.** OpenTofu still reaches the Talos API from the Forgejo runners over the internet, so `ADMIN_CIDRS` keeps the runners' address until CI joins the tailnet. Closing the firewall completely waits for that.
+* **Tailnet policy** is allow-all for now; an ACL file belongs on the Headscale server before anyone but the owner joins.
 * **Storage Box** for backups, **OpenBao**, and the AX41 are not in the code yet.

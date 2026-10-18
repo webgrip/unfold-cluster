@@ -10,8 +10,9 @@ variable "location" {
 }
 
 variable "talos_snapshot_id" {
-  description = "Id of the Hetzner snapshot built from talos/schematics/cloud.yaml at the Talos version in talos/talenv.yaml."
+  description = "Id of the Hetzner snapshot built from talos/schematics/cloud.yaml at the Talos version in talos/talenv.yaml. Needed once the cluster nodes are created."
   type        = string
+  default     = ""
 }
 
 variable "control_plane_server_type" {
@@ -58,7 +59,7 @@ variable "hcloud_token" {
 variable "talos_cloud_schematic" {
   description = "Image Factory schematic id of talos/schematics/cloud.yaml."
   type        = string
-  default     = "e6f2695f46beded22e55354c7bf5189c080e726d840f093384f54d07294b9939"
+  default     = "bd06ca487272b755c51239191fb53b48470a1daf0fe0b628e424b67dd66cf1f4"
 }
 
 variable "talos_version" {
@@ -77,4 +78,34 @@ variable "gitops_url" {
   description = "Repository Flux reconciles from: the public GitHub mirror, so production keeps reconciling when the homelab is down."
   type        = string
   default     = "https://github.com/webgrip/unfold-cluster.git"
+}
+
+variable "headscale_server_type" {
+  description = "The small cloud server that runs Headscale, the self-hosted coordination server of the admin tailnet."
+  type        = string
+  default     = "cpx02"
+}
+
+variable "headscale_hostname" {
+  description = "Public DNS name of Headscale. Its A record points at the headscale_ipv4 output and is created by hand in Cloudflare, unproxied."
+  type        = string
+  default     = "headscale.webgrip.dev"
+}
+
+variable "acme_email" {
+  description = "Optional contact address Let's Encrypt uses for Headscale's certificate expiry notices. Empty sends none."
+  type        = string
+  default     = ""
+}
+
+variable "admin_ssh_public_key" {
+  description = "The owner's SSH public key, the only way into the Headscale server."
+  type        = string
+}
+
+variable "tailscale_authkey" {
+  description = "Reusable Headscale pre-auth key the Talos nodes join the tailnet with. Null until Headscale runs; while null, no cluster node is created."
+  type        = string
+  default     = null
+  sensitive   = true
 }

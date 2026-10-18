@@ -4,3 +4,4 @@ customization:
     officialExtensions:
       - siderolabs/qemu-guest-agent
       - siderolabs/gvisor
+      - siderolabs/tailscale

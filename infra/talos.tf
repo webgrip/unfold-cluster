@@ -62,6 +62,18 @@ resource "talos_machine_secrets" "cluster" {
   talos_version = var.talos_version
 }
 
+locals {
+  tailscale_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "ExtensionServiceConfig"
+    name       = "tailscale"
+    environment = [
+      "TS_AUTHKEY=${coalesce(var.tailscale_authkey, "unset")}",
+      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false",
+    ]
+  })
+}
+
 data "talos_machine_configuration" "control_plane" {
   cluster_name       = local.cluster_name
   cluster_endpoint   = local.cluster_endpoint
@@ -71,7 +83,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = var.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = [local.common_patch, local.control_plane_patch]
+  config_patches     = [local.common_patch, local.control_plane_patch, local.tailscale_patch]
 }
 
 data "talos_machine_configuration" "worker" {
@@ -83,7 +95,7 @@ data "talos_machine_configuration" "worker" {
   kubernetes_version = var.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = [local.common_patch]
+  config_patches     = [local.common_patch, local.tailscale_patch]
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {
@@ -122,6 +134,8 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
 }
 
 resource "talos_machine_bootstrap" "cluster" {
+  count = local.cluster_enabled ? 1 : 0
+
   client_configuration = talos_machine_secrets.cluster.client_configuration
   node                 = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
   endpoint             = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
@@ -137,6 +151,8 @@ data "talos_client_configuration" "cluster" {
 }
 
 resource "talos_cluster_kubeconfig" "cluster" {
+  count = local.cluster_enabled ? 1 : 0
+
   client_configuration = talos_machine_secrets.cluster.client_configuration
   node                 = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
   endpoint             = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
