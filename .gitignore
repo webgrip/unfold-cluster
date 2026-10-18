@@ -1,0 +1,7 @@
+infra/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+talos/out/
+talosconfig
+kubeconfig
