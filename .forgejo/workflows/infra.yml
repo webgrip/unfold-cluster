@@ -1,0 +1,76 @@
+---
+name: infra
+
+on:
+  pull_request:
+    paths:
+      - infra/**
+      - .forgejo/workflows/infra.yml
+  push:
+    branches:
+      - main
+    paths:
+      - infra/**
+      - .forgejo/workflows/infra.yml
+
+concurrency:
+  group: infra-state
+  cancel-in-progress: false
+
+env:
+  TOFU_VERSION: 1.13.1
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+  HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.STATE_S3_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_KEY }}
+  TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
+
+jobs:
+  plan-or-apply:
+    runs-on: docker
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install OpenTofu with a verified checksum
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -eu
+          base="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}"
+          archive="tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/tofu_${TOFU_VERSION}_SHA256SUMS"
+          grep " ${archive}\$" "tofu_${TOFU_VERSION}_SHA256SUMS" | sha256sum -c -
+          tar -xzf "${archive}" tofu
+          install -m 0755 tofu /usr/local/bin/tofu
+          tofu version
+
+      - name: Refuse to run without credentials
+        run: |
+          set -eu
+          for name in HCLOUD_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_talos_snapshot_id; do
+            eval "value=\${$name:-}"
+            [ -n "$value" ] || { echo "::error::$name is not set for this repository"; exit 1; }
+          done
+
+      - name: Format
+        run: tofu fmt -check -recursive
+
+      - name: Init
+        run: >-
+          tofu init
+          -backend-config="bucket=${{ vars.STATE_BUCKET }}"
+          -backend-config="endpoints={s3=\"${{ vars.STATE_ENDPOINT }}\"}"
+
+      - name: Validate
+        run: tofu validate
+
+      - name: Plan
+        run: tofu plan -lock-timeout=5m -out=infra.tfplan
+
+      - name: Apply the reviewed plan on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: tofu apply -lock-timeout=5m infra.tfplan

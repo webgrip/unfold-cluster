@@ -1,0 +1,6 @@
+---
+machine:
+  nodeLabels:
+    node.webgrip.io/pool: unfold
+  nodeTaints:
+    node.webgrip.io/pool: unfold:NoSchedule
