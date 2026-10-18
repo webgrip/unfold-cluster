@@ -27,7 +27,7 @@ variable "unfold_worker_server_type" {
 }
 
 variable "admin_cidrs" {
-  description = "Addresses allowed to reach the Talos and Kubernetes APIs from the internet. Empty after bootstrap: admin traffic then arrives over WireGuard or Tailscale."
+  description = "Addresses allowed to reach the Talos and Kubernetes APIs from the internet, as a JSON list. Must include the public address the Forgejo runners leave from, because OpenTofu configures the nodes over the Talos API. Both APIs require client certificates."
   type        = list(string)
   default     = []
 }
@@ -36,4 +36,45 @@ variable "vswitch_id" {
   description = "Robot vSwitch id that joins the AX41 to the Cloud Network. Null until the AX41 is ordered."
   type        = number
   default     = null
+}
+
+variable "state_passphrase" {
+  description = "Encrypts the OpenTofu state and plans, which hold the Talos machine secrets. Kept by the owner with the other bootstrap secrets."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.state_passphrase) >= 32
+    error_message = "Use a passphrase of at least 32 characters."
+  }
+}
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API token handed to the cloud controller and CSI driver through a Talos inline manifest. Same value the provider reads from HCLOUD_TOKEN."
+  type        = string
+  sensitive   = true
+}
+
+variable "talos_cloud_schematic" {
+  description = "Image Factory schematic id of talos/schematics/cloud.yaml."
+  type        = string
+  default     = "e6f2695f46beded22e55354c7bf5189c080e726d840f093384f54d07294b9939"
+}
+
+variable "talos_version" {
+  description = "Talos version of the nodes; matches talos/talenv.yaml and the snapshot."
+  type        = string
+  default     = "v1.14.4"
+}
+
+variable "kubernetes_version" {
+  description = "Kubernetes version of the control plane and kubelets; matches talos/talenv.yaml."
+  type        = string
+  default     = "1.37.1"
+}
+
+variable "gitops_url" {
+  description = "Repository Flux reconciles from: the public GitHub mirror, so production keeps reconciling when the homelab is down."
+  type        = string
+  default     = "https://github.com/webgrip/unfold-cluster.git"
 }
