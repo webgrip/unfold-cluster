@@ -34,10 +34,10 @@ The workflow needs, on this repository in Forgejo:
 | --- | --- | --- |
 | secret | `HCLOUD_TOKEN` | Hetzner Cloud API token, read and write, for the Unfold project |
 | secret | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | Object Storage credentials for the state bucket |
-| variable | `STATE_BUCKET`, `STATE_ENDPOINT` | the state bucket and its endpoint, e.g. `https://fsn1.your-objectstorage.com` |
+| variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
 | variable | `TALOS_SNAPSHOT_ID` | the Hetzner snapshot built from `talos/schematics/cloud.yaml` |
 
-Without them the workflow stops before `init`.
+Without them the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
 ## Bootstrap secrets
 
