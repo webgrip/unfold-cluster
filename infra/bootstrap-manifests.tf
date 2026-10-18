@@ -56,6 +56,11 @@ data "helm_template" "flux_operator" {
   chart        = "flux-operator"
   version      = "0.61.0"
   kube_version = var.kubernetes_version
+
+  values = [yamlencode({
+    tolerations  = local.control_plane_tolerations
+    nodeSelector = local.control_plane_node_selector
+  })]
 }
 
 data "helm_template" "flux_instance" {
@@ -77,11 +82,39 @@ data "helm_template" "flux_instance" {
         ref  = "refs/heads/main"
         path = "kubernetes/clusters/main"
       }
+      kustomize = {
+        patches = [{
+          target = {
+            kind = "Deployment"
+          }
+          patch = yamlencode([
+            {
+              op    = "add"
+              path  = "/spec/template/spec/tolerations"
+              value = local.control_plane_tolerations
+            },
+            {
+              op    = "add"
+              path  = "/spec/template/spec/nodeSelector"
+              value = local.control_plane_node_selector
+            },
+          ])
+        }]
+      }
     }
   })]
 }
 
 locals {
+  control_plane_tolerations = [{
+    key      = "node-role.kubernetes.io/control-plane"
+    operator = "Exists"
+    effect   = "NoSchedule"
+  }]
+  control_plane_node_selector = {
+    "node-role.kubernetes.io/control-plane" = ""
+  }
+
   hcloud_secret_manifest = yamlencode({
     apiVersion = "v1"
     kind       = "Secret"
