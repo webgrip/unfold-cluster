@@ -26,7 +26,7 @@ The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitc
 
 ## How changes reach Hetzner
 
-A pull request that touches `infra/` runs `tofu plan`. A push to `main` runs `tofu apply` on the plan it just made. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
+Pull requests and pushes to `main` that touch `infra/` run `tofu plan` only; nothing is created. Applying is a separate, deliberate step: in Forgejo, Actions → `infra` → **Run workflow** on `main`, with the input set to `apply`. That run makes a fresh plan and applies exactly that plan, so read the plan of the latest `main` run first. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
 
 The workflow needs, on this repository in Forgejo:
 
