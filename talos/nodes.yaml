@@ -1,0 +1,40 @@
+---
+clusterName: unfold-main
+endpoint: https://10.64.0.11:6443
+additionalSans:
+  - 127.0.0.1
+  - 10.64.0.11
+  - 10.64.0.12
+  - 10.64.0.13
+installerRegistry: factory.talos.dev/installer
+patches:
+  all:
+    - patches/all/cluster-network.yaml
+  controlplane: []
+  worker: []
+nodes:
+  - hostname: unfold-cp-1
+    address: 10.64.0.11
+    role: controlplane
+    installDisk: /dev/sda
+    schematic: cloud
+    patches: []
+  - hostname: unfold-cp-2
+    address: 10.64.0.12
+    role: controlplane
+    installDisk: /dev/sda
+    schematic: cloud
+    patches: []
+  - hostname: unfold-cp-3
+    address: 10.64.0.13
+    role: controlplane
+    installDisk: /dev/sda
+    schematic: cloud
+    patches: []
+  - hostname: unfold-app-1
+    address: 10.64.0.21
+    role: worker
+    installDisk: /dev/sda
+    schematic: cloud
+    patches:
+      - nodes/unfold-app-1.yaml
