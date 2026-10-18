@@ -63,6 +63,7 @@ jobs:
         run: >-
           tofu init
           -backend-config="bucket=${{ vars.STATE_BUCKET }}"
+          -backend-config="region=${{ vars.STATE_REGION }}"
           -backend-config="endpoints={s3=\"${{ vars.STATE_ENDPOINT }}\"}"
 
       - name: Validate
