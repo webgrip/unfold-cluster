@@ -62,18 +62,6 @@ variable "talos_cloud_schematic" {
   default     = "bd06ca487272b755c51239191fb53b48470a1daf0fe0b628e424b67dd66cf1f4"
 }
 
-variable "talos_version" {
-  description = "Talos version of the nodes; matches talos/talenv.yaml and the snapshot."
-  type        = string
-  default     = "v1.14.4"
-}
-
-variable "kubernetes_version" {
-  description = "Kubernetes version of the control plane and kubelets; matches talos/talenv.yaml."
-  type        = string
-  default     = "1.37.1"
-}
-
 variable "gitops_url" {
   description = "Repository Flux reconciles from: the public GitHub mirror, so production keeps reconciling when the homelab is down."
   type        = string

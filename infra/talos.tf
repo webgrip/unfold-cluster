@@ -1,7 +1,11 @@
 locals {
+  talenv             = yamldecode(file("${path.module}/../talos/talenv.yaml"))
+  talos_version      = local.talenv.talosVersion
+  kubernetes_version = trimprefix(local.talenv.kubernetesVersion, "v")
+
   cluster_name     = "unfold-main"
   cluster_endpoint = "https://${local.api_vip}:6443"
-  install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${var.talos_version}"
+  install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
 
   common_patch = yamlencode({
     machine = {
@@ -59,7 +63,12 @@ locals {
 }
 
 resource "talos_machine_secrets" "cluster" {
-  talos_version = var.talos_version
+  talos_version = local.talos_version
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [talos_version]
+  }
 }
 
 locals {
@@ -97,8 +106,8 @@ data "talos_machine_configuration" "control_plane" {
   cluster_endpoint   = local.cluster_endpoint
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.cluster.machine_secrets
-  talos_version      = var.talos_version
-  kubernetes_version = var.kubernetes_version
+  talos_version      = local.talos_version
+  kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
   config_patches     = [local.common_patch, local.control_plane_patch, local.control_plane_tailscale_patch, local.api_vip_patch]
@@ -109,8 +118,8 @@ data "talos_machine_configuration" "worker" {
   cluster_endpoint   = local.cluster_endpoint
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.cluster.machine_secrets
-  talos_version      = var.talos_version
-  kubernetes_version = var.kubernetes_version
+  talos_version      = local.talos_version
+  kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
   config_patches     = [local.common_patch, local.tailscale_patch]

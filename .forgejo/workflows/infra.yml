@@ -24,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # renovate: datasource=github-releases depName=opentofu/opentofu extractVersion=^v(?<version>.+)$
   TOFU_VERSION: 1.13.1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"

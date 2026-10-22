@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>webgrip/renovate-config#v1.13.0",
+    "local>webgrip/renovate-config:gitops#v1.13.0"
+  ],
+  "flux": {
+    "managerFilePatterns": [
+      "/^kubernetes/.+\\.ya?ml$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts and Headscale in infra/, OpenTofu in the workflow. One manager reads them all, so a version without the line is the only way to freeze silently.",
+      "managerFilePatterns": [
+        "/^infra/.+\\.tf$/",
+        "/^talos/.+\\.ya?ml$/",
+        "/^\\.forgejo/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[=:]\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A Talos or Kubernetes bump changes the machine configs OpenTofu applies, but the nodes only move with a rolling upgrade. Approve it on the dashboard when the upgrade is planned.",
+      "matchDepNames": [
+        "siderolabs/talos",
+        "ghcr.io/siderolabs/kubelet"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "The Flux operator and the Flux instance chart are released together and must move together.",
+      "matchDepNames": [
+        "ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+        "ghcr.io/controlplaneio-fluxcd/charts/flux-instance"
+      ],
+      "groupName": "flux operator"
+    },
+    {
+      "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",
+      "matchDepNames": [
+        "quay.io/cilium/charts/cilium"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Headscale is installed once by cloud-init, which ignores later changes; a bump records the version and its checksum must be updated with it. Upgrade the server by hand from the release notes.",
+      "matchDepNames": [
+        "juanfont/headscale"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update `headscale_sha256` in `infra/headscale.tf` from the release's `checksums.txt`, then upgrade the running server by hand."
+      ]
+    },
+    {
+      "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu's version is tracked through TOFU_VERSION in the workflow.",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepNames": [
+        "hashicorp/terraform"
+      ],
+      "enabled": false
+    }
+  ]
+}
