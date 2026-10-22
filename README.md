@@ -33,6 +33,8 @@ Two manual workflow runs, with one manual step between them:
 3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator and a Flux instance that reconciles `kubernetes/clusters/main` from the public GitHub mirror.
 4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
+The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on link `enp7s0`, Hetzner's name for the first private NIC on CPX servers). It costs nothing and is reachable only inside the network. The control planes advertise `10.64.0.0/16` to the tailnet; approve that route once with `sudo headscale nodes approve-routes` on the Headscale server, and the admin kubeconfig from `tofu output -raw kubeconfig` works from any tailnet device.
+
 Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
 
 ## Machines
@@ -78,8 +80,7 @@ The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu outpu
 
 ## Open
 
-* **Kubernetes API endpoint.** The cluster endpoint is `unfold-cp-1`'s private address. Talos's Layer 2 VIP does not work on Hetzner Cloud; the choice is Talos's Hetzner floating-IP VIP or a private load balancer.
-* **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, and that Cilium's MTU is right on the vSwitch path, are proven only by the first apply.
+* **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the private NIC is named `enp7s0` so the API VIP comes up, are proven only by the first apply.
 * **CI is not on the tailnet.** OpenTofu still reaches the Talos API from the Forgejo runners over the internet, so `ADMIN_CIDRS` keeps the runners' address until CI joins the tailnet. Closing the firewall completely waits for that.
 * **Tailnet policy** is allow-all for now; an ACL file belongs on the Headscale server before anyone but the owner joins.
 * **Storage Box** for backups, **OpenBao**, and the AX41 are not in the code yet.

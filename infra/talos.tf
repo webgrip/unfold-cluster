@@ -1,6 +1,6 @@
 locals {
   cluster_name     = "unfold-main"
-  cluster_endpoint = "https://${local.control_planes["unfold-cp-1"]}:6443"
+  cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${var.talos_version}"
 
   common_patch = yamlencode({
@@ -63,6 +63,24 @@ resource "talos_machine_secrets" "cluster" {
 }
 
 locals {
+  api_vip_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "HCloudVIPConfig"
+    name       = local.api_vip
+    link       = local.private_link
+    apiToken   = var.hcloud_token
+  })
+
+  control_plane_tailscale_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "ExtensionServiceConfig"
+    name       = "tailscale"
+    environment = [
+      "TS_AUTHKEY=${coalesce(var.tailscale_authkey, "unset")}",
+      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-routes=${local.network_range}",
+    ]
+  })
+
   tailscale_patch = yamlencode({
     apiVersion = "v1alpha1"
     kind       = "ExtensionServiceConfig"
@@ -83,7 +101,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = var.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = [local.common_patch, local.control_plane_patch, local.tailscale_patch]
+  config_patches     = [local.common_patch, local.control_plane_patch, local.control_plane_tailscale_patch, local.api_vip_patch]
 }
 
 data "talos_machine_configuration" "worker" {
