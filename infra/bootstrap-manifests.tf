@@ -1,10 +1,21 @@
+locals {
+  # renovate: datasource=docker depName=quay.io/cilium/charts/cilium
+  cilium_chart_version = "1.20.3"
+  # renovate: datasource=helm depName=hcloud-cloud-controller-manager registryUrl=https://charts.hetzner.cloud
+  hcloud_ccm_chart_version = "1.39.0"
+  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator
+  flux_operator_chart_version = "0.61.0"
+  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-instance
+  flux_instance_chart_version = "0.61.0"
+}
+
 data "helm_template" "cilium" {
   name         = "cilium"
   namespace    = "kube-system"
   repository   = "oci://quay.io/cilium/charts"
   chart        = "cilium"
-  version      = "1.20.3"
-  kube_version = var.kubernetes_version
+  version      = local.cilium_chart_version
+  kube_version = local.kubernetes_version
 
   values = [yamlencode({
     ipam = {
@@ -39,8 +50,8 @@ data "helm_template" "hcloud_ccm" {
   namespace    = "kube-system"
   repository   = "https://charts.hetzner.cloud"
   chart        = "hcloud-cloud-controller-manager"
-  version      = "1.39.0"
-  kube_version = var.kubernetes_version
+  version      = local.hcloud_ccm_chart_version
+  kube_version = local.kubernetes_version
 
   values = [yamlencode({
     networking = {
@@ -54,8 +65,8 @@ data "helm_template" "flux_operator" {
   namespace    = "flux-system"
   repository   = "oci://ghcr.io/controlplaneio-fluxcd/charts"
   chart        = "flux-operator"
-  version      = "0.61.0"
-  kube_version = var.kubernetes_version
+  version      = local.flux_operator_chart_version
+  kube_version = local.kubernetes_version
 
   values = [yamlencode({
     tolerations  = local.control_plane_tolerations
@@ -68,8 +79,8 @@ data "helm_template" "flux_instance" {
   namespace    = "flux-system"
   repository   = "oci://ghcr.io/controlplaneio-fluxcd/charts"
   chart        = "flux-instance"
-  version      = "0.61.0"
-  kube_version = var.kubernetes_version
+  version      = local.flux_instance_chart_version
+  kube_version = local.kubernetes_version
 
   values = [yamlencode({
     instance = {

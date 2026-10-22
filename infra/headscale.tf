@@ -1,4 +1,5 @@
 locals {
+  # renovate: datasource=github-releases depName=juanfont/headscale extractVersion=^v(?<version>.+)$
   headscale_version = "0.29.5"
   headscale_sha256  = "9e8ec12a65229435863a2cdf5082853c282808e845efd3a1f0b0c02b8f84d723"
 }
