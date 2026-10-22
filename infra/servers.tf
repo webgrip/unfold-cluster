@@ -8,7 +8,7 @@ resource "hcloud_placement_group" "control_planes" {
 }
 
 resource "hcloud_server" "control_plane" {
-  for_each = local.control_planes
+  for_each = local.cluster_enabled ? local.control_planes : {}
 
   name               = each.key
   server_type        = var.control_plane_server_type
@@ -35,13 +35,18 @@ resource "hcloud_server" "control_plane" {
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [image]
+
+    precondition {
+      condition     = var.talos_snapshot_id != ""
+      error_message = "Set TALOS_SNAPSHOT_ID before the cluster nodes are created."
+    }
   }
 
   depends_on = [hcloud_network_subnet.cloud]
 }
 
 resource "hcloud_server" "unfold_worker" {
-  for_each = local.unfold_worker
+  for_each = local.cluster_enabled ? local.unfold_worker : {}
 
   name         = each.key
   server_type  = var.unfold_worker_server_type
