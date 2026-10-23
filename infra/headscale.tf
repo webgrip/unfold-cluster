@@ -10,10 +10,11 @@ resource "hcloud_ssh_key" "admin" {
 }
 
 resource "hcloud_primary_ip" "headscale" {
-  name        = "unfold-headscale-ipv4"
-  type        = "ipv4"
-  location    = var.location
-  auto_delete = false
+  name              = "unfold-headscale-ipv4"
+  type              = "ipv4"
+  location          = var.location
+  auto_delete       = false
+  delete_protection = true
 
   labels = {
     cluster = "unfold-main"
@@ -63,12 +64,14 @@ resource "hcloud_firewall" "headscale" {
 }
 
 resource "hcloud_server" "headscale" {
-  name         = "unfold-headscale"
-  server_type  = var.headscale_server_type
-  image        = "ubuntu-24.04"
-  location     = var.location
-  ssh_keys     = [hcloud_ssh_key.admin.id]
-  firewall_ids = [hcloud_firewall.headscale.id]
+  name               = "unfold-headscale"
+  server_type        = var.headscale_server_type
+  image              = "ubuntu-24.04"
+  location           = var.location
+  ssh_keys           = [hcloud_ssh_key.admin.id]
+  firewall_ids       = [hcloud_firewall.headscale.id]
+  delete_protection  = true
+  rebuild_protection = true
 
   public_net {
     ipv4_enabled = true

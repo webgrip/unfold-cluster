@@ -16,6 +16,8 @@ resource "hcloud_server" "control_plane" {
   location           = var.location
   placement_group_id = hcloud_placement_group.control_planes.id
   firewall_ids       = [hcloud_firewall.nodes.id]
+  delete_protection  = true
+  rebuild_protection = true
 
   public_net {
     ipv4_enabled = true
@@ -48,11 +50,13 @@ resource "hcloud_server" "control_plane" {
 resource "hcloud_server" "unfold_worker" {
   for_each = local.cluster_enabled ? local.unfold_worker : {}
 
-  name         = each.key
-  server_type  = var.unfold_worker_server_type
-  image        = var.talos_snapshot_id
-  location     = var.location
-  firewall_ids = [hcloud_firewall.nodes.id]
+  name               = each.key
+  server_type        = var.unfold_worker_server_type
+  image              = var.talos_snapshot_id
+  location           = var.location
+  firewall_ids       = [hcloud_firewall.nodes.id]
+  delete_protection  = true
+  rebuild_protection = true
 
   public_net {
     ipv4_enabled = true

@@ -33,7 +33,8 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_KEY }}
   TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
   TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
-  TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+  TF_VAR_hcloud_cluster_token: ${{ secrets.HCLOUD_TOKEN_CLUSTER }}
+  TF_VAR_hcloud_vip_token: ${{ secrets.HCLOUD_TOKEN_VIP }}
   TF_VAR_state_passphrase: ${{ secrets.STATE_PASSPHRASE }}
   TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
   TF_VAR_tailscale_authkey: ${{ secrets.TAILSCALE_AUTHKEY }}

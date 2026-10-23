@@ -50,10 +50,18 @@ variable "state_passphrase" {
   }
 }
 
-variable "hcloud_token" {
-  description = "Hetzner Cloud API token handed to the cloud controller and CSI driver through a Talos inline manifest. Same value the provider reads from HCLOUD_TOKEN."
+variable "hcloud_cluster_token" {
+  description = "Hetzner Cloud API token for the cloud controller and the CSI driver, delivered to kube-system through a Talos inline manifest. A different token from CI's, so either can be revoked alone."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "hcloud_vip_token" {
+  description = "Hetzner Cloud API token the control planes use to move the API address. A third token, so a leaked machine config does not expose the others."
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "talos_cloud_schematic" {

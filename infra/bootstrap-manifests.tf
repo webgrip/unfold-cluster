@@ -139,7 +139,7 @@ locals {
       namespace = "kube-system"
     }
     stringData = {
-      token   = var.hcloud_token
+      token   = var.hcloud_cluster_token
       network = tostring(hcloud_network.cluster.id)
     }
   })
