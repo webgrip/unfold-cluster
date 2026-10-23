@@ -7,57 +7,83 @@ locals {
   cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
 
-  common_patch = yamlencode({
-    machine = {
-      install = {
+  common_patches = [
+    yamlencode({
+      cluster = {
+        externalCloudProvider = {
+          enabled = true
+        }
+      }
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "UnattendedInstallConfig"
+      installer = {
         image = local.install_image
       }
-      kubelet = {
-        nodeIP = {
-          validSubnets = [local.network_range]
+      provisioning = {
+        diskSelector = {
+          match = "disk.dev_path == \"/dev/sda\""
         }
       }
-      features = {
-        kubePrism = {
-          enabled = true
-          port    = 7445
-        }
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeNodeConfig"
+      nodeIP = {
+        validSubnets = [local.network_range]
       }
-    }
-    cluster = {
-      network = {
-        cni = {
-          name = "none"
-        }
-        podSubnets     = ["10.244.0.0/16"]
-        serviceSubnets = ["10.96.0.0/12"]
-      }
-      proxy = {
-        disabled = true
-      }
-      externalCloudProvider = {
-        enabled = true
-      }
-    }
-  })
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeFlannelCNIConfig"
+      "$patch"   = "delete"
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeProxyConfig"
+      "$patch"   = "delete"
+    }),
+  ]
 
-  control_plane_patch = yamlencode({
-    cluster = {
-      etcd = {
-        advertisedSubnets = [local.network_range]
+  control_plane_patches = [
+    yamlencode({
+      cluster = {
+        etcd = {
+          advertisedSubnets = [local.network_range]
+        }
+        inlineManifests = local.inline_manifests
       }
-      inlineManifests = local.inline_manifests
+    }),
+    local.pod_security_patch,
+  ]
+
+  pod_security_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "KubeAdmissionControlConfig"
+    name       = "PodSecurity"
+    configuration = {
+      apiVersion = "pod-security.admission.config.k8s.io/v1"
+      kind       = "PodSecurityConfiguration"
+      defaults = {
+        enforce           = "restricted"
+        "enforce-version" = "latest"
+        audit             = "restricted"
+        "audit-version"   = "latest"
+        warn              = "restricted"
+        "warn-version"    = "latest"
+      }
     }
   })
 
   unfold_worker_patch = yamlencode({
-    machine = {
-      nodeLabels = {
-        "node.webgrip.io/pool" = "unfold"
-      }
-      nodeTaints = {
-        "node.webgrip.io/pool" = "unfold:NoSchedule"
-      }
+    apiVersion = "v1alpha1"
+    kind       = "KubeNodeConfig"
+    labels = {
+      "node.webgrip.io/pool" = "unfold"
+    }
+    taints = {
+      "node.webgrip.io/pool" = "unfold:NoSchedule"
     }
   })
 }
@@ -110,7 +136,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = [local.common_patch, local.control_plane_patch, local.control_plane_tailscale_patch, local.api_vip_patch]
+  config_patches     = concat(local.common_patches, local.control_plane_patches, [local.control_plane_tailscale_patch, local.api_vip_patch])
 }
 
 data "talos_machine_configuration" "worker" {
@@ -122,7 +148,7 @@ data "talos_machine_configuration" "worker" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = [local.common_patch, local.tailscale_patch]
+  config_patches     = concat(local.common_patches, [local.tailscale_patch])
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {
@@ -133,11 +159,10 @@ resource "talos_machine_configuration_apply" "control_plane" {
   node                        = each.value.ipv4_address
   endpoint                    = each.value.ipv4_address
   config_patches = [yamlencode({
-    machine = {
-      network = {
-        hostname = each.key
-      }
-    }
+    apiVersion = "v1alpha1"
+    kind       = "HostnameConfig"
+    auto       = "off"
+    hostname   = each.key
   })]
 }
 
@@ -151,11 +176,10 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
   config_patches = [
     local.unfold_worker_patch,
     yamlencode({
-      machine = {
-        network = {
-          hostname = each.key
-        }
-      }
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      auto       = "off"
+      hostname   = each.key
     }),
   ]
 }

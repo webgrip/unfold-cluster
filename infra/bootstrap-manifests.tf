@@ -42,6 +42,12 @@ data "helm_template" "cilium" {
     operator = {
       replicas = 1
     }
+    hubble = {
+      enabled = true
+      relay = {
+        enabled = true
+      }
+    }
   })]
 }
 

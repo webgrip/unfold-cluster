@@ -48,6 +48,13 @@ Flux applies whatever is on the GitHub mirror's `main`, so a push made straight 
 
 A refused commit leaves the cluster on the last verified one and marks the GitRepository not ready. Renovate's own commits are unsigned, so they reach `main` only through a pull request merge, which Forgejo signs; Renovate must never push straight to `main` here. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest.
 
+## Security floor from the first boot
+
+* **Pod Security `restricted`** is the API server's default for every namespace; Talos exempts `kube-system`, where Cilium and the storage node plugin need host access.
+* **Default-deny networking**: a Cilium clusterwide policy denies all ingress and egress for every pod outside `kube-system` and `flux-system`, except DNS. A workload's namespace adds its own allow policy.
+* **Pinned, approved images**: a native ValidatingAdmissionPolicy refuses any pod outside `kube-system` and `flux-system` whose images are not pinned by digest or come from a registry not on the list.
+* **Hubble relay** runs, so `hubble observe --verdict DROPPED` shows what default-deny refused.
+
 ## Machines
 
 | Node | Hetzner type | Private address | Role |
