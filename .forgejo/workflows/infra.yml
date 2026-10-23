@@ -58,8 +58,10 @@ jobs:
           curl -fsSLO "${base}/tofu_${TOFU_VERSION}_SHA256SUMS"
           grep " ${archive}\$" "tofu_${TOFU_VERSION}_SHA256SUMS" | sha256sum -c -
           tar -xzf "${archive}" tofu
-          install -m 0755 tofu /usr/local/bin/tofu
-          tofu version
+          mkdir -p "${RUNNER_TEMP}/bin"
+          install -m 0755 tofu "${RUNNER_TEMP}/bin/tofu"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/tofu" version
 
       - name: Refuse to run without credentials
         run: |
