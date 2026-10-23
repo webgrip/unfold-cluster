@@ -1,0 +1,20 @@
+{
+  "groups": {
+    "group:admin": ["${admin_user}@"]
+  },
+  "tagOwners": {
+    "tag:node": ["group:admin"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "dst": ["*:*"]
+    }
+  ],
+  "autoApprovers": {
+    "routes": {
+      "${node_route}": ["tag:node"]
+    }
+  }
+}

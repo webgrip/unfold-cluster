@@ -25,15 +25,16 @@ Two manual workflow runs, with one manual step between them:
       ```sh
       ssh admin@headscale.webgrip.dev
       sudo headscale users create nodes
+      sudo headscale users create ryan
       sudo headscale users list
-      sudo headscale preauthkeys create --user <ID of nodes from the list> --reusable --expiration 8760h
+      sudo headscale preauthkeys create --user <ID of nodes from the list> --reusable --tags tag:node --expiration 2160h
       ```
    4. Store the key as the repository secret `TAILSCALE_AUTHKEY`, and in the password manager.
    5. Build the Talos snapshot from `talos/schematics/cloud.yaml` and set `TALOS_SNAPSHOT_ID`.
 3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
 4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
-The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on link `enp7s0`, Hetzner's name for the first private NIC on CPX servers). It costs nothing and is reachable only inside the network. The control planes advertise `10.64.0.0/16` to the tailnet; approve that route once with `sudo headscale nodes approve-routes` on the Headscale server, and the admin kubeconfig from `tofu output -raw kubeconfig` works from any tailnet device.
+The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on link `enp7s0`, Hetzner's name for the first private NIC on CPX servers). It costs nothing and is reachable only inside the network. The control planes advertise the cloud subnet `10.64.0.0/24` to the tailnet, and the tailnet policy approves that route automatically, so the admin kubeconfig from `tofu output -raw kubeconfig` works from any admin device.
 
 Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
 
@@ -55,6 +56,16 @@ A refused commit leaves the cluster on the last verified one and marks the GitRe
 * **Pinned, approved images**: a native ValidatingAdmissionPolicy refuses any pod outside `kube-system` and `flux-system` whose images are not pinned by digest or come from a registry not on the list.
 * **Pod traffic between nodes is encrypted** with Cilium's WireGuard, so nothing crosses Hetzner's private network or the vSwitch in clear text.
 * **Hubble relay** runs, so `hubble observe --verdict DROPPED` shows what default-deny refused.
+
+## Tailnet policy
+
+`infra/templates/headscale-acl.hujson` is Headscale's access policy:
+
+* devices of the Headscale user `ryan` form `group:admin` and may reach everything on the tailnet, including the routed cloud subnet;
+* cluster nodes join with a key tagged `tag:node` and may start no connection to anyone; they only answer;
+* only `10.64.0.0/24`, the cloud subnet with the control planes, the API address and the Unfold node, is routed into the tailnet, and only when a `tag:node` device advertises it.
+
+The node key expires after 90 days; renew it with the same command and update `TAILSCALE_AUTHKEY`. The policy is written once when the server is created; to change it later, copy the file to `/etc/headscale/acl.hujson` and run `sudo systemctl reload headscale`.
 
 ## Machines
 
@@ -101,5 +112,4 @@ The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu outpu
 
 * **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the private NIC is named `enp7s0` so the API VIP comes up, are proven only by the first apply.
 * **CI is not on the tailnet.** OpenTofu still reaches the Talos API from the Forgejo runners over the internet, so `ADMIN_CIDRS` keeps the runners' address until CI joins the tailnet. Closing the firewall completely waits for that.
-* **Tailnet policy** is allow-all for now; an ACL file belongs on the Headscale server before anyone but the owner joins.
 * **Storage Box** for backups, **OpenBao**, and the AX41 are not in the code yet.
