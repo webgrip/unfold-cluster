@@ -111,3 +111,28 @@ variable "headscale_admin_user" {
   type        = string
   default     = "ryan"
 }
+
+variable "etcd_backup_s3_access_key" {
+  description = "Access key of the Garage key that may write, but not read, the etcd backup bucket. Delivered to the etcd-backup namespace through a Talos inline manifest."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "etcd_backup_s3_secret_key" {
+  description = "Secret key belonging to etcd_backup_s3_access_key."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "etcd_backup_age_recipient" {
+  description = "The age public key every etcd snapshot is encrypted to. Its private key stays with the owner and with the restore check, never in the cluster."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.etcd_backup_age_recipient == "" || startswith(var.etcd_backup_age_recipient, "age1")
+    error_message = "etcd_backup_age_recipient must be an age public key, starting with age1."
+  }
+}

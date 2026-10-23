@@ -1,0 +1,87 @@
+---
+name: etcd-backup-check
+
+on:
+  schedule:
+    - cron: "40 7 * * *"
+  workflow_dispatch:
+    inputs:
+      corrupt:
+        description: Type "corrupt" to damage the snapshot after download and prove the check fails
+        required: true
+        default: "no"
+
+concurrency:
+  group: etcd-backup-check
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=FiloSottile/age
+  AGE_VERSION: v1.3.2
+  AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+  # renovate: datasource=github-releases depName=etcd-io/etcd
+  ETCD_VERSION: v3.7.2
+  BUCKET: unfold-cluster-etcd
+  PREFIX: unfold-main
+  MAX_AGE_HOURS: "7"
+  S3_ENDPOINT: ${{ vars.STATE_ENDPOINT }}
+  S3_REGION: ${{ vars.STATE_REGION }}
+  S3_ACCESS_KEY: ${{ secrets.ETCD_BACKUP_READ_ACCESS_KEY }}
+  S3_SECRET_KEY: ${{ secrets.ETCD_BACKUP_READ_SECRET_KEY }}
+
+jobs:
+  restore-latest-snapshot:
+    if: vars.ETCD_BACKUP_CHECK == 'enabled'
+    runs-on: unfold-infra
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install age and etcd with verified checksums
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -eu
+          age_archive="age-${AGE_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/${age_archive}"
+          echo "${AGE_SHA256}  ${age_archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${age_archive}" age/age
+          install -m 0755 age/age "${RUNNER_TEMP}/bin/age"
+
+          etcd_archive="etcd-${ETCD_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/${etcd_archive}"
+          curl -fsSLO "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/SHA256SUMS"
+          grep " ${etcd_archive}\$" SHA256SUMS | sha256sum -c -
+          tar -xzf "${etcd_archive}"
+          install -m 0755 "etcd-${ETCD_VERSION}-linux-amd64/etcd" "etcd-${ETCD_VERSION}-linux-amd64/etcdctl" "etcd-${ETCD_VERSION}-linux-amd64/etcdutl" "${RUNNER_TEMP}/bin/"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Download the newest snapshot and refuse a stale one
+        id: fetch
+        run: |
+          set -eu
+          [ -n "${S3_ACCESS_KEY}" ] && [ -n "${S3_SECRET_KEY}" ] || { echo "::error::ETCD_BACKUP_READ_ACCESS_KEY and ETCD_BACKUP_READ_SECRET_KEY must be set"; exit 1; }
+          sign="aws:amz:${S3_REGION}:s3"
+          newest="$(curl -fsS --aws-sigv4 "$sign" --user "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" \
+            "${S3_ENDPOINT}/${BUCKET}?list-type=2&prefix=${PREFIX}/" \
+            | grep -o '<Key>[^<]*\.snap\.age</Key>' | sed 's/<[^>]*>//g' | sort | tail -n 1)"
+          [ -n "$newest" ] || { echo "::error::no snapshot under ${BUCKET}/${PREFIX}/"; exit 1; }
+          taken_at="$(printf '%s' "$newest" | sed -E 's/.*-([0-9]{4}-[0-9]{2}-[0-9]{2}T[^.]+)\.snap\.age$/\1/')"
+          age_hours=$(( ( $(date -u +%s) - $(date -u -d "$taken_at" +%s) ) / 3600 ))
+          echo "newest snapshot ${newest}, taken ${taken_at}, ${age_hours}h ago"
+          [ "$age_hours" -le "$MAX_AGE_HOURS" ] || { echo "::error::the newest snapshot is ${age_hours}h old; backups have stopped"; exit 1; }
+          curl -fsS --aws-sigv4 "$sign" --user "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" \
+            -o "${RUNNER_TEMP}/snapshot.snap.age" "${S3_ENDPOINT}/${BUCKET}/${newest}"
+
+      - name: Restore it into a throwaway etcd and read the cluster back
+        env:
+          AGE_IDENTITY: ${{ secrets.ETCD_BACKUP_AGE_IDENTITY }}
+          CORRUPT_ON_PURPOSE: ${{ inputs.corrupt == 'corrupt' }}
+        run: |
+          set -eu
+          umask 077
+          printf '%s\n' "${AGE_IDENTITY}" > "${RUNNER_TEMP}/age-identity.txt"
+          AGE_IDENTITY_FILE="${RUNNER_TEMP}/age-identity.txt" ./scripts/verify-etcd-snapshot.sh "${RUNNER_TEMP}/snapshot.snap.age"
+
+      - name: Remove the restore key and snapshot from the runner
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/age-identity.txt" "${RUNNER_TEMP}/snapshot.snap.age"

@@ -199,6 +199,29 @@ locals {
     }),
   ])
 
+  etcd_backup_manifest = join("\n---\n", [
+    yamlencode({
+      apiVersion = "v1"
+      kind       = "Namespace"
+      metadata = {
+        name = "etcd-backup"
+      }
+    }),
+    yamlencode({
+      apiVersion = "v1"
+      kind       = "Secret"
+      metadata = {
+        name      = "etcd-backup"
+        namespace = "etcd-backup"
+      }
+      stringData = {
+        AWS_ACCESS_KEY_ID        = var.etcd_backup_s3_access_key
+        AWS_SECRET_ACCESS_KEY    = var.etcd_backup_s3_secret_key
+        AGE_RECIPIENT_PUBLIC_KEY = var.etcd_backup_age_recipient
+      }
+    }),
+  ])
+
   flux_namespace_manifest = yamlencode({
     apiVersion = "v1"
     kind       = "Namespace"
@@ -215,5 +238,6 @@ locals {
     { name = "flux-operator", contents = data.helm_template.flux_operator.manifest },
     { name = "flux-instance", contents = data.helm_template.flux_instance.manifest },
     { name = "flux-sync", contents = local.flux_sync_manifest },
+    { name = "etcd-backup", contents = local.etcd_backup_manifest },
   ]
 }

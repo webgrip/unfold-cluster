@@ -96,6 +96,8 @@ The workflow needs, on this repository in Forgejo:
 | variable | `ADMIN_CIDRS` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
 | variable | `ADMIN_SSH_PUBLIC_KEY` | the owner's SSH public key, the only way into the Headscale server |
 | secret | `TAILSCALE_AUTHKEY` | the reusable Headscale pre-auth key; leave unset for the first apply |
+| secret | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
+| variable | `ETCD_BACKUP_AGE_RECIPIENT` | the age public key snapshots are encrypted to |
 
 Without the secrets and variables other than `TAILSCALE_AUTHKEY` and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
@@ -117,6 +119,20 @@ Hetzner tokens cannot be narrowed below a whole project, so each job gets its ow
 
 Nothing outside `kube-system` and cluster admins may read Secrets in `kube-system`: no Role, ClusterRole or binding that grants it is added to this repository, and agents get no Kubernetes token at all.
 
+## Backups and the restore check
+
+Every six hours a CronJob in `etcd-backup` asks the Talos API for an etcd snapshot, encrypts it to `ETCD_BACKUP_AGE_RECIPIENT` and writes it to the `unfold-cluster-etcd` bucket on the off-site Garage ([kubernetes/platform/etcd-backup](kubernetes/platform/etcd-backup)). Talos gives the job one role, `os:etcd:backup`, and only in that namespace. The cluster's Garage key can write to the bucket but not read it, and the cluster never holds the age private key, so a compromised cluster cannot read its own backups.
+
+A backup counts only once it has been restored. Every morning [etcd-backup-check](.forgejo/workflows/etcd-backup-check.yml) downloads the newest snapshot, fails if it is more than seven hours old, decrypts it, restores it with `etcdutl` into a throwaway etcd on the runner and reads `kube-system` and `flux-system` back out of it ([scripts/verify-etcd-snapshot.sh](scripts/verify-etcd-snapshot.sh)). Running it by hand with `corrupt` damages the snapshot first, and the run must fail; do that once after enabling the check, so the check is known to catch damage.
+
+Set up once, before the second apply:
+
+1. `age-keygen -o etcd-backup.age`; keep the file in the password manager with an offline copy. Its `# public key:` line goes into `ETCD_BACKUP_AGE_RECIPIENT`, the whole file into the secret `ETCD_BACKUP_AGE_IDENTITY`.
+2. On the Garage: create the bucket `unfold-cluster-etcd` with a 30-day expiry lifecycle rule, one key with write only on it for the cluster (`ETCD_BACKUP_WRITE_*`), and one key with read only on it for the check (`ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`).
+3. After the first snapshot lands, set the variable `ETCD_BACKUP_CHECK` to `enabled`, run the check once normally and once with `corrupt`.
+
+Persistent volumes are not in these snapshots; the Hetzner volumes and CNPG backups get their own when the first stateful workload arrives.
+
 ## Bootstrap secrets
 
 The owner keeps these in a password manager with an offline copy, never in git:
@@ -132,4 +148,6 @@ The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu outpu
 
 * **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the private NIC is named `enp7s0` so the API VIP comes up, are proven only by the first apply.
 * **CI is not on the tailnet.** OpenTofu still reaches the Talos API from the Forgejo runners over the internet, so `ADMIN_CIDRS` keeps the runners' address until CI joins the tailnet. Closing the firewall completely waits for that.
-* **Storage Box** for backups, **OpenBao**, and the AX41 are not in the code yet.
+* **Backups share a datacentre.** The off-site Garage and the cluster are both in Hetzner's Falkenstein region, so a regional outage or a lost Hetzner account takes both. A second copy outside Hetzner, on the homelab Garage, is the next step.
+* **A failed restore check alerts nobody yet.** It shows as a failed run in Forgejo; wiring failed scheduled runs into the homelab's alerting is still to do.
+* **OpenBao** and the AX41 are not in the code yet.
