@@ -41,7 +41,7 @@ env:
 
 jobs:
   plan-or-apply:
-    runs-on: docker
+    runs-on: unfold-infra
     defaults:
       run:
         working-directory: infra
