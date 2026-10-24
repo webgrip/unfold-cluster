@@ -148,7 +148,7 @@ The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu outpu
 
 ## Security architecture
 
-The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md).
+The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md). The confidential class and the next tier of measures are in [RFC 0002](docs/rfc/0002-confidential-class-and-next-tier.md).
 
 ## Open
 
