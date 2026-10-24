@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       corrupt:
-        description: Type "corrupt" to damage the snapshot after download and prove the check fails
+        description: Choose "corrupt" to damage the snapshot after download and prove the check fails
         required: true
+        type: choice
+        options:
+          - "no"
+          - corrupt
         default: "no"
 
 concurrency:

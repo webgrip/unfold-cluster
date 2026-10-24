@@ -97,7 +97,7 @@ Pods get addresses from `10.65.0.0/16` and Services from `10.66.0.0/16`, and Cil
 
 ## How changes reach Hetzner
 
-Pull requests and pushes to `main` that touch `infra/` run `tofu plan` only; nothing is created. Applying is a separate, deliberate step: in Forgejo, Actions → `infra` → **Run workflow** on `main`, with the input set to `apply`. That run makes a fresh plan and applies exactly that plan, so read the plan of the latest `main` run first. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
+Pull requests and pushes to `main` that touch `infra/` run `tofu plan` only; nothing is created. Applying is a separate, deliberate step: in Forgejo, Actions → `infra` → **Run workflow** on `main`, with `apply` chosen in the dropdown. That run makes a fresh plan and applies exactly that plan, so read the plan of the latest `main` run first. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
 
 The workflow needs these repository secrets and variables in Forgejo. Nobody types them into Forgejo: the owner puts each value into the homelab's OpenBao, and the homelab CronJob `forgejo-actions-secrets` (in `kubernetes/apps/forgejo/forgejo-actions-secrets` of homelab-cluster, hourly at minute 23) copies them onto this repository, as homelab-cluster ADR-0055 lays out. The order and commands are in the [bootstrap checklist](docs/bootstrap-checklist.md).
 
