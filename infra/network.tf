@@ -22,6 +22,7 @@ resource "hcloud_network" "cluster" {
   name                     = "unfold-cluster"
   ip_range                 = local.network_range
   expose_routes_to_vswitch = var.vswitch_id != null
+  delete_protection        = true
 
   labels = {
     cluster = "unfold-main"

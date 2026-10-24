@@ -86,7 +86,9 @@ The workflow needs, on this repository in Forgejo:
 
 | Kind | Name | Holds |
 | --- | --- | --- |
-| secret | `HCLOUD_TOKEN` | Hetzner Cloud API token, read and write, for the Unfold project |
+| secret | `HCLOUD_TOKEN` | Hetzner Cloud API token for OpenTofu in CI, read and write |
+| secret | `HCLOUD_TOKEN_CLUSTER` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
+| secret | `HCLOUD_TOKEN_VIP` | a third token, for the control planes to move the API address; set before the second apply |
 | secret | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | credentials for the state bucket |
 | secret | `STATE_PASSPHRASE` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
 | variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
@@ -97,12 +99,28 @@ The workflow needs, on this repository in Forgejo:
 
 Without the secrets and variables other than `TAILSCALE_AUTHKEY` and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
+## Credentials and rotation
+
+Hetzner tokens cannot be narrowed below a whole project, so each job gets its own token and each can be revoked alone. Every server, the network and the Headscale address carry Hetzner's delete protection, so a stolen token cannot remove them in one call; removing one takes a deliberate change in this repository first.
+
+| Credential | Where it lives | Rotate |
+| --- | --- | --- |
+| `HCLOUD_TOKEN` | Forgejo secret, password manager | every 6 months |
+| `HCLOUD_TOKEN_CLUSTER` | Forgejo secret, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
+| `HCLOUD_TOKEN_VIP` | Forgejo secret, encrypted state, control plane configs | every 6 months, then apply |
+| `TAILSCALE_AUTHKEY` | Forgejo secret, encrypted state, node configs | expires after 90 days |
+| `STATE_PASSPHRASE` | Forgejo secret, password manager | when someone with access leaves |
+| State bucket keys | Forgejo secrets | every 6 months |
+| GitHub mirror token | Forgejo mirror settings | at its expiry date |
+
+Nothing outside `kube-system` and cluster admins may read Secrets in `kube-system`: no Role, ClusterRole or binding that grants it is added to this repository, and agents get no Kubernetes token at all.
+
 ## Bootstrap secrets
 
 The owner keeps these in a password manager with an offline copy, never in git:
 
 1. the state passphrase; without it the state, and with it the Talos secrets, cannot be read;
-2. the Hetzner API token, which also reaches the cloud controller through a Talos inline manifest;
+2. the three Hetzner API tokens: CI's, the cluster's, and the API address's;
 3. after the first apply, an export of the Talos secrets bundle: `tofu output -raw talos_machine_secrets`;
 4. later, the OpenBao static-seal key, delivered through a Talos inline manifest when OpenBao is added.
 

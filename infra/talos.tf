@@ -103,7 +103,7 @@ locals {
     kind       = "HCloudVIPConfig"
     name       = local.api_vip
     link       = local.private_link
-    apiToken   = var.hcloud_token
+    apiToken   = var.hcloud_vip_token
   })
 
   control_plane_tailscale_patch = yamlencode({
