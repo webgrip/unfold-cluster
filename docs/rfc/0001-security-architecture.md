@@ -158,7 +158,7 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 | --- | --- | --- |
 | Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | design (built: Retain) |
 | Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Three instances across the hub pool with required anti-affinity, continuous WAL archiving and a daily base backup | design |
-| Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once | decided 2026-10-24 |
+| Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster's data: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once. It holds only the state and etcd snapshots until delivery step 3 | decided 2026-10-24 |
 | Other state | Not allowed by default. A workload that needs a PVC outside CNPG brings its own backup and restore test. Velero's file-system backup needs a privileged node agent, so it is not installed | design |
 | Run scratch space | The AX41's EPHEMERAL partition is LUKS, TPM-bound, wiped on reinstall. Every Run pod has ephemeral-storage and `emptyDir` size limits | design |
 | Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built, CNPG design |
@@ -324,7 +324,7 @@ Hetzner bills objects under 64 KB as 64 KB, so evidence is shipped in batches. S
 
 Lock-in stays low because every store speaks the same S3 API: SeaweedFS in the cluster, Hetzner and OVHcloud outside it. Moving a copy to another provider is a new endpoint and an `rclone sync`, not a migration. For speed, SeaweedFS volume servers write to the local NVMe user volumes, its filer keeps metadata in the CNPG Postgres cluster so every filer replica sees the same namespace, and hot data is read in-cluster; only copies leave the cluster.
 
-The backups built in #16 move from the off-site Garage to this layout before the first apply.
+Until delivery step 3, the OpenTofu state and the etcd snapshots of #16 stay on the off-site Garage, decided on 2026-10-24: they are a few megabytes, cost nothing there, and the cluster holds no client data yet. Step 3 moves them to this layout, and no client data arrives before it.
 
 **No lock-in.** The S3 API is the portability layer, kept portable by four rules:
 - Data is encrypted before upload with age, restic or kopia, so no provider's key service is relied on.
