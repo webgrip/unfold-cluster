@@ -16,15 +16,25 @@ variable "talos_snapshot_id" {
 }
 
 variable "control_plane_server_type" {
-  description = "CPX22 until Hetzner's CX stock returns; then CX23, one node at a time."
+  description = "Cost-optimized CX23 (2 vCPU, 4 GB), chosen 2026-10-24 after Hetzner's price rises made CPX22 more than three times the price. Must stay x86: the Talos snapshot is amd64."
   type        = string
-  default     = "cpx22"
+  default     = "cx23"
+
+  validation {
+    condition     = !startswith(lower(var.control_plane_server_type), "cax")
+    error_message = "CAX servers are Arm; the Talos snapshot and the Headscale package are x86 (amd64)."
+  }
 }
 
 variable "unfold_worker_server_type" {
-  description = "The worker dedicated to Unfold by label and taint (VIK-2157)."
+  description = "The worker dedicated to Unfold by label and taint (VIK-2157). Cost-optimized CX33 (4 vCPU, 8 GB), x86 like the Talos snapshot."
   type        = string
-  default     = "cpx32"
+  default     = "cx33"
+
+  validation {
+    condition     = !startswith(lower(var.unfold_worker_server_type), "cax")
+    error_message = "CAX servers are Arm; the Talos snapshot and the Headscale package are x86 (amd64)."
+  }
 }
 
 variable "admin_cidrs" {
@@ -77,9 +87,14 @@ variable "gitops_url" {
 }
 
 variable "headscale_server_type" {
-  description = "The small cloud server that runs Headscale, the self-hosted coordination server of the admin tailnet."
+  description = "The small cloud server that runs Headscale, the self-hosted coordination server of the admin tailnet. x86, because cloud-init installs Headscale's amd64 package."
   type        = string
-  default     = "cpx02"
+  default     = "cx23"
+
+  validation {
+    condition     = !startswith(lower(var.headscale_server_type), "cax")
+    error_message = "CAX servers are Arm; the Talos snapshot and the Headscale package are x86 (amd64)."
+  }
 }
 
 variable "headscale_hostname" {

@@ -280,9 +280,9 @@ Hetzner Cloud offers no nested virtualization, and Hetzner dedicated servers are
 
 | Pool | Machines | Runs | Scales by |
 | --- | --- | --- | --- |
-| Control planes | 3 × CPX22 | The recovery set | By hand |
-| Hub pool | CPX32 × N, designed for three or more | ploegd, Unfold, LiteLLM; Postgres, OpenBao, NATS and SeaweedFS as three replicas each | One node at a time; replicas spread across nodes as they join. Every stateful service is configured for three replicas from the first day |
-| `gvisor` | CPX VMs | `standard` and `hardened` Runs, under gVisor's systrap, which needs no `/dev/kvm` | cluster-autoscaler from zero. Each pool is one server type; the Talos worker config is its cloud-init, the Talos snapshot its image |
+| Control planes | 3 × CX23 | The recovery set | By hand |
+| Hub pool | CX33 × N, designed for three or more | ploegd, Unfold, LiteLLM; Postgres, OpenBao, NATS and SeaweedFS as three replicas each | One node at a time; replicas spread across nodes as they join. Every stateful service is configured for three replicas from the first day |
+| `gvisor` | x86 cloud VMs | `standard` and `hardened` Runs, under gVisor's systrap, which needs no `/dev/kvm` | cluster-autoscaler from zero. Each pool is one server type; the Talos worker config is its cloud-init, the Talos snapshot its image |
 | `kata` | AX41 now; Hetzner auction servers later | `isolated` Runs under Kata with Cloud Hypervisor; CI under Kata until it moves to its own cell ([CI](#ci)) | A person orders a server when `isolated` Runs have waited too long for a week; the alert carries the evidence |
 | Burst cells | Hourly bare metal (Scaleway Elastic Metal) | `isolated` Runs at peak | OpenTofu creates and destroys a small Talos cell that pulls work from the hub (Ploeg ADR-0107) |
 | `confidential` | None on Hetzner | `confidential` Runs | A confidential-VM cloud cell, or our own EPYC hardware, when a client needs it |
@@ -378,7 +378,7 @@ The cluster is not production until it has passed these checks. Until then it is
 
 | Layer | Today | Next step, and its trigger |
 | --- | --- | --- |
-| Nodes | 3 CPX22, 1 CPX32, 1 AX41 | Second AX41 when Runs queue; larger control planes when etcd latency alerts |
+| Nodes | 3 CX23, 1 CX33, 1 AX41 | Second AX41 when Runs queue; larger control planes when etcd latency alerts |
 | Admission | CEL policies plus one Kyverno webhook | The same policy set ships as a versioned Flux OCI bundle, so every cell runs identical policy |
 | Network | One cluster | ClusterMesh between cells using the address plan; ztunnel when it leaves beta |
 | DNS | One subzone | One subzone per cell, each with its own external-dns owner |

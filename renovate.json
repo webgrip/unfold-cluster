@@ -17,11 +17,12 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts and Headscale in infra/, OpenTofu, age and etcd in the workflows. One manager reads them all, so a version without the line is the only way to freeze silently.",
+      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts and Headscale in infra/, OpenTofu, age and etcd in the workflows, hcloud-upload-image in scripts/build-talos-snapshot.sh. One manager reads them all, so a version without the line is the only way to freeze silently.",
       "managerFilePatterns": [
         "/^infra/.+\\.tf$/",
         "/^talos/.+\\.ya?ml$/",
-        "/^\\.forgejo/workflows/.+\\.ya?ml$/"
+        "/^\\.forgejo/workflows/.+\\.ya?ml$/",
+        "/^scripts/.+\\.sh$/"
       ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[=:]\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
@@ -82,6 +83,16 @@
         "etcd-io/etcd"
       ],
       "dependencyDashboardApproval": true
+    },
+    {
+      "description": "hcloud-upload-image is installed from pinned checksums, which Renovate cannot update. Approve on the dashboard and update the checksums in the same PR.",
+      "matchDepNames": [
+        "apricote/hcloud-upload-image"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update the three `upload_tool_sha256_*` values in `scripts/build-talos-snapshot.sh` from the release's `hcloud-upload-image_<version>_checksums.txt`."
+      ]
     },
     {
       "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu's version is tracked through TOFU_VERSION in the workflow.",

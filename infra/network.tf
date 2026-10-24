@@ -5,7 +5,7 @@ locals {
   cloud_subnet_range   = "10.64.0.0/24"
   vswitch_subnet_range = "10.64.1.0/24"
   api_vip              = "10.64.0.10"
-  private_link         = "enp7s0"
+  private_link_alias   = "private0"
 
   cilium_cluster_id = 2
   pod_subnet        = "10.65.0.0/16"
