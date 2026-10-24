@@ -15,7 +15,7 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 
 ## From nothing to GitOps
 
-Two manual workflow runs, with one manual step between them:
+Two manual workflow runs, with one manual step between them. The owner's step-by-step version, with every secret, command and check in order, is [docs/bootstrap-checklist.md](docs/bootstrap-checklist.md).
 
 1. **First apply.** With no `TAILSCALE_AUTHKEY` set, OpenTofu creates only the network, the firewalls and `unfold-headscale`, a small server running Headscale, the self-hosted coordination server of the admin tailnet. No cluster node exists yet.
 2. **Between the runs, by hand.**
@@ -29,12 +29,12 @@ Two manual workflow runs, with one manual step between them:
       sudo headscale users list
       sudo headscale preauthkeys create --user <ID of nodes from the list> --reusable --tags tag:node --expiration 2160h
       ```
-   4. Store the key as the repository secret `TAILSCALE_AUTHKEY`, and in the password manager.
-   5. Build the Talos snapshot from `talos/schematics/cloud.yaml` and set `TALOS_SNAPSHOT_ID`.
+   4. Put the key into OpenBao as `TAILSCALE_AUTHKEY` at `secret/unfold-cluster/tailnet`; the bridge makes it the repository secret.
+   5. Build the Talos snapshot with `scripts/build-talos-snapshot.sh`, which turns `talos/schematics/cloud.yaml` and the version in `talos/talenv.yaml` into a Hetzner snapshot and prints its id, and put that id into OpenBao as `TALOS_SNAPSHOT_ID` at `secret/unfold-cluster/vars`, from where the bridge sets the repository variable.
 3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
 4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
-The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on link `enp7s0`, Hetzner's name for the first private NIC on CPX servers). It costs nothing and is reachable only inside the network. The control planes advertise the cloud subnet `10.64.0.0/24` to the tailnet, and the tailnet policy approves that route automatically, so the admin kubeconfig from `tofu output -raw kubeconfig` works from any admin device.
+The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on the link alias `private0`; each control plane's machine config points that alias at the MAC address Hetzner reports for the server's private NIC, so the VIP does not depend on how a server type names its interfaces). It costs nothing and is reachable only inside the network. The control planes advertise the cloud subnet `10.64.0.0/24` to the tailnet, and the tailnet policy approves that route automatically, so the admin kubeconfig from `tofu output -raw kubeconfig` works from any admin device.
 
 Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
 
@@ -69,12 +69,27 @@ The node key expires after 90 days; renew it with the same command and update `T
 
 ## Machines
 
-| Node | Hetzner type | Private address | Role |
+| Node | Hetzner type | Size | Private address | Role |
+| --- | --- | --- | --- | --- |
+| `unfold-cp-1` to `-3` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | `10.64.0.11` to `.13` | control planes, one placement group |
+| `unfold-app-1` | Cloud CX33 | 4 vCPU, 8 GB, 80 GB | `10.64.0.21` | Unfold, ploegd and their databases only (label and taint `node.webgrip.io/pool=unfold`) |
+| `unfold-headscale` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | public only | Headscale, the admin tailnet's coordination server and relay |
+| `unfold-metal-1` | Robot AX41 | | `10.64.1.31` on the vSwitch | agent Runs and CI, both under Kata; not in `infra/` yet |
+
+The cloud servers are Hetzner's cost-optimized CX line, chosen on 2026-10-24 because the 2026 price rises made the CPX line (AMD, regular performance) three to four times the price. CX servers run on shared Intel or AMD x86 hosts and Hetzner limits how many it sells, so a create can fail with the type unavailable; `location` can then move to `nbg1`. They must stay x86, because the Talos snapshot and the Headscale package are amd64: Arm CAX types are refused by the variables' validation.
+
+### What the cloud servers cost
+
+| Node | Type | Per month | Per hour |
 | --- | --- | --- | --- |
-| `unfold-cp-1` to `-3` | Cloud CPX22 | `10.64.0.11` to `.13` | control planes, one placement group |
-| `unfold-app-1` | Cloud CPX32 | `10.64.0.21` | Unfold, ploegd and their databases only (label and taint `node.webgrip.io/pool=unfold`) |
-| `unfold-headscale` | Cloud CPX02 | public only | Headscale, the admin tailnet's coordination server and relay |
-| `unfold-metal-1` | Robot AX41 | `10.64.1.31` on the vSwitch | agent Runs and CI, both under Kata; not in `infra/` yet |
+| `unfold-cp-1` | CX23 | €5.99 | €0.0096 |
+| `unfold-cp-2` | CX23 | €5.99 | €0.0096 |
+| `unfold-cp-3` | CX23 | €5.99 | €0.0096 |
+| `unfold-app-1` | CX33 | €8.99 | €0.0144 |
+| `unfold-headscale` | CX23 | €5.99 | €0.0096 |
+| **Total** | | **€32.95** (€39.87 with 21% VAT) | |
+
+Hetzner list prices of 2026-10-23, checked on 2026-10-24 at [hetzner.com/cloud/cost-optimized](https://www.hetzner.com/cloud/cost-optimized/), excluding VAT, each including the server's public IPv4 address. Billing is hourly up to the monthly price, from creation until deletion, whether the server runs or not. The Cloud Network, the placement group and the alias IP of the API address cost nothing; the Talos snapshot is billed per GB stored. The same five servers on the CPX line (CPX22, CPX32, CPX02) list at €102.45 a month. The AX41 and object storage are not in this table.
 
 The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, the smallest link in the cluster, so Cilium's `MTU` is set to 1400; Cilium subtracts its VXLAN (50 bytes) and WireGuard (80 bytes) overhead itself, leaving pods 1270.
 
@@ -84,22 +99,23 @@ Pods get addresses from `10.65.0.0/16` and Services from `10.66.0.0/16`, and Cil
 
 Pull requests and pushes to `main` that touch `infra/` run `tofu plan` only; nothing is created. Applying is a separate, deliberate step: in Forgejo, Actions → `infra` → **Run workflow** on `main`, with the input set to `apply`. That run makes a fresh plan and applies exactly that plan, so read the plan of the latest `main` run first. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
 
-The workflow needs, on this repository in Forgejo:
+The workflow needs these repository secrets and variables in Forgejo. Nobody types them into Forgejo: the owner puts each value into the homelab's OpenBao, and the homelab CronJob `forgejo-actions-secrets` (in `kubernetes/apps/forgejo/forgejo-actions-secrets` of homelab-cluster, hourly at minute 23) copies them onto this repository, as homelab-cluster ADR-0055 lays out. The order and commands are in the [bootstrap checklist](docs/bootstrap-checklist.md).
 
-| Kind | Name | Holds |
-| --- | --- | --- |
-| secret | `HCLOUD_TOKEN` | Hetzner Cloud API token for OpenTofu in CI, read and write |
-| secret | `HCLOUD_TOKEN_CLUSTER` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
-| secret | `HCLOUD_TOKEN_VIP` | a third token, for the control planes to move the API address; set before the second apply |
-| secret | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | credentials for the state bucket |
-| secret | `STATE_PASSPHRASE` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
-| variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
-| variable | `TALOS_SNAPSHOT_ID` | the Hetzner snapshot built from `talos/schematics/cloud.yaml` |
-| variable | `ADMIN_CIDRS` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
-| variable | `ADMIN_SSH_PUBLIC_KEY` | the owner's SSH public key, the only way into the Headscale server |
-| secret | `TAILSCALE_AUTHKEY` | the reusable Headscale pre-auth key; leave unset for the first apply |
-| secret | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
-| variable | `ETCD_BACKUP_AGE_RECIPIENT` | the age public key snapshots are encrypted to |
+| Kind | Name | OpenBao path | Holds |
+| --- | --- | --- | --- |
+| secret | `HCLOUD_TOKEN` | `secret/hetzner/unfold-tofu` | Hetzner Cloud API token for OpenTofu in CI, read and write |
+| secret | `HCLOUD_TOKEN_CLUSTER` | `secret/hetzner/unfold-cluster` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
+| secret | `HCLOUD_TOKEN_VIP` | `secret/hetzner/unfold-vip` | a third token, for the control planes to move the API address; set before the second apply |
+| secret | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | `secret/unfold-cluster/tofu-state` | credentials for the state bucket |
+| secret | `STATE_PASSPHRASE` | `secret/unfold-cluster/tofu-state` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
+| variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | `secret/unfold-cluster/vars` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
+| variable | `TALOS_SNAPSHOT_ID` | `secret/unfold-cluster/vars` | the Hetzner snapshot `scripts/build-talos-snapshot.sh` builds from `talos/schematics/cloud.yaml` |
+| variable | `ADMIN_CIDRS` | `secret/unfold-cluster/vars` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
+| variable | `ADMIN_SSH_PUBLIC_KEY` | `secret/unfold-cluster/vars` | the owner's SSH public key, the only way into the Headscale server |
+| secret | `TAILSCALE_AUTHKEY` | `secret/unfold-cluster/tailnet` | the reusable Headscale pre-auth key; leave unset for the first apply |
+| secret | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | `secret/unfold-cluster/etcd-backup` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
+| secret | `ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`, `ETCD_BACKUP_AGE_IDENTITY` | `secret/unfold-cluster/etcd-backup` | the restore check's read-only Garage key and the age private key |
+| variable | `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK` | `secret/unfold-cluster/vars` | the age public key snapshots are encrypted to; `enabled` once the first snapshot exists |
 
 Without the secrets and variables other than `TAILSCALE_AUTHKEY` and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
@@ -111,13 +127,16 @@ Hetzner tokens cannot be narrowed below a whole project, so each job gets its ow
 
 | Credential | Where it lives | Rotate |
 | --- | --- | --- |
-| `HCLOUD_TOKEN` | Forgejo secret, password manager | every 6 months |
-| `HCLOUD_TOKEN_CLUSTER` | Forgejo secret, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
-| `HCLOUD_TOKEN_VIP` | Forgejo secret, encrypted state, control plane configs | every 6 months, then apply |
-| `TAILSCALE_AUTHKEY` | Forgejo secret, encrypted state, node configs | expires after 90 days |
-| `STATE_PASSPHRASE` | Forgejo secret, password manager | when someone with access leaves |
-| State bucket keys | Forgejo secrets | every 6 months |
+| `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu`, bridged to a Forgejo secret | every 6 months |
+| `HCLOUD_TOKEN_CLUSTER` | OpenBao `secret/hetzner/unfold-cluster`, Forgejo secret, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
+| `HCLOUD_TOKEN_VIP` | OpenBao `secret/hetzner/unfold-vip`, Forgejo secret, encrypted state, control plane configs | every 6 months, then apply |
+| `TAILSCALE_AUTHKEY` | OpenBao `secret/unfold-cluster/tailnet`, Forgejo secret, encrypted state, node configs | expires after 90 days |
+| `STATE_PASSPHRASE` | OpenBao `secret/unfold-cluster/tofu-state`, Forgejo secret, password manager with an offline copy | when someone with access leaves |
+| State bucket keys | OpenBao `secret/unfold-cluster/tofu-state`, Forgejo secrets | every 6 months |
+| etcd backup keys and age key | OpenBao `secret/unfold-cluster/etcd-backup`, Forgejo secrets; the age key also in the password manager with an offline copy | Garage keys every 6 months; the age key when it may have leaked |
 | GitHub mirror token | Forgejo mirror settings | at its expiry date |
+
+A rotation is a new value in OpenBao (`bao kv patch`), the next run of the bridge, and an apply where the table says so. OpenBao runs in the homelab, so the values that cannot be made again, the state passphrase, the age key and the Talos secrets bundle, also stay in the password manager with an offline copy.
 
 Nothing outside `kube-system` and cluster admins may read Secrets in `kube-system`: no Role, ClusterRole or binding that grants it is added to this repository, and agents get no Kubernetes token at all.
 
@@ -129,9 +148,9 @@ A backup counts only once it has been restored. Every morning [etcd-backup-check
 
 Set up once, before the second apply:
 
-1. `age-keygen -o etcd-backup.age`; keep the file in the password manager with an offline copy. Its `# public key:` line goes into `ETCD_BACKUP_AGE_RECIPIENT`, the whole file into the secret `ETCD_BACKUP_AGE_IDENTITY`.
-2. On the Garage: create the bucket `unfold-cluster-etcd` with a 30-day expiry lifecycle rule, one key with write only on it for the cluster (`ETCD_BACKUP_WRITE_*`), and one key with read only on it for the check (`ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`).
-3. After the first snapshot lands, set the variable `ETCD_BACKUP_CHECK` to `enabled`, run the check once normally and once with `corrupt`.
+1. `age-keygen -o etcd-backup.age`; keep the file in the password manager with an offline copy. Its `# public key:` line goes into `ETCD_BACKUP_AGE_RECIPIENT`, the whole file into `ETCD_BACKUP_AGE_IDENTITY`, both through OpenBao as in the [bootstrap checklist](docs/bootstrap-checklist.md#b4-put-every-value-into-openbao).
+2. On the Garage: create the bucket `unfold-cluster-etcd` with a 30-day expiry lifecycle rule, one key with write only on it for the cluster (`ETCD_BACKUP_WRITE_*`), and one key with read only on it for the check (`ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`). The commands are in [the bootstrap checklist](docs/bootstrap-checklist.md#b3-garage-buckets-and-keys).
+3. After the first snapshot lands, set the variable `ETCD_BACKUP_CHECK` to `enabled` (`bao kv patch secret/unfold-cluster/vars ETCD_BACKUP_CHECK=enabled`, then the bridge's next run), run the check once normally and once with `corrupt`.
 
 Persistent volumes are not in these snapshots; the Hetzner volumes and CNPG backups get their own when the first stateful workload arrives.
 
@@ -152,7 +171,7 @@ The target design for every layer, its threat model, the residual risks and the 
 
 ## Open
 
-* **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the private NIC is named `enp7s0` so the API VIP comes up, are proven only by the first apply.
+* **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the `private0` alias lands on the private NIC so the API VIP comes up, are proven only by the first apply.
 * **CI is not on the tailnet.** OpenTofu still reaches the Talos API from the Forgejo runners over the internet, so `ADMIN_CIDRS` keeps the runners' address until CI joins the tailnet. Closing the firewall completely waits for that.
 * **Backups share a datacentre.** The off-site Garage and the cluster are both in Hetzner's Falkenstein region, so a regional outage or a lost Hetzner account takes both. A second copy outside Hetzner, on the homelab Garage, is the next step.
 * **A failed restore check alerts nobody yet.** It shows as a failed run in Forgejo; wiring failed scheduled runs into the homelab's alerting is still to do.

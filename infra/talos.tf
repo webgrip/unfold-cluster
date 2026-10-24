@@ -121,7 +121,7 @@ locals {
     apiVersion = "v1alpha1"
     kind       = "HCloudVIPConfig"
     name       = local.api_vip
-    link       = local.private_link
+    link       = local.private_link_alias
     apiToken   = var.hcloud_vip_token
   })
 
@@ -177,12 +177,22 @@ resource "talos_machine_configuration_apply" "control_plane" {
   machine_configuration_input = data.talos_machine_configuration.control_plane.machine_configuration
   node                        = each.value.ipv4_address
   endpoint                    = each.value.ipv4_address
-  config_patches = [yamlencode({
-    apiVersion = "v1alpha1"
-    kind       = "HostnameConfig"
-    auto       = "off"
-    hostname   = each.key
-  })]
+  config_patches = [
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      auto       = "off"
+      hostname   = each.key
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "LinkAliasConfig"
+      name       = local.private_link_alias
+      selector = {
+        match = "mac(link.permanent_addr) == \"${lower(one([for attachment in each.value.network : attachment.mac_address]))}\""
+      }
+    }),
+  ]
 }
 
 resource "talos_machine_configuration_apply" "unfold_worker" {
