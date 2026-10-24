@@ -157,12 +157,13 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 | Control | How | State |
 | --- | --- | --- |
 | Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | design (built: Retain) |
-| Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Continuous WAL archiving and a daily base backup. Single instance while there is one Unfold node; a replica on a control plane is the step before hub HA | design |
+| Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Three instances across the hub pool with required anti-affinity, continuous WAL archiving and a daily base backup | design |
 | Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once | proposed |
 | Other state | Not allowed by default. A workload that needs a PVC outside CNPG brings its own backup and restore test. Velero's file-system backup needs a privileged node agent, so it is not installed | design |
 | Run scratch space | The AX41's EPHEMERAL partition is LUKS, TPM-bound, wiped on reinstall. Every Run pod has ephemeral-storage and `emptyDir` size limits | design |
 | Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built, CNPG design |
-| Database disk | CNPG starts on hcloud LUKS volumes, which Hetzner replicates three times. A benchmark gate (fio with `--fsync=1` and an etcd-style WAL test) runs on an encrypted and a plain volume before the first database goes live; if fsync p99 misses the target, the primary moves to encrypted local NVMe and relies on its replica and WAL archive for durability | design |
+| Database disk | Encrypted Talos user volumes (LUKS2) on each hub node's local disk, provisioned by local-path or TopoLVM. Durability comes from the three replicas and the WAL archive, not from the disk. A benchmark gate (fio with `--fsync=1` and an etcd-style WAL test) confirms the flush-latency target before the first database goes live | design |
+| In-cluster object storage | SeaweedFS on the hub pool: our own S3 with replication across nodes, object lock, and SSE-KMS keys from OpenBao. It is the first target for backups, registry images and caches; copies go off-site from there | decided 2026-10-24 |
 
 ### 8. Secrets
 
@@ -280,7 +281,7 @@ Hetzner Cloud offers no nested virtualization, and Hetzner dedicated servers are
 | Pool | Machines | Runs | Scales by |
 | --- | --- | --- | --- |
 | Control planes | 3 × CPX22 | The recovery set | By hand |
-| `unfold` | CPX32 | ploegd, Unfold, databases | By hand; a second node with hub HA |
+| Hub pool | CPX32 × N, designed for three or more | ploegd, Unfold, LiteLLM; Postgres, OpenBao, NATS and SeaweedFS as three replicas each | One node at a time; replicas spread across nodes as they join. Every stateful service is configured for three replicas from the first day |
 | `gvisor` | CPX VMs | `standard` and `hardened` Runs, under gVisor's systrap, which needs no `/dev/kvm` | cluster-autoscaler from zero. Each pool is one server type; the Talos worker config is its cloud-init, the Talos snapshot its image |
 | `kata` | AX41 now; Hetzner auction servers later | `isolated` Runs under Kata with Cloud Hypervisor; CI under Kata until it moves to its own cell ([CI](#ci)) | A person orders a server when `isolated` Runs have waited too long for a week; the alert carries the evidence |
 | Burst cells | Hourly bare metal (Scaleway Elastic Metal) | `isolated` Runs at peak | OpenTofu creates and destroys a small Talos cell that pulls work from the hub (Ploeg ADR-0107) |
@@ -337,8 +338,8 @@ Postgres, OpenBao and NATS each replicate their own data, so a distributed stora
 
 | Option | Verdict |
 | --- | --- |
-| hcloud volumes with LUKS | Chosen now: nothing to operate, and pods can move between cloud nodes. The passphrase comes from OpenBao |
-| Talos user volumes with local-path or TopoLVM | Already used for etcd. Databases move here when the disk benchmark misses its target or a second Unfold node exists for replicas |
+| hcloud volumes with LUKS | For single-replica data that must follow a pod between cloud nodes. The passphrase comes from OpenBao |
+| Talos user volumes with local-path or TopoLVM | Chosen for every replicated service: etcd, Postgres, OpenBao, NATS, SeaweedFS |
 | Piraeus / LINSTOR (DRBD) | When two or three bare-metal nodes have spare NVMe |
 | Rook-Ceph | When there are five or more bare-metal nodes with 10 Gb networking. It needs about 27 GB of RAM before any workload and cannot heal itself on three nodes. At that size its object gateway can also become the self-hosted S3 |
 | Longhorn, OpenEBS Mayastor | Not planned. Longhorn keeps encryption keys only in Kubernetes Secrets; Mayastor pins CPU cores and needs hugepages |
@@ -429,6 +430,8 @@ Decided on 2026-10-24:
 - We stay on current Kata: an upstream contribution, and our own build until it lands.
 - CI starts as a Kata-only pool in this cluster (option A) and moves to its own cell (option B).
 - Trivy is used, pinned by digest and signature-verified (section 12).
+- The design assumes scale: the hub is a pool, and every stateful service runs three replicas on encrypted local volumes from the first day.
+- SeaweedFS is the in-cluster object store; Hetzner and OVHcloud hold the off-site copies.
 
 Open:
 
