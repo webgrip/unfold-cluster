@@ -158,7 +158,7 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 | --- | --- | --- |
 | Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | design (built: Retain) |
 | Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Three instances across the hub pool with required anti-affinity, continuous WAL archiving and a daily base backup | design |
-| Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once | proposed |
+| Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once | decided 2026-10-24 |
 | Other state | Not allowed by default. A workload that needs a PVC outside CNPG brings its own backup and restore test. Velero's file-system backup needs a privileged node agent, so it is not installed | design |
 | Run scratch space | The AX41's EPHEMERAL partition is LUKS, TPM-bound, wiped on reinstall. Every Run pod has ephemeral-storage and `emptyDir` size limits | design |
 | Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built, CNPG design |
@@ -203,7 +203,7 @@ The stack:
 - **Storage:** VMSingle on the VictoriaMetrics LTS line (1.148.x; 1.154.0 can run out of memory), and VLSingle.
 - **Collectors:** vlagent and vmagent.
 - **Alerting:** vmalert and VMAlertmanager, sending to a self-hosted ntfy on the off-site box. uptime-kuma there is the dead-man's switch.
-- **Tamper-evidence:** audit and Tetragon events are also forwarded off the cluster within seconds, so a cluster administrator cannot erase them afterwards. Garage has no object lock, so true write-once retention needs a different target. Owner decision.
+- **Tamper-evidence:** audit and Tetragon events are also forwarded off the cluster within seconds, so a cluster administrator cannot erase them afterwards. They land in Hetzner and OVHcloud buckets with object lock in compliance mode ([object storage](#object-storage)), which the cluster can write but not delete.
 
 ### 11. In-cluster TLS and workload identity
 
@@ -320,7 +320,9 @@ The cost is about €10 a month at the start, rising to about €17 a month at s
 
 Neither provider charges for requests or egress at this scale.
 
-Hetzner bills objects under 64 KB as 64 KB, so evidence is shipped in batches. Self-hosting is rejected for evidence: write-once storage on disks the cluster's administrator controls is not tamper-proof against that administrator. MinIO's community edition is archived. SeaweedFS is the most complete self-hosted option, if one is ever needed.
+Hetzner bills objects under 64 KB as 64 KB, so evidence is shipped in batches. Self-hosting is rejected for evidence: write-once storage on disks the cluster's administrator controls is not tamper-proof against that administrator. MinIO's community edition is archived.
+
+Lock-in stays low because every store speaks the same S3 API: SeaweedFS in the cluster, Hetzner and OVHcloud outside it. Moving a copy to another provider is a new endpoint and an `rclone sync`, not a migration. For speed, SeaweedFS volume servers write to the local NVMe user volumes, its filer keeps metadata in the CNPG Postgres cluster so every filer replica sees the same namespace, and hot data is read in-cluster; only copies leave the cluster.
 
 The backups built in #16 move from the off-site Garage to this layout before the first apply.
 
@@ -433,6 +435,6 @@ Decided on 2026-10-24:
 - The design assumes scale: the hub is a pool, and every stateful service runs three replicas on encrypted local volumes from the first day.
 - SeaweedFS is the in-cluster object store; Hetzner and OVHcloud hold the off-site copies.
 
-Open:
+- Object storage: SeaweedFS in the cluster for speed, Hetzner Object Storage and OVHcloud for the off-site and write-once copies, all over the S3 API so any one can be replaced ([object storage](#object-storage)).
 
-1. **Object storage:** Hetzner Object Storage plus OVHcloud, as [proposed](#object-storage), and the self-hosted option that keeps it free of lock-in.
+Nothing in this RFC is open.
