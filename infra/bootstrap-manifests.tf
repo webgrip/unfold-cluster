@@ -219,9 +219,9 @@ locals {
         namespace = "etcd-backup"
       }
       stringData = {
-        AWS_ACCESS_KEY_ID        = var.etcd_backup_s3_access_key
-        AWS_SECRET_ACCESS_KEY    = var.etcd_backup_s3_secret_key
-        AGE_RECIPIENT_PUBLIC_KEY = var.etcd_backup_age_recipient
+        AWS_ACCESS_KEY_ID     = var.etcd_backup_s3_access_key
+        AWS_SECRET_ACCESS_KEY = var.etcd_backup_s3_secret_key
+        AGE_X25519_PUBLIC_KEY = var.etcd_backup_age_recipient
       }
     }),
   ])
