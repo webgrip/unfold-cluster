@@ -1,6 +1,6 @@
 locals {
   # renovate: datasource=docker depName=quay.io/cilium/charts/cilium
-  cilium_chart_version = "1.20.3"
+  cilium_chart_version = "1.20.4"
   # renovate: datasource=helm depName=hcloud-cloud-controller-manager registryUrl=https://charts.hetzner.cloud
   hcloud_ccm_chart_version = "1.39.0"
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator
@@ -18,6 +18,10 @@ data "helm_template" "cilium" {
   kube_version = local.kubernetes_version
 
   values = [yamlencode({
+    cluster = {
+      name = local.cluster_name
+      id   = local.cilium_cluster_id
+    }
     ipam = {
       mode = "kubernetes"
     }

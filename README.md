@@ -78,6 +78,8 @@ The node key expires after 90 days; renew it with the same command and update `T
 
 The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, the smallest link in the cluster, so Cilium's `MTU` is set to 1400; Cilium subtracts its VXLAN (50 bytes) and WireGuard (80 bytes) overhead itself, leaving pods 1270.
 
+Pods get addresses from `10.65.0.0/16` and Services from `10.66.0.0/16`, and Cilium runs as cluster `unfold-main` with ID 2, as the [address plan](docs/rfc/0001-security-architecture.md#address-plan) allocates them for ClusterMesh. None of these can change once the cluster exists.
+
 ## How changes reach Hetzner
 
 Pull requests and pushes to `main` that touch `infra/` run `tofu plan` only; nothing is created. Applying is a separate, deliberate step: in Forgejo, Actions → `infra` → **Run workflow** on `main`, with the input set to `apply`. That run makes a fresh plan and applies exactly that plan, so read the plan of the latest `main` run first. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.

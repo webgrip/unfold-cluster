@@ -299,7 +299,7 @@ ClusterMesh fixes these at install and requires them to be unique, so they are a
 | unfold-main (production hub) | 2 | 10.64.0.0/16 | 10.65.0.0/16 | 10.66.0.0/16 |
 | later cells | 3 and up | 10.(64+4n).0.0/16 | 10.(65+4n).0.0/16 | 10.(66+4n).0.0/16 |
 
-`clustermesh.maxConnectedClusters` stays at 255. Today `infra/talos.tf` uses the Talos defaults, pods on 10.244.0.0/16 and services on 10.96.0.0/12. Moving them to this plan is part of delivery step 2. It has to happen before the first apply: Kubernetes cannot change a cluster's pod or service range in place.
+`clustermesh.maxConnectedClusters` stays at 255. `infra/network.tf` holds unfold-main's row: Talos takes the pod and service ranges from its `KubeNetworkConfig` document, and Cilium takes the cluster name and ID from its `cluster` values. They are set before the first apply because Kubernetes cannot change a cluster's pod or service range in place.
 
 ## Object storage
 

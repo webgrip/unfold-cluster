@@ -7,6 +7,10 @@ locals {
   api_vip              = "10.64.0.10"
   private_link         = "enp7s0"
 
+  cilium_cluster_id = 2
+  pod_subnet        = "10.65.0.0/16"
+  service_subnet    = "10.66.0.0/16"
+
   control_planes = {
     "unfold-cp-1" = "10.64.0.11"
     "unfold-cp-2" = "10.64.0.12"
