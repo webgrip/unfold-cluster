@@ -323,6 +323,28 @@ Hetzner bills objects under 64 KB as 64 KB, so evidence is shipped in batches. S
 
 The backups built in #16 move from the off-site Garage to this layout before the first apply.
 
+**No lock-in.** The S3 API is the portability layer, kept portable by four rules:
+- Data is encrypted before upload with age, restic or kopia, so no provider's key service is relied on.
+- Copies between providers are made with rclone under separate write-only credentials, never with a provider's replication feature.
+- Only versioning and a bucket-default object lock are used.
+- Provider-specific features are avoided: SSE-KMS, lifecycle beyond expiry, replication APIs and IAM dialects.
+
+Either provider can then be replaced by any S3 endpoint, including a self-hosted one, without a change to the cluster. The one exception is barman-cloud, which cannot encrypt on the client. Postgres backups therefore rely on OVH's server-side encryption until a pgBackRest-based CNPG plugin with its own encryption is mature.
+
+### Volumes: what was weighed
+
+Postgres, OpenBao and NATS each replicate their own data, so a distributed storage layer underneath would multiply copies, memory and things to operate.
+
+| Option | Verdict |
+| --- | --- |
+| hcloud volumes with LUKS | Chosen now: nothing to operate, and pods can move between cloud nodes. The passphrase comes from OpenBao |
+| Talos user volumes with local-path or TopoLVM | Already used for etcd. Databases move here when the disk benchmark misses its target or a second Unfold node exists for replicas |
+| Piraeus / LINSTOR (DRBD) | When two or three bare-metal nodes have spare NVMe |
+| Rook-Ceph | When there are five or more bare-metal nodes with 10 Gb networking. It needs about 27 GB of RAM before any workload and cannot heal itself on three nodes. At that size its object gateway can also become the self-hosted S3 |
+| Longhorn, OpenEBS Mayastor | Not planned. Longhorn keeps encryption keys only in Kubernetes Secrets; Mayastor pins CPU cores and needs hugepages |
+
+The full weighing, with scores per axis, is in the blueprint.
+
 ## CI
 
 CI jobs run code from every repository: Renovate updates, agent pull requests, and anyone's branch. They need container builds, and the trusted ones push and sign images. They do not belong next to the production hub.
