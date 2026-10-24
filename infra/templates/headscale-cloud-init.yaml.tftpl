@@ -2,6 +2,7 @@
 package_update: true
 packages:
   - curl
+  - unattended-upgrades
 users:
   - default
   - name: admin
@@ -13,6 +14,23 @@ users:
 ssh_pwauth: false
 disable_root: true
 write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  - path: /etc/apt/apt.conf.d/52unattended-upgrades-reboot
+    permissions: "0644"
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+  - path: /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf
+    permissions: "0644"
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* 04:00
+      RandomizedDelaySec=0
   - path: /etc/headscale/acl.hujson
     permissions: "0644"
     content: |

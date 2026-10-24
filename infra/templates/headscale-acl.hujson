@@ -3,6 +3,7 @@
     "group:admin": ["${admin_user}@"]
   },
   "tagOwners": {
+    "tag:cp": ["group:admin"],
     "tag:node": ["group:admin"]
   },
   "acls": [
@@ -14,7 +15,7 @@
   ],
   "autoApprovers": {
     "routes": {
-      "${node_route}": ["tag:node"]
+      "${node_route}": ["tag:cp"]
     }
   }
 }
