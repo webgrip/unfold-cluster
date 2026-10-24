@@ -25,7 +25,7 @@ No cluster is perfectly secure. [Residual risks](#residual-risks) lists what thi
 
 | Actor | Goal | Primary controls |
 | --- | --- | --- |
-| A malicious or confused agent Run | Escape the pod, steal credentials, reach other tenants, exfiltrate code | Kata micro-VM on the AX41, user namespaces, Tetragon LSM enforcement, FQDN-only egress through the egress gateway, credentials held outside the pod |
+| A malicious or confused agent Run | Escape the pod, steal credentials, reach other tenants, exfiltrate code, sabotage a change | Kata micro-VM on the AX41, user namespaces, Tetragon LSM enforcement, FQDN-only egress through the egress gateway, credentials held outside the pod; judge models that watch every action and can hold the Run; a sampled audit ([agent oversight](#agent-oversight-infrastructure)) |
 | An internet attacker | Reach any service or node | No public ingress ports: Cloudflare Tunnel only. Hetzner and Talos firewalls closed. API and Talos API reachable on the tailnet only |
 | A compromised supply chain | Run a poisoned image or chart | Digest pins, signature checks at pull (Talos) and at admission (Kyverno), registry allowlist in CEL, in-cluster mirror that only serves signed or re-signed images |
 | A stolen credential | Use a kubeconfig, a Hetzner token or a forge token | Short-lived OIDC sign-in, break-glass credentials kept offline with an alert on use, one token per job with delete protection (#14), signed commits only (#10) |
@@ -94,11 +94,14 @@ The rules live in four tiers, from hardest to remove to easiest:
    | Secrets | No `kubernetes.io/service-account-token` Secrets |
    | Namespaces | The PodSecurity `enforce` label cannot be lowered from `restricted` |
 3. **MutatingAdmissionPolicy (CEL)**, GA in 1.36. It sets the safe defaults so manifests stay short and the validating rules rarely fire: seccomp RuntimeDefault, `hostUsers: false`, `automountServiceAccountToken: false`, and the runtime class from the namespace label.
-4. **Kyverno ImageValidatingPolicy**, the one webhook. VAP cannot verify signatures. Kyverno checks cosign signatures and in-toto attestations (SBOM, provenance, vulnerability scan) at admission, which is a second check behind Talos's check at pull time.
-   - Version 1.19.2 or later: that release fixed 24 advisories, nine of them critical.
-   - Three replicas on the control planes, with a PodDisruptionBudget.
-   - `failurePolicy: Fail`, except for `kube-system` and Kyverno's own namespace.
-   - Only the admission controller runs. No background, cleanup or reports controllers.
+4. **Kyverno**, the authoring layer and the one webhook. It runs at version 1.19.2 or later, which fixed 24 advisories, nine of them critical. Three admission replicas run on the control planes with a PodDisruptionBudget, and two reports-controller replicas. It does two jobs:
+   - **It authors the best-practice catalogue in CEL.** Kyverno's CEL `ValidatingPolicy` and `MutatingPolicy` generate native ValidatingAdmissionPolicies and MutatingAdmissionPolicies (`autogen`). The rules are written once, with Kyverno's tests and reports, and the API server enforces them in-process. A Kyverno outage does not stop admission.
+     - The catalogue covers pod security beyond PodSecurity, requests and limits, probes, labels, no `latest` tags, PodDisruptionBudgets for replicated workloads, and no default service account.
+     - The tier 2 and tier 3 rules above live here.
+   - **It does what CEL in the API server cannot:**
+     - `ImageValidatingPolicy` checks cosign signatures and in-toto attestations (SBOM, provenance, vulnerability scan) at admission, as a second check behind Talos's check at pull time. It uses `failurePolicy: Fail`, except for `kube-system` and Kyverno's own namespace.
+     - `GeneratingPolicy` gives every new namespace its default-deny network policy, ResourceQuota and LimitRange.
+     - `DeletingPolicy` removes expired Run namespaces.
 
 Every policy rolls out in `Audit`, then `Warn`, then `Deny`. A policy reaches `Deny` only after the mutation test: a manifest that breaks the rule is refused, a manifest that follows it is admitted, and both run in CI against a kind cluster on the same Kubernetes version.
 
@@ -199,6 +202,53 @@ The stack:
 - **Alerting:** vmalert and VMAlertmanager, sending to a self-hosted ntfy on the off-site box. uptime-kuma there is the dead-man's switch.
 - **Tamper-evidence:** audit and Tetragon events are also forwarded off the cluster within seconds, so a cluster administrator cannot erase them afterwards. Garage has no object lock, so true write-once retention needs a different target. Owner decision.
 
+## Platform components
+
+Every component below is reconciled by Flux from this repository, pinned by digest, and placed on the control planes when it belongs to the recovery set: the components needed to change the cluster when everything else is down.
+
+| Area | Component | Role |
+| --- | --- | --- |
+| Bootstrap (Talos inline manifests) | Cilium, hcloud CCM, Flux operator and instance | Network and GitOps before anything else exists |
+| Network | Cilium with Hubble and Gateway API; cloudflared; external-dns | Encrypted, default-deny networking; the only public way in; DNS records |
+| Certificates | cert-manager, trust-manager | Gateway and internal certificates; CA bundles; later the signer for pod certificates (GA in 1.37) |
+| Secrets | OpenBao, External Secrets, Reloader | Secret store with the static seal; delivery into Secrets; restarts on rotation |
+| Policy | Kyverno (admission and reports), native VAP and MAP | Section 3 |
+| Runtime security | Tetragon | Section 9, and the agent oversight below |
+| Images | Zot | Section 6 |
+| Storage | hcloud-csi, CloudNativePG with plugin-barman-cloud | Section 7 |
+| Observability | VictoriaMetrics operator: VMSingle, VLSingle, VictoriaTraces, vmagent, vlagent, vmalert, VMAlertmanager; kube-state-metrics, node-exporter; Grafana; OpenCost | Section 10; VictoriaTraces holds each Run's harness traces (Ploeg ADR-0113) |
+| Off-site | ntfy, uptime-kuma | Alerts and the dead-man's switch, outside the cluster |
+| Agent plane | ploegd and ploeg-worker, Unfold, LiteLLM, KEDA, NATS JetStream, RuntimeClasses `kata` and `gvisor`, agent-sandbox (spike) | The workloads this cluster exists for, and their oversight |
+| Scaling | cluster-autoscaler with the Hetzner provider | Node pools below |
+
+## Agent oversight infrastructure
+
+Agents are watched in five layers, designed in Ploeg's [run oversight and execution backends dossier](https://github.com/ploeg-hq/ploeg/pull/243): guards that refuse an action inline, a Watch that judges every action within seconds, a sampled Audit, and a person. This cluster provides the parts that sit outside Ploeg.
+
+| Part | In this cluster | Why here |
+| --- | --- | --- |
+| Kernel guard and evidence | Tetragon `TracingPolicyNamespaced` on Run pods. It kills processes and fails their system calls (through BPF LSM hooks, which the Talos kernel supports) on credential-file reads, `setns` and `unshare`, module and BPF loads, execution from `/tmp`, and connections outside the allowlist. It also exports exec, file and connect events with pod labels | The Run cannot forge or suppress kernel events |
+| Network evidence | Hubble flow export for Run pods, allowed and dropped | The same reason |
+| Event stream | NATS JetStream, one subject per Run, which the Run's own pod cannot publish to | The Watch reads every source from one ordered stream |
+| Model gateway guards | LiteLLM's Tool Permission guardrail; Prompt Guard 2 scoring tool results for injection; outbound secret patterns | Refusals happen before the model or the tool acts |
+| Judge models | Stage 1 (gpt-oss-safeguard or Granite Guardian) and stage 2 (a frontier model from a different family than the agent), both reached through LiteLLM | Every judge call is metered and budgeted like a Run's |
+| Holding a Run | Blocking the Run's LiteLLM key, and a Cilium policy that denies all egress for pods labelled for quarantine | The fastest stop available without killing the evidence |
+
+## Node pools and scaling
+
+Hetzner Cloud offers no nested virtualization, and Hetzner dedicated servers are billed monthly with a setup fee. Each isolation class therefore scales differently (Ploeg ADR-0106, and section 5 of the dossier).
+
+| Pool | Machines | Runs | Scales by |
+| --- | --- | --- | --- |
+| Control planes | 3 × CPX22 | The recovery set | By hand |
+| `unfold` | CPX32 | ploegd, Unfold, databases | By hand; a second node with hub HA |
+| `gvisor` | CPX VMs | `standard` and `hardened` Runs, under gVisor's systrap, which needs no `/dev/kvm` | cluster-autoscaler from zero. Each pool is one server type; the Talos worker config is its cloud-init, the Talos snapshot its image |
+| `kata` | AX41 now; Hetzner auction servers later | `isolated` Runs under Kata with Cloud Hypervisor; CI under Kata | A person orders a server when `isolated` Runs have waited too long for a week; the alert carries the evidence |
+| Burst cells | Hourly bare metal (Scaleway Elastic Metal) | `isolated` Runs at peak | OpenTofu creates and destroys a small Talos cell that pulls work from the hub (Ploeg ADR-0107) |
+| `confidential` | None on Hetzner | `confidential` Runs | A confidential-VM cloud cell, or our own EPYC hardware, when a client needs it |
+
+Warm Run pods per pool keep Kata and gVisor starts close to a second; agent-sandbox's warm pools are the candidate (spike). The Talos Kata extension ships Kata 3.32 while upstream is at 4.3.1, which is a risk to watch.
+
 ## Address plan
 
 ClusterMesh fixes these at install and requires them to be unique, so they are allocated now even though only one cluster exists.
@@ -250,12 +300,15 @@ Each step is one pull request with its mutation test, stacked like #10 to #16.
 7. Zot mirror, Talos registry mirrors and `ImageVerificationConfig`, then Kyverno image policies.
 8. Encrypted StorageClass, OpenBao, External Secrets, CNPG with the barman-cloud plugin.
 9. Cloudflare Tunnel, Gateway API, external-dns, DNSSEC and CAA.
-10. Spikes, in parallel: KMS disk encryption, static admission manifests, Tetragon LSM enforcement, SELinux enforcing.
-11. Policies from Audit to Deny, one at a time, each after its mutation test.
+10. Agent plane: RuntimeClasses, the `gvisor` pool with cluster-autoscaler, NATS JetStream, Tetragon Run policies, LiteLLM guardrails, then Ploeg's Watch in shadow mode.
+11. Spikes, in parallel: KMS disk encryption, static admission manifests, Tetragon LSM enforcement, SELinux enforcing, agent-sandbox warm pools.
+12. Policies from Audit to Deny, one at a time, each after its mutation test.
 
 ## Decisions for the owner
 
 1. **KMS VM for disk encryption** on the cloud nodes: one CX-class VM on the private network, about €4 a month, or accept unencrypted cloud disks.
 2. **Where database backups and audit evidence live:** the off-site Garage with LUKS under it, or a second provider with encryption at rest and object lock.
-3. **Kyverno as the one admission webhook** for signatures and attestations, or rely on Talos's pull-time check alone and keep the API path webhook-free.
-4. **SELinux enforcing:** run the spike now, or after the cluster is live.
+3. **SELinux enforcing:** run the spike now, or after the cluster is live.
+4. **Burst capacity for `isolated` Runs:** hourly bare metal at Scaleway as burst cells, or only Hetzner servers ordered by a person.
+
+Decided on 2026-10-24: Kyverno authors the best-practice catalogue in CEL and is the one admission webhook (section 3).
