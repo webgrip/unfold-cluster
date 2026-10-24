@@ -1,0 +1,49 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pinned-approved-images
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: images
+      expression: >-
+        object.spec.containers.map(c, c.image)
+        + (has(object.spec.initContainers) ? object.spec.initContainers.map(c, c.image) : [])
+        + (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers.map(c, c.image) : [])
+  validations:
+    - expression: variables.images.all(i, i.contains('@sha256:'))
+      messageExpression: >-
+        'every image must be pinned by digest; not pinned: ' + variables.images.filter(i, !i.contains('@sha256:')).join(', ')
+      reason: Forbidden
+    - expression: >-
+        variables.images.all(i,
+          i.startsWith('ghcr.io/') || i.startsWith('quay.io/') || i.startsWith('registry.k8s.io/')
+          || i.startsWith('docker.io/') || i.startsWith('code.forgejo.org/') || i.startsWith('factory.talos.dev/'))
+      messageExpression: >-
+        'images must come from an approved registry; refused: ' + variables.images.filter(i,
+          !(i.startsWith('ghcr.io/') || i.startsWith('quay.io/') || i.startsWith('registry.k8s.io/')
+          || i.startsWith('docker.io/') || i.startsWith('code.forgejo.org/') || i.startsWith('factory.talos.dev/'))).join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pinned-approved-images
+spec:
+  policyName: pinned-approved-images
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - flux-system
