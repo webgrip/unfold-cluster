@@ -56,7 +56,20 @@ locals {
       }
     }),
     local.pod_security_patch,
+    local.etcd_backup_access_patch,
   ]
+
+  etcd_backup_access_patch = yamlencode({
+    machine = {
+      features = {
+        kubernetesTalosAPIAccess = {
+          enabled                     = true
+          allowedRoles                = ["os:etcd:backup"]
+          allowedKubernetesNamespaces = ["etcd-backup"]
+        }
+      }
+    }
+  })
 
   pod_security_patch = yamlencode({
     apiVersion = "v1alpha1"
