@@ -15,8 +15,12 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Type "apply" to create or change the Hetzner resources in the plan this run makes
+        description: Choose "apply" to create or change the Hetzner resources in the plan this run makes
         required: true
+        type: choice
+        options:
+          - plan-only
+          - apply
         default: plan-only
 
 concurrency:

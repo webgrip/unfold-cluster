@@ -17,7 +17,7 @@ Words used below:
 * **OpenBao**: the homelab's secret store. Every value the workflows need is put there by the owner, at a fixed path, and nowhere else by hand.
 * **The bridge**: the homelab CronJob `forgejo-actions-secrets` (namespace `forgejo`, hourly at minute 23). It reads those OpenBao paths and sets them on this repository as Forgejo Actions **secrets** (write-only, hidden in logs) or **variables** (readable plain text). So a value put into OpenBao reaches the workflows within the hour. To start it at once from a homelab shell: `kubectl -n forgejo create job --from=cronjob/forgejo-actions-secrets forgejo-actions-secrets-now`. Nobody types secrets into Forgejo's settings pages; this is the estate's secret model (homelab-cluster ADR-0055).
 * **Password manager**: the owner's own vault, with an offline copy (paper or an encrypted USB stick in a drawer). OpenBao runs in the homelab, so anything that cannot be made again, the state passphrase, the age key and the Talos secrets bundle, also goes here, so a lost homelab does not lose the cluster.
-* **Apply**: a run of the `infra` workflow (Actions → `infra` → **Run workflow** on `main`, input `apply`). Pushes and PRs only plan; nothing at Hetzner changes until a run with `apply`.
+* **Apply**: a run of the `infra` workflow (Actions → `infra` → **Run workflow** on `main`, choose `apply` in the dropdown). Pushes and PRs only plan; nothing at Hetzner changes until a run with `apply`.
 
 ## What is made by hand, and why
 
@@ -203,7 +203,7 @@ Everything under `secret/unfold-cluster/vars` becomes a Forgejo **variable**, re
 With `TAILSCALE_AUTHKEY` unset, OpenTofu creates only the network, the firewalls, the Headscale server and its address. No cluster node yet.
 
 - [ ] **C1.** Open the newest `infra` run on `main` and read its plan: it should create `hcloud_network`, its subnet, two firewalls, the placement group, the SSH key, the Headscale primary IP and `hcloud_server.headscale`, and nothing named `control_plane` or `unfold_worker`.
-- [ ] **C2.** Actions → `infra` → **Run workflow**, branch `main`, input `apply`.
+- [ ] **C2.** Actions → `infra` → **Run workflow**, branch `main`, choose `apply` in the dropdown (the default `plan-only` creates nothing).
 - [ ] **C3.** At the end of the run, note the output `headscale_ipv4`. If the create fails with the server type unavailable, Hetzner has no CX stock in `fsn1` at that moment: retry later, or set `location` to `nbg1` in `infra/variables.tf` through a PR. Decide that before the second apply, because every node must share one location.
 
 ## D. Between the applies
