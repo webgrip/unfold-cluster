@@ -168,4 +168,8 @@ Decided on 2026-10-24:
   - **Kata VMs:** each gets whole CPU cores.
   - **Admin:** the owner is the only admin for now.
 
-Open: which hardware keys to buy.
+Hardware keys, decided on 2026-10-24:
+
+- **Now, at no cost:** admin accounts sign in with passkeys bound to the laptop's TPM and to the phone, each device the other's backup. The age backup key moves into the laptop TPM with `age-plugin-tpm`.
+- **Before the first client:** two YubiKey 5 NFC (about €110 together), one in daily use and one stored elsewhere. They take over the passkeys and hold the age backup key, signing keys and Talos CA, as the "before the first client" row requires.
+- OpenBao recovery shares need no extra hardware: the third share is on paper or an encrypted USB stick in a separate place.
