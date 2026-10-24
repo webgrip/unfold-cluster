@@ -35,6 +35,12 @@ locals {
       }
     }),
     yamlencode({
+      apiVersion     = "v1alpha1"
+      kind           = "KubeNetworkConfig"
+      podSubnets     = [local.pod_subnet]
+      serviceSubnets = [local.service_subnet]
+    }),
+    yamlencode({
       apiVersion = "v1alpha1"
       kind       = "KubeFlannelCNIConfig"
       "$patch"   = "delete"

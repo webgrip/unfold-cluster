@@ -18,6 +18,10 @@ data "helm_template" "cilium" {
   kube_version = local.kubernetes_version
 
   values = [yamlencode({
+    cluster = {
+      name = local.cluster_name
+      id   = local.cilium_cluster_id
+    }
     ipam = {
       mode = "kubernetes"
     }
