@@ -78,6 +78,10 @@ The owner keeps these in a password manager with an offline copy, never in git:
 
 The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu output -raw talosconfig` and `tofu output -raw kubeconfig`, from a shell that has the state credentials and the passphrase.
 
+## Security architecture
+
+The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md).
+
 ## Open
 
 * **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the private NIC is named `enp7s0` so the API VIP comes up, are proven only by the first apply.
