@@ -1,8 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "local>webgrip/renovate-config#v1.13.0",
-    "local>webgrip/renovate-config:gitops#v1.13.0"
+    "local>webgrip/renovate-config#v1.14.0",
+    "local>webgrip/renovate-config:gitops#v1.14.0"
   ],
   "flux": {
     "managerFilePatterns": [
