@@ -99,6 +99,8 @@ The workflow needs, on this repository in Forgejo:
 
 Without the secrets and variables other than `TAILSCALE_AUTHKEY` and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
+The workflow runs only on `unfold-infra`, a runner registered on this repository alone and on no other, so no other repository's job can land on the runner that holds these secrets. It runs one job at a time, each in a fresh pod that is deleted afterwards. The runner pool is defined in the homelab, in `kubernetes/apps/forgejo/forgejo-runner/app/infra/` of homelab-cluster.
+
 ## Credentials and rotation
 
 Hetzner tokens cannot be narrowed below a whole project, so each job gets its own token and each can be revoked alone. Every server, the network and the Headscale address carry Hetzner's delete protection, so a stolen token cannot remove them in one call; removing one takes a deliberate change in this repository first.
