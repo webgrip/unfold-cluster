@@ -30,12 +30,23 @@ Two manual workflow runs, with one manual step between them:
       ```
    4. Store the key as the repository secret `TAILSCALE_AUTHKEY`, and in the password manager.
    5. Build the Talos snapshot from `talos/schematics/cloud.yaml` and set `TALOS_SNAPSHOT_ID`.
-3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator and a Flux instance that reconciles `kubernetes/clusters/main` from the public GitHub mirror.
+3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
 4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
 The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on link `enp7s0`, Hetzner's name for the first private NIC on CPX servers). It costs nothing and is reachable only inside the network. The control planes advertise `10.64.0.0/16` to the tailnet; approve that route once with `sudo headscale nodes approve-routes` on the Headscale server, and the admin kubeconfig from `tofu output -raw kubeconfig` works from any tailnet device.
 
 Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
+
+## Only signed commits deploy
+
+Flux applies whatever is on the GitHub mirror's `main`, so a push made straight to GitHub would otherwise reach production. Flux therefore checks the signature of the commit it is about to apply (`verify.mode: HEAD`) and refuses anything not signed by a key in `infra/trusted-signers/`:
+
+| Key | Signs |
+| --- | --- |
+| `ryan.sshpub` | the owner's own commits |
+| `forgejo.sshpub` | every pull request merge, signed by Forgejo's instance key (published at `/api/v1/signing-key.ssh`) |
+
+A refused commit leaves the cluster on the last verified one and marks the GitRepository not ready. Renovate's own commits are unsigned, so they reach `main` only through a pull request merge, which Forgejo signs; Renovate must never push straight to `main` here. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest.
 
 ## Machines
 

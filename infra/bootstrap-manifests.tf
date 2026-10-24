@@ -87,12 +87,6 @@ data "helm_template" "flux_instance" {
       distribution = {
         version = "2.x"
       }
-      sync = {
-        kind = "GitRepository"
-        url  = var.gitops_url
-        ref  = "refs/heads/main"
-        path = "kubernetes/clusters/main"
-      }
       kustomize = {
         patches = [{
           target = {
@@ -139,6 +133,61 @@ locals {
     }
   })
 
+  trusted_signers = {
+    for file in fileset("${path.module}/trusted-signers", "*.sshpub") :
+    file => trimspace(file("${path.module}/trusted-signers/${file}"))
+  }
+
+  flux_sync_manifest = join("\n---\n", [
+    yamlencode({
+      apiVersion = "v1"
+      kind       = "Secret"
+      metadata = {
+        name      = "trusted-signers"
+        namespace = "flux-system"
+      }
+      stringData = local.trusted_signers
+    }),
+    yamlencode({
+      apiVersion = "source.toolkit.fluxcd.io/v1"
+      kind       = "GitRepository"
+      metadata = {
+        name      = "flux-system"
+        namespace = "flux-system"
+      }
+      spec = {
+        interval = "1m"
+        url      = var.gitops_url
+        ref = {
+          branch = "main"
+        }
+        verify = {
+          mode = "HEAD"
+          secretRef = {
+            name = "trusted-signers"
+          }
+        }
+      }
+    }),
+    yamlencode({
+      apiVersion = "kustomize.toolkit.fluxcd.io/v1"
+      kind       = "Kustomization"
+      metadata = {
+        name      = "flux-system"
+        namespace = "flux-system"
+      }
+      spec = {
+        interval = "10m"
+        path     = "./kubernetes/clusters/main"
+        prune    = true
+        sourceRef = {
+          kind = "GitRepository"
+          name = "flux-system"
+        }
+      }
+    }),
+  ])
+
   flux_namespace_manifest = yamlencode({
     apiVersion = "v1"
     kind       = "Namespace"
@@ -154,5 +203,6 @@ locals {
     { name = "flux-system-namespace", contents = local.flux_namespace_manifest },
     { name = "flux-operator", contents = data.helm_template.flux_operator.manifest },
     { name = "flux-instance", contents = data.helm_template.flux_instance.manifest },
+    { name = "flux-sync", contents = local.flux_sync_manifest },
   ]
 }
