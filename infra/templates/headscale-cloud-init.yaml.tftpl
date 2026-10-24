@@ -13,6 +13,10 @@ users:
 ssh_pwauth: false
 disable_root: true
 write_files:
+  - path: /etc/headscale/acl.hujson
+    permissions: "0644"
+    content: |
+      ${indent(6, acl)}
   - path: /etc/headscale/config.yaml
     permissions: "0644"
     content: |
@@ -58,7 +62,7 @@ write_files:
         format: text
       policy:
         mode: file
-        path: ""
+        path: /etc/headscale/acl.hujson
       dns:
         magic_dns: true
         base_domain: tailnet.unfold.internal

@@ -112,7 +112,7 @@ locals {
     name       = "tailscale"
     environment = [
       "TS_AUTHKEY=${coalesce(var.tailscale_authkey, "unset")}",
-      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-routes=${local.network_range}",
+      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-tags=tag:node --advertise-routes=${local.cloud_subnet_range}",
     ]
   })
 
@@ -122,7 +122,7 @@ locals {
     name       = "tailscale"
     environment = [
       "TS_AUTHKEY=${coalesce(var.tailscale_authkey, "unset")}",
-      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false",
+      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-tags=tag:node",
     ]
   })
 }

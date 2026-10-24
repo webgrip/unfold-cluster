@@ -83,6 +83,10 @@ resource "hcloud_server" "headscale" {
     ssh_public_key    = var.admin_ssh_public_key
     headscale_version = local.headscale_version
     headscale_sha256  = local.headscale_sha256
+    acl = templatefile("${path.module}/templates/headscale-acl.hujson", {
+      admin_user = var.headscale_admin_user
+      node_route = local.cloud_subnet_range
+    })
   })
 
   labels = {

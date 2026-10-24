@@ -97,3 +97,9 @@ variable "tailscale_authkey" {
   default     = null
   sensitive   = true
 }
+
+variable "headscale_admin_user" {
+  description = "The Headscale user whose devices are admins on the tailnet: the only members allowed to reach the nodes and the cluster's private subnet."
+  type        = string
+  default     = "ryan"
+}
