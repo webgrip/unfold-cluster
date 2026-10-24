@@ -20,12 +20,39 @@ spec:
       retries: 3
   values:
     controller:
+      image:
+        hcloudCSIDriver:
+          # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-csi-driver
+          tag: v2.24.0@sha256:5b25f70ea9acd5ae0a607ebc8213becfc4cf414232927e4ff35405a153299f10
+        csiAttacher:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-attacher
+          tag: v4.13.0@sha256:d1a26170efed45491074ca4545c81844eee2b9043fb885ac01fb4aed6f8b72d2
+        csiResizer:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-resizer
+          tag: v2.2.1@sha256:ea1d25e23479000c7e8eeb92d827df66258df4e482ca054c5e7ce3fc0f5c41a5
+        csiProvisioner:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-provisioner
+          tag: v6.3.0@sha256:a4b0b1a37605b7b04a293e136edf7006ec1786a8eb3f4e5a945f81d667dcc371
+        livenessProbe:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/livenessprobe
+          tag: v2.20.0@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8
       nodeSelector:
         node-role.kubernetes.io/control-plane: ""
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+    node:
+      image:
+        hcloudCSIDriver:
+          # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-csi-driver
+          tag: v2.24.0@sha256:5b25f70ea9acd5ae0a607ebc8213becfc4cf414232927e4ff35405a153299f10
+        csiNodeDriverRegistrar:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
+          tag: v2.18.0@sha256:b7fefd08651f00ac4df1a196ed4c621c2451fbb899297fe9fad9e36c667af0c0
+        livenessProbe:
+          # renovate: datasource=docker depName=registry.k8s.io/sig-storage/livenessprobe
+          tag: v2.20.0@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8
     storageClasses:
       - name: hcloud-volumes
         defaultStorageClass: true
