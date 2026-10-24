@@ -26,7 +26,7 @@ data "helm_template" "cilium" {
     k8sServicePort       = 7445
     routingMode          = "tunnel"
     tunnelProtocol       = "vxlan"
-    MTU                  = 1350
+    MTU                  = 1400
     cgroup = {
       autoMount = {
         enabled = false
@@ -41,6 +41,11 @@ data "helm_template" "cilium" {
     }
     operator = {
       replicas = 1
+    }
+    encryption = {
+      enabled        = true
+      type           = "wireguard"
+      nodeEncryption = false
     }
     hubble = {
       enabled = true

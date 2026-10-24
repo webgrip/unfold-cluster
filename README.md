@@ -53,6 +53,7 @@ A refused commit leaves the cluster on the last verified one and marks the GitRe
 * **Pod Security `restricted`** is the API server's default for every namespace; Talos exempts `kube-system`, where Cilium and the storage node plugin need host access.
 * **Default-deny networking**: a Cilium clusterwide policy denies all ingress and egress for every pod outside `kube-system` and `flux-system`, except DNS. A workload's namespace adds its own allow policy.
 * **Pinned, approved images**: a native ValidatingAdmissionPolicy refuses any pod outside `kube-system` and `flux-system` whose images are not pinned by digest or come from a registry not on the list.
+* **Pod traffic between nodes is encrypted** with Cilium's WireGuard, so nothing crosses Hetzner's private network or the vSwitch in clear text.
 * **Hubble relay** runs, so `hubble observe --verdict DROPPED` shows what default-deny refused.
 
 ## Machines
@@ -64,7 +65,7 @@ A refused commit leaves the cluster on the last verified one and marks the GitRe
 | `unfold-headscale` | Cloud CPX02 | public only | Headscale, the admin tailnet's coordination server and relay |
 | `unfold-metal-1` | Robot AX41 | `10.64.1.31` on the vSwitch | agent Runs and CI, both under Kata; not in `infra/` yet |
 
-The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, which is why Cilium's MTU is 1350.
+The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, the smallest link in the cluster, so Cilium's `MTU` is set to 1400; Cilium subtracts its VXLAN (50 bytes) and WireGuard (80 bytes) overhead itself, leaving pods 1270.
 
 ## How changes reach Hetzner
 
