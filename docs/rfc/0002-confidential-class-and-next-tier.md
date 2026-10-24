@@ -148,10 +148,24 @@ These are not legal advice.
 - **Cyber Resilience Act:** non-commercial open-source releases of Ploeg are out of scope, but a company that sells it becomes the manufacturer. Reporting duties start 11 September 2026.
 - **AI Act:** marking AI-generated commits and pull requests is advisable. A coding-agent platform is likely not high-risk; confirm with counsel.
 
-## Decisions for the owner
+## Decisions
 
-1. **Confidential, phase 0:** build the pipeline now on the AX41, at no hardware cost.
-2. **Where the key broker lives:** an IONOS confidential VM (option B), with a client-run broker as a premium tier.
-3. **The admission carve-out** for `cc_init_data` on SNP runtime classes only, when phase 0 starts.
-4. **The "before the first client" list** as the next build work after RFC 0001's delivery steps.
-5. **Hardware keys:** buy them now (about €50 each; about €300 with spares and the token set for keys).
+Decided on 2026-10-24:
+
+- Confidential phase 0 is built now on the AX41, at no hardware cost.
+- The key broker runs in a confidential VM at a second provider (option B); a client-run broker is offered as a premium tier.
+- The admission carve-out for `cc_init_data` on SNP runtime classes comes with phase 0.
+- The "before the first client" list is the next build work after RFC 0001's delivery steps.
+- From RFC 0001's open list:
+  - **Hub pool:** starts at one node and goes to three before anyone else depends on it.
+  - **Cap:** raised to about €280 a month.
+  - **Seccomp:** on inside gVisor and Kata, on the homelab first.
+  - **Kata 4:** we wait a week for Sidero before building it ourselves.
+  - **Runs:** a per-Run egress proxy and package caches are adopted.
+  - **Accounts:** hardware keys are required on every admin account.
+  - **Retention:** workspaces are deleted at the end of a Run, transcripts kept 90 days, security evidence 365 days.
+  - **Judge:** gpt-oss-safeguard is the first-stage judge.
+  - **Kata VMs:** each gets whole CPU cores.
+  - **Admin:** the owner is the only admin for now.
+
+Open: which hardware keys to buy.
