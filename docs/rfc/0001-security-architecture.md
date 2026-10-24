@@ -231,7 +231,7 @@ WireGuard encrypts pod traffic between nodes, so a reader on Hetzner's network s
 | Incident runbooks: node compromise, OpenBao rotation, mass credential rotation, etcd key rotation; a yearly tabletop exercise | The first bad day follows a script | A few days |
 | Forensics: Tetragon and audit events off the cluster, `talosctl support` bundles, volume snapshots; container checkpoints treated as secrets | Evidence survives the incident | Free |
 | OWASP ZAP baseline in CI against public routes; an external pentest once real users depend on it | Outside view | Free; a pentest €3,000–10,000 |
-| Trivy: not installed. Its March 2026 supply-chain compromise (CVE-2026-33634) is the reason; if it is ever used, pin it by digest | Avoids a known-bad dependency path | Free |
+| Trivy, in CI before signing and as the Trivy Operator in the cluster. Its March 2026 supply-chain compromise (CVE-2026-33634: malicious v0.69.4 binaries, v0.69.5 and v0.69.6 images, moved `trivy-action` tags) is handled the way every dependency should be: pinned by digest, its signature verified, a release adopted only after Renovate's soak period, and its database pulled through the Zot mirror | Vulnerability and misconfiguration findings for every image, before and after deployment; Kubescape stays for posture and RBAC | Free; a few hundred MiB |
 
 ### Disk encryption cost
 
@@ -405,8 +405,9 @@ Decided on 2026-10-24:
 - SELinux enforcing is tested on this cluster before it becomes production.
 - `isolated` capacity grows both ways: Hetzner servers ordered by a person, and hourly bare-metal burst cells.
 - We stay on current Kata: an upstream contribution, and our own build until it lands.
+- CI starts as a Kata-only pool in this cluster (option A) and moves to its own cell (option B).
+- Trivy is used, pinned by digest and signature-verified (section 12).
 
 Open:
 
-1. **Object storage:** Hetzner Object Storage plus OVHcloud, as [proposed](#object-storage).
-2. **CI:** start with option A and move to B, or go to B straight away and raise the cap by about €60 a month.
+1. **Object storage:** Hetzner Object Storage plus OVHcloud, as [proposed](#object-storage), and the self-hosted option that keeps it free of lock-in.
