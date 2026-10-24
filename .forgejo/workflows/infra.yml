@@ -73,29 +73,45 @@ jobs:
         run: tofu validate
 
   plan-or-apply:
-    # Never for pull requests: this job holds every production secret.
+    # Never for pull requests. The credentials are not Forgejo secrets: OpenBao hands them only
+    # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
+    # workflow_dispatch (role ci-unfold-cluster), so a branch's own workflow cannot read them.
     if: github.event_name != 'pull_request'
     runs-on: unfold-infra
+    enable-openid-connect: true
     defaults:
       run:
         working-directory: infra
     env:
-      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.STATE_S3_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_KEY }}
       TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
       TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
-      TF_VAR_hcloud_cluster_token: ${{ secrets.HCLOUD_TOKEN_CLUSTER }}
-      TF_VAR_hcloud_vip_token: ${{ secrets.HCLOUD_TOKEN_VIP }}
-      TF_VAR_state_passphrase: ${{ secrets.STATE_PASSPHRASE }}
       TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
-      TF_VAR_tailscale_authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-      TF_VAR_tailscale_control_plane_authkey: ${{ secrets.TAILSCALE_AUTHKEY_CONTROL_PLANE }}
-      TF_VAR_etcd_backup_s3_access_key: ${{ secrets.ETCD_BACKUP_WRITE_ACCESS_KEY }}
-      TF_VAR_etcd_backup_s3_secret_key: ${{ secrets.ETCD_BACKUP_WRITE_SECRET_KEY }}
       TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Read the state, Hetzner and backup credentials from OpenBao
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            HCLOUD_TOKEN=secret/data/hetzner/unfold-tofu#HCLOUD_TOKEN
+            AWS_ACCESS_KEY_ID=secret/data/unfold-cluster/tofu-state#STATE_S3_ACCESS_KEY
+            AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
+            TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
+            TF_VAR_hcloud_cluster_token=secret/data/hetzner/unfold-cluster#HCLOUD_TOKEN_CLUSTER
+            TF_VAR_hcloud_vip_token=secret/data/hetzner/unfold-vip#HCLOUD_TOKEN_VIP
+            TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
+            TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
+
+      - name: Read the tailnet keys from OpenBao, once the cluster nodes are wanted
+        if: vars.CLUSTER_NODES == 'enabled'
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            TF_VAR_tailscale_control_plane_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY_CONTROL_PLANE
+            TF_VAR_tailscale_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY
 
       - name: Install OpenTofu with a verified checksum
         working-directory: ${{ runner.temp }}

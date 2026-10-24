@@ -30,7 +30,7 @@ Two manual workflow runs, with one manual step between them. The owner's step-by
       sudo headscale preauthkeys create --tags tag:node --expiration 24h
       ```
 
-   4. Put the `tag:cp` key into OpenBao as `TAILSCALE_AUTHKEY_CONTROL_PLANE` and the `tag:node` key as `TAILSCALE_AUTHKEY`, both at `secret/unfold-cluster/tailnet`; the bridge makes them repository secrets. The worker key is spent when the worker joins, so make it just before the second apply.
+   4. Put the `tag:cp` key into OpenBao as `TAILSCALE_AUTHKEY_CONTROL_PLANE` and the `tag:node` key as `TAILSCALE_AUTHKEY`, both at `secret/unfold-cluster/tailnet`, and set `CLUSTER_NODES` to `enabled` at `secret/unfold-cluster/vars`, which tells the workflow to read the keys. The worker key is spent when the worker joins, so make it just before the second apply.
    5. Build the Talos snapshot with `scripts/build-talos-snapshot.sh`, which turns `talos/schematics/cloud.yaml` and the version in `talos/talenv.yaml` into a Hetzner snapshot and prints its id, and put that id into OpenBao as `TALOS_SNAPSHOT_ID` at `secret/unfold-cluster/vars`, from where the bridge sets the repository variable.
 3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
 4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
@@ -113,28 +113,29 @@ Pull requests that touch `infra/` run only `fmt` and `validate`, on the shared `
 
 Applying is a separate, deliberate step. Read the plan of a run on `main` and copy its digest. Then in Forgejo, Actions → `infra` → **Run workflow** on `main`, with `apply` chosen in the dropdown and that digest in `plan_digest`. The run makes a fresh plan and applies it only if its digest matches the one you read; otherwise it stops and prints its own, so read that run's plan and dispatch again. Every server carries `prevent_destroy`, so a plan that would replace one fails instead.
 
-The workflow needs these repository secrets and variables in Forgejo. Nobody types them into Forgejo: the owner puts each value into the homelab's OpenBao, and the homelab CronJob `forgejo-actions-secrets` (in `kubernetes/apps/forgejo/forgejo-actions-secrets` of homelab-cluster, hourly at minute 23) copies them onto this repository, as homelab-cluster ADR-0055 lays out. The order and commands are in the [bootstrap checklist](docs/bootstrap-checklist.md).
+The owner puts every value into the homelab's OpenBao; nobody types one into Forgejo. The credentials never become Forgejo secrets: each run that needs them proves who it is with its Forgejo OIDC token and reads them from OpenBao itself, through the shared `openbao-read` action, as homelab-cluster ADR-0061 lays out. OpenBao's role `ci-unfold-cluster` answers only a token for this repository, on `refs/heads/main`, from a push, the schedule or a manual run, so neither a pull request nor a workflow added on a branch can read them. Only the plain variables are still copied onto this repository, by the homelab CronJob `forgejo-actions-secrets` (in `kubernetes/apps/forgejo/forgejo-actions-secrets` of homelab-cluster, hourly at minute 23). The order and commands are in the [bootstrap checklist](docs/bootstrap-checklist.md).
 
-| Kind | Name | OpenBao path | Holds |
+| Reaches the workflow as | Name | OpenBao path | Holds |
 | --- | --- | --- | --- |
-| secret | `HCLOUD_TOKEN` | `secret/hetzner/unfold-tofu` | Hetzner Cloud API token for OpenTofu in CI, read and write |
-| secret | `HCLOUD_TOKEN_CLUSTER` | `secret/hetzner/unfold-cluster` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
-| secret | `HCLOUD_TOKEN_VIP` | `secret/hetzner/unfold-vip` | a third token, for the control planes to move the API address; set before the second apply |
-| secret | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | `secret/unfold-cluster/tofu-state` | credentials for the state bucket |
-| secret | `STATE_PASSPHRASE` | `secret/unfold-cluster/tofu-state` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
+| OpenBao read per run | `HCLOUD_TOKEN` | `secret/hetzner/unfold-tofu` | Hetzner Cloud API token for OpenTofu in CI, read and write |
+| OpenBao read per run | `HCLOUD_TOKEN_CLUSTER` | `secret/hetzner/unfold-cluster` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
+| OpenBao read per run | `HCLOUD_TOKEN_VIP` | `secret/hetzner/unfold-vip` | a third token, for the control planes to move the API address; set before the second apply |
+| OpenBao read per run | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | `secret/unfold-cluster/tofu-state` | credentials for the state bucket |
+| OpenBao read per run | `STATE_PASSPHRASE` | `secret/unfold-cluster/tofu-state` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
 | variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | `secret/unfold-cluster/vars` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
 | variable | `TALOS_SNAPSHOT_ID` | `secret/unfold-cluster/vars` | the Hetzner snapshot `scripts/build-talos-snapshot.sh` builds from `talos/schematics/cloud.yaml` |
 | variable | `ADMIN_CIDRS` | `secret/unfold-cluster/vars` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
 | variable | `ADMIN_SSH_PUBLIC_KEY` | `secret/unfold-cluster/vars` | the owner's SSH public key, the only way into the Headscale server |
-| secret | `TAILSCALE_AUTHKEY_CONTROL_PLANE` | `secret/unfold-cluster/tailnet` | the reusable `tag:cp` Headscale pre-auth key of the control planes; leave unset for the first apply |
-| secret | `TAILSCALE_AUTHKEY` | `secret/unfold-cluster/tailnet` | the single-use `tag:node` Headscale pre-auth key of the next worker; leave unset for the first apply |
-| secret | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | `secret/unfold-cluster/etcd-backup` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
-| secret | `ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`, `ETCD_BACKUP_AGE_IDENTITY` | `secret/unfold-cluster/etcd-backup` | the restore check's read-only Garage key and the age private key |
+| OpenBao read per run | `TAILSCALE_AUTHKEY_CONTROL_PLANE` | `secret/unfold-cluster/tailnet` | the reusable `tag:cp` Headscale pre-auth key of the control planes; leave unset for the first apply |
+| OpenBao read per run | `TAILSCALE_AUTHKEY` | `secret/unfold-cluster/tailnet` | the single-use `tag:node` Headscale pre-auth key of the next worker; leave unset for the first apply |
+| OpenBao read per run | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | `secret/unfold-cluster/etcd-backup` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
+| OpenBao read per run | `ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`, `ETCD_BACKUP_AGE_IDENTITY` | `secret/unfold-cluster/etcd-backup` | the restore check's read-only Garage key and the age private key |
 | variable | `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK` | `secret/unfold-cluster/vars` | the age public key snapshots are encrypted to; `enabled` once the first snapshot exists |
+| variable | `CLUSTER_NODES` | `secret/unfold-cluster/vars` | `enabled` once both tailnet keys are in OpenBao; until then the workflow does not read them and creates no node |
 
-Without the secrets and variables other than the two tailnet keys and `TALOS_SNAPSHOT_ID`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
+A value missing from OpenBao stops the run at the read, naming the path and key; without the variables other than `TALOS_SNAPSHOT_ID`, `CLUSTER_NODES` and `ETCD_BACKUP_CHECK`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
-The workflow runs only on `unfold-infra`, a runner registered on this repository alone and on no other, so no other repository's job can land on the runner that holds these secrets. That does not keep out other branches of this repository: Forgejo gives secrets to workflows on pull requests from branches here, so a branch that adds its own workflow with `runs-on: unfold-infra` gets them. Only the owner may therefore push branches to this repository, and Renovate must open its pull requests from a fork, where Forgejo gives no secrets. It runs one job at a time, each in a fresh pod that is deleted afterwards. The runner pool is defined in the homelab, in `kubernetes/apps/forgejo/forgejo-runner/app/infra/` of homelab-cluster.
+The workflow runs only on `unfold-infra`, a runner registered on this repository alone and on no other, so no other repository's job can land on the runner these credentials are read on. The runner is not what keeps other branches of this repository out: Forgejo would hand repository secrets to a workflow a branch adds, which is why there are none, and OpenBao refuses any token not from `main`. It runs one job at a time, each in a fresh pod that is deleted afterwards. The runner pool is defined in the homelab, in `kubernetes/apps/forgejo/forgejo-runner/app/infra/` of homelab-cluster.
 
 ## Credentials and rotation
 
@@ -144,17 +145,17 @@ Treat every one of these tokens as the whole cluster. Any token can boot a node 
 
 | Credential | Where it lives | Rotate |
 | --- | --- | --- |
-| `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu`, bridged to a Forgejo secret | every 6 months |
-| `HCLOUD_TOKEN_CLUSTER` | OpenBao `secret/hetzner/unfold-cluster`, Forgejo secret, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
-| `HCLOUD_TOKEN_VIP` | OpenBao `secret/hetzner/unfold-vip`, Forgejo secret, encrypted state, control plane configs | every 6 months, then apply |
-| `TAILSCALE_AUTHKEY_CONTROL_PLANE` | OpenBao `secret/unfold-cluster/tailnet`, Forgejo secret, encrypted state, control plane configs | expires after 90 days |
-| `TAILSCALE_AUTHKEY` | OpenBao `secret/unfold-cluster/tailnet`, Forgejo secret, encrypted state, worker configs | single use, made for each new worker |
-| `STATE_PASSPHRASE` | OpenBao `secret/unfold-cluster/tofu-state`, Forgejo secret, password manager with an offline copy | when someone with access leaves |
-| State bucket keys | OpenBao `secret/unfold-cluster/tofu-state`, Forgejo secrets | every 6 months |
-| etcd backup keys and age key | OpenBao `secret/unfold-cluster/etcd-backup`, Forgejo secrets; the age key also in the password manager with an offline copy | Garage keys every 6 months; the age key when it may have leaked |
+| `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu` | every 6 months |
+| `HCLOUD_TOKEN_CLUSTER` | OpenBao `secret/hetzner/unfold-cluster`, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
+| `HCLOUD_TOKEN_VIP` | OpenBao `secret/hetzner/unfold-vip`, encrypted state, control plane configs | every 6 months, then apply |
+| `TAILSCALE_AUTHKEY_CONTROL_PLANE` | OpenBao `secret/unfold-cluster/tailnet`, encrypted state, control plane configs | expires after 90 days |
+| `TAILSCALE_AUTHKEY` | OpenBao `secret/unfold-cluster/tailnet`, encrypted state, worker configs | single use, made for each new worker |
+| `STATE_PASSPHRASE` | OpenBao `secret/unfold-cluster/tofu-state`, password manager with an offline copy | when someone with access leaves |
+| State bucket keys | OpenBao `secret/unfold-cluster/tofu-state` | every 6 months |
+| etcd backup keys and age key | OpenBao `secret/unfold-cluster/etcd-backup`; the age key also in the password manager with an offline copy | Garage keys every 6 months; the age key when it may have leaked |
 | GitHub mirror token | Forgejo mirror settings | at its expiry date |
 
-A rotation is a new value in OpenBao (`bao kv patch`), the next run of the bridge, and an apply where the table says so. OpenBao runs in the homelab, so the values that cannot be made again, the state passphrase, the age key and the Talos secrets bundle, also stay in the password manager with an offline copy.
+A rotation is a new value in OpenBao (`bao kv patch`), which the next run reads, and an apply where the table says so. OpenBao runs in the homelab, so the values that cannot be made again, the state passphrase, the age key and the Talos secrets bundle, also stay in the password manager with an offline copy.
 
 Nothing outside `kube-system` and cluster admins may read Secrets in `kube-system`: no Role, ClusterRole or binding that grants it is added to this repository, and agents get no Kubernetes token at all.
 
@@ -195,5 +196,5 @@ The target design for every layer, its threat model, the residual risks and the 
 * **A failed restore check alerts nobody yet.** It shows as a failed run in Forgejo; wiring failed scheduled runs into the homelab's alerting is still to do.
 * **Headscale has no backup.** Losing the server loses the tailnet's keys and nodes; the APIs stay reachable from `ADMIN_CIDRS`, and a new server means re-registering every device.
 * **Every Hetzner token reads every disk** until the Talos partitions are encrypted with a key server outside this Hetzner project (see [Credentials and rotation](#credentials-and-rotation)).
-* **Renovate's fork mode and the GitHub mirror's branch protection** are settings outside this repository; until both are set, the [signing](#only-signed-commits-deploy) and [runner](#how-changes-reach-hetzner) rules above are only conventions.
+* **Two rules live outside this repository.** The GitHub mirror's ruleset `main: no rollback` refuses force-pushes and deletion of `main`, and OpenBao's role `ci-unfold-cluster` (homelab-cluster, `kubernetes/apps/security/openbao/bootstrap/config.sh`) decides who reads the credentials. A change to either is a change to this repository's security.
 * **OpenBao** and the AX41 are not in the code yet.
