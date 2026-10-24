@@ -46,13 +46,14 @@ Every row below has a state: **built** (merged or in an open PR), **design** (th
 | Workload isolation | `SecurityProfileConfig` with `workloadIsolation: true`: kubelet, containerd and pods run in their own PID and mount namespace | design |
 | Host firewall | `NetworkDefaultActionConfig` `ingress: block`, plus one `NetworkRuleConfig` per port and source subnet. Control planes accept 6443 and 50000 from the tailnet only; 2379–2380 from control planes only; etcd HTTP 2383 from the metrics scraper only; 10250 and 50001 from the cluster subnet; WireGuard 51871/udp and VXLAN 8472/udp from nodes. Talos owns host filtering; Cilium's host firewall stays off so the two never fight over the nftables chain | design |
 | Cloud firewall | Hetzner Cloud Firewall in front, mirroring the Talos rules | built |
-| Disk encryption, cloud nodes | `VolumeConfig` STATE and EPHEMERAL with LUKS2 `aes-xts-plain64`. Key slot 0 is `kms` against a KMS server on its own small VM, reachable only on the private network. Hetzner Cloud has no TPM, so `nodeID` (no real protection) and `static` (stored in clear text for STATE) are not used | spike |
-| Disk encryption, AX41 | SecureBoot with our own keys, enrolled once over the KVM console. Slot 0 is `tpm` bound to the signed PCR 11 policy; slot 1 is `kms` as recovery for a BIOS update or CMOS reset | design |
+| Disk encryption, cloud nodes | `VolumeConfig` STATE and EPHEMERAL with LUKS2 `aes-xts-plain64`, `blockSize: 4096`, and the `no_read_workqueue` and `no_write_workqueue` options (see [disk encryption cost](#disk-encryption-cost)). Key slot 0 is `kms` against a KMS server on its own small VM, reachable only on the private network. Hetzner Cloud has no TPM, so `nodeID` (no real protection) and `static` (stored in clear text for STATE) are not used. Discards stay off | decided 2026-10-24; KMS server is a spike |
+| Disk encryption, AX41 | SecureBoot with our own keys, enrolled once over the KVM console. Slot 0 is `tpm` bound to the signed PCR 11 policy; slot 1 is `kms` as recovery for a BIOS update or CMOS reset. Same cipher options as the cloud nodes, plus `allowDiscards` on the local NVMe, where TRIM keeps write performance and wear healthy | design |
 | Talos API | Reached over the tailnet only. Day-to-day `talosconfig` is `os:reader`; `os:admin` is issued for one day from the break-glass bundle when needed | design |
 | Image signature at pull | `ImageVerificationConfig` ends in `image: "*"` `deny: true`. Allowed: Sidero images (keyless, Sidero's GitHub identity), our images (our public key), the mirror's re-signed images (the mirror's key). Applies to system images and every pod image | design |
 | Bootstrap without registries | `ImageCacheConfig` bakes the bootstrap images into the Talos snapshot, so a node boots and joins without reaching any registry | design |
 | User namespaces | `SysctlConfig` raises `user.max_user_namespaces`; admission requires `hostUsers: false` (section 3) | design |
-| SELinux enforcing | Permissive by default and labelled experimental; Cilium under enforcing is unproven. Test on a throwaway cluster before committing | spike |
+| SELinux enforcing | Permissive by default and labelled experimental; Cilium under enforcing is unproven. Enforcing only takes effect on a fresh install, so the cluster is installed enforcing from its first apply and qualified before production moves onto it ([qualification](#qualification-before-production)) | decided 2026-10-24 |
+| Kata Containers version | The Talos extension pins Kata 3.32, the last 3.x release (June 2026). Upstream is at 4.3.1, and a plain version bump breaks the extension because 4.x moved its Go runtime configs and confidential images. We contribute the bump to siderolabs/extensions and, until it merges, build our own extension and installer with Talos's `imager` (base `installer-base:v1.14.4`), signed with our key and mirrored. That also removes the dependence on Sidero's Image Factory for these nodes. Renovate tracks Kata releases | decided 2026-10-24 |
 
 ### 2. Control plane and etcd
 
@@ -157,10 +158,11 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 | --- | --- | --- |
 | Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | design (built: Retain) |
 | Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Continuous WAL archiving and a daily base backup. Single instance while there is one Unfold node; a replica on a control plane is the step before hub HA | design |
-| Backup encryption | barman-cloud supports only AWS-style server-side encryption, and Garage encrypts nothing at rest without SSE-C. Choose between LUKS under the off-site Garage's data disk and a bucket at a provider with encryption at rest. Owner decision | decision |
+| Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once | proposed |
 | Other state | Not allowed by default. A workload that needs a PVC outside CNPG brings its own backup and restore test. Velero's file-system backup needs a privileged node agent, so it is not installed | design |
 | Run scratch space | The AX41's EPHEMERAL partition is LUKS, TPM-bound, wiped on reinstall. Every Run pod has ephemeral-storage and `emptyDir` size limits | design |
 | Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built, CNPG design |
+| Database disk | CNPG starts on hcloud LUKS volumes, which Hetzner replicates three times. A benchmark gate (fio with `--fsync=1` and an etcd-style WAL test) runs on an encrypted and a plain volume before the first database goes live; if fsync p99 misses the target, the primary moves to encrypted local NVMe and relies on its replica and WAL archive for durability | design |
 
 ### 8. Secrets
 
@@ -201,6 +203,43 @@ The stack:
 - **Collectors:** vlagent and vmagent.
 - **Alerting:** vmalert and VMAlertmanager, sending to a self-hosted ntfy on the off-site box. uptime-kuma there is the dead-man's switch.
 - **Tamper-evidence:** audit and Tetragon events are also forwarded off the cluster within seconds, so a cluster administrator cannot erase them afterwards. Garage has no object lock, so true write-once retention needs a different target. Owner decision.
+
+### 11. In-cluster TLS and workload identity
+
+WireGuard encrypts pod traffic between nodes, so a reader on Hetzner's network sees nothing. It does not prove *which workload* is calling. That second property comes from TLS with client certificates, on the services where it matters most.
+
+| Control | How | State |
+| --- | --- | --- |
+| Transport | Cilium WireGuard with node encryption. Traffic between pods on the same node and control-plane host traffic stay outside it; both remain inside one machine or on the private network, and every control-plane protocol is TLS 1.3 | built (#12) |
+| Internal CA | cert-manager with an intermediate CA issued by OpenBao PKI (offline root). trust-manager distributes the CA bundle; approver-policy replaces the default approver, so a namespace can only request names it owns. Per-pod keys through cert-manager's CSI driver stay on the node and never enter etcd | design |
+| PostgreSQL | CNPG serves TLS 1.3 only, but its default `pg_hba` still accepts plain connections. The rules are replaced with `hostssl` entries using certificate authentication and a final `host all all all reject`. Clients connect with `sslmode=verify-full` | design |
+| OpenBao | TLS end to end, never terminated in front of it. Certificate rotation triggers a reload | design |
+| NATS | TLS on client and route ports, client certificates required, and JWT accounts per publisher: a Run's pod has no credential for its own event subject | design |
+| Everything else | TLS where the application supports it, verified against the internal CA. VictoriaMetrics' mTLS is an Enterprise feature, so vmauth fronts it | design |
+| Mesh | Not now. Cilium's ztunnel mTLS is beta and today replaces WireGuard and breaks L4 policies. Istio ambient is GA but needs CNI chaining and gives up eBPF masquerading. Pod certificates are GA in 1.37 but no maintained signer exists yet, cert-manager included. Re-evaluate when ztunnel leaves beta, a signer ships, or per-request L7 authorization becomes a requirement | rejected for now |
+
+### 12. Further hardening
+
+| Measure | Value | Cost |
+| --- | --- | --- |
+| Kubescape operator | Continuous posture checks against CIS, NSA and MITRE, RBAC risk, image scans | A few hundred MiB |
+| Sidero's CIS mapping for Talos 1.14 | Evidence of record; kube-bench expects kubeadm paths and reports false positives on Talos | Free |
+| gitleaks in CI and pre-commit on every repository, one history scan | No secret reaches git | Free |
+| RBAC review in CI (`rbac-tool`, `kubectl-who-can`) | Every role change shows who gains what | Free |
+| Cloudflare WAF, rate limits and Access in front of every public route; the origin accepts only the tunnel | Admin pages never face the internet unauthenticated | Free tier |
+| NTS for time sync, set explicitly in `TimeSyncConfig` | Certificate and token expiry checks cannot be skewed by a forged time server; servers learned from DHCP never use NTS | Free |
+| Incident runbooks: node compromise, OpenBao rotation, mass credential rotation, etcd key rotation; a yearly tabletop exercise | The first bad day follows a script | A few days |
+| Forensics: Tetragon and audit events off the cluster, `talosctl support` bundles, volume snapshots; container checkpoints treated as secrets | Evidence survives the incident | Free |
+| OWASP ZAP baseline in CI against public routes; an external pentest once real users depend on it | Outside view | Free; a pentest €3,000–10,000 |
+| Trivy: not installed. Its March 2026 supply-chain compromise (CVE-2026-33634) is the reason; if it is ever used, pin it by digest | Avoids a known-bad dependency path | Free |
+
+### Disk encryption cost
+
+- **The cipher is not the cost.** On AMD CPUs with AES-NI, aes-xts runs at well over a gigabyte per second per core.
+- **The cost is dm-crypt's work queues**, which queue each write up to four times. Cloudflare measured default dm-crypt at about 7 times slower than the raw device on a RAM disk. Turning the queues off (`no_read_workqueue`, `no_write_workqueue`) roughly doubled throughput.
+- **On Hetzner Cloud volumes the network is the bottleneck.** Their latency dwarfs the encryption, so encryption costs close to nothing there.
+- **On local NVMe, expect 5 to 15% less throughput** and microseconds more per write, with the queues off.
+- **etcd is sensitive to fsync latency, not throughput**, and its target is a WAL fsync p99 under 10 ms. The control planes' etcd lives on their local disk, and `etcd_disk_wal_fsync_duration_seconds` p99 is alerted on from the first day.
 
 ## Platform components
 
@@ -243,7 +282,7 @@ Hetzner Cloud offers no nested virtualization, and Hetzner dedicated servers are
 | Control planes | 3 × CPX22 | The recovery set | By hand |
 | `unfold` | CPX32 | ploegd, Unfold, databases | By hand; a second node with hub HA |
 | `gvisor` | CPX VMs | `standard` and `hardened` Runs, under gVisor's systrap, which needs no `/dev/kvm` | cluster-autoscaler from zero. Each pool is one server type; the Talos worker config is its cloud-init, the Talos snapshot its image |
-| `kata` | AX41 now; Hetzner auction servers later | `isolated` Runs under Kata with Cloud Hypervisor; CI under Kata | A person orders a server when `isolated` Runs have waited too long for a week; the alert carries the evidence |
+| `kata` | AX41 now; Hetzner auction servers later | `isolated` Runs under Kata with Cloud Hypervisor; CI under Kata until it moves to its own cell ([CI](#ci)) | A person orders a server when `isolated` Runs have waited too long for a week; the alert carries the evidence |
 | Burst cells | Hourly bare metal (Scaleway Elastic Metal) | `isolated` Runs at peak | OpenTofu creates and destroys a small Talos cell that pulls work from the hub (Ploeg ADR-0107) |
 | `confidential` | None on Hetzner | `confidential` Runs | A confidential-VM cloud cell, or our own EPYC hardware, when a client needs it |
 
@@ -260,6 +299,55 @@ ClusterMesh fixes these at install and requires them to be unique, so they are a
 | later cells | 3 and up | 10.(64+4n).0.0/16 | 10.(65+4n).0.0/16 | 10.(66+4n).0.0/16 |
 
 `clustermesh.maxConnectedClusters` stays at 255. Today `infra/talos.tf` uses the Talos defaults, pods on 10.244.0.0/16 and services on 10.96.0.0/12. Moving them to this plan is part of delivery step 2. It has to happen before the first apply: Kubernetes cannot change a cluster's pod or service range in place.
+
+## Object storage
+
+| Use | Primary | Second copy (outside Hetzner and Falkenstein) | Why |
+| --- | --- | --- | --- |
+| etcd snapshots (age-encrypted) | Hetzner Object Storage, Nuremberg | OVHcloud | Already encrypted; Nuremberg puts the backup on another site at the same price |
+| CNPG backups | Hetzner Object Storage, Nuremberg | OVHcloud multi-zone with SSE (`AES256`), copied by a scheduled job | barman-cloud writes to one store and cannot send SSE-C; OVH accepts its `AES256` header |
+| Security evidence (audit, Tetragon, Hubble) | Hetzner Object Storage with object lock in compliance mode, 365 days | OVHcloud with object lock in compliance mode | Two providers make it tamper-evident even against a lost or closed account. The cluster holds write-only keys |
+| OpenTofu state | OVHcloud | Scaleway | Hetzner rejects conditional writes on versioned buckets, which OpenTofu's lock needs |
+| Zot storage, later file backups | Hetzner Object Storage | OVHcloud | In-region for fast restores |
+
+The cost is about €10 a month at the start, rising to about €17 a month at steady state, excluding VAT:
+
+| Provider | Start | Steady state |
+| --- | --- | --- |
+| Hetzner Object Storage | €6.49 | €6.49 (up to 1 TB storage and 1 TB egress) |
+| OVHcloud multi-zone | about €3.30 | about €10.40 |
+
+Neither provider charges for requests or egress at this scale.
+
+Hetzner bills objects under 64 KB as 64 KB, so evidence is shipped in batches. Self-hosting is rejected for evidence: write-once storage on disks the cluster's administrator controls is not tamper-proof against that administrator. MinIO's community edition is archived. SeaweedFS is the most complete self-hosted option, if one is ever needed.
+
+The backups built in #16 move from the off-site Garage to this layout before the first apply.
+
+## CI
+
+CI jobs run code from every repository: Renovate updates, agent pull requests, and anyone's branch. They need container builds, and the trusted ones push and sign images. They do not belong next to the production hub.
+
+| Option | Separation | Cost |
+| --- | --- | --- |
+| A. A `ci` node pool in this cluster: its own bare-metal node, Kata only, tainted, its own namespace and network policy | Separate kernel and node; shared control plane, API and cluster-wide policy | Within the €185 cap if it shares the AX41 with Runs, as decided on 2026-10-18 |
+| B. A separate CI cell: a single-node Talos cluster on its own bare-metal server, with Forgejo runners pulling jobs as they do today | Nothing shared with production: a CI escape reaches no production credential, API or node | One more server, about €57 to €68 a month, which takes the plan past the cap |
+
+Recommendation: B is the target and A is the start. Runners pull their jobs, so moving them from A to B only re-points them; nothing else changes.
+
+Three rules apply in both:
+- Signing happens in a separate trusted job that reaches OpenBao Transit through Forgejo's OIDC, never on the runner that executed untrusted build steps.
+- The infra workflow keeps its own repository-scoped runner (#15) on trusted nodes, never on the CI pool.
+- A CI cell needs no high availability. It holds no state; a lost node means jobs retry.
+
+## Qualification before production
+
+The cluster is not production until it has passed these checks. Until then it is the test bed, so no separate throwaway cluster is needed. If one is wanted for a riskier change, the same OpenTofu can create a cloud-only copy for an afternoon; it costs a few euros, because cloud servers are billed by the hour.
+
+1. SELinux enforcing on every node, with Cilium, hcloud-csi, Kata, gVisor, Tetragon and every platform component running. A component that fails gets a written fix or its node goes back to permissive through a reinstall, and that exception is recorded.
+2. Disk benchmarks on encrypted volumes and local disks, against the etcd and Postgres targets.
+3. Every admission policy's mutation test, and every network policy's allowed and denied probe.
+4. A restore of etcd and of a CNPG database from the off-site copies.
+5. Ploeg's attack drill (ADR-0126) against the cluster, and a planted-sabotage Run through the oversight layers.
 
 ## Room to scale, per layer
 
@@ -282,9 +370,10 @@ ClusterMesh fixes these at install and requires them to be unique, so they are a
 | Hetzner can read memory on its own hosts | Cloud servers offer no TPM, SecureBoot or confidential computing | Confidential VMs with SEV-SNP when an EU provider offers them at this price |
 | The KMS server has no client authentication | Sidero's reference server authorises by node UUID alone | Network isolation now; our own KMS server backed by OpenBao Transit later |
 | Control-plane host traffic is not WireGuard-encrypted | Cilium excludes control planes from node encryption by default | Private network plus TLS on every control-plane protocol |
-| Backups and evidence sit in the same region and lack object lock | The off-site Garage is in Falkenstein and has no write-once mode | A second copy outside Hetzner; a target with object lock |
+| Backups depend on two object-storage providers | Both are rented; neither is ours | Restore drills from each copy; a third copy only if a provider fails a drill |
 | The homelab CI shares a privileged Docker daemon | The infra runner's pods share nodes with other repositories' jobs | Move the infra runner into the AX41's Kata pool |
-| SELinux is permissive | Enforcing is experimental on Talos and unproven with Cilium | The SELinux spike |
+| SELinux enforcing is experimental on Talos | Upstream labels it experimental; components may need fixes | Qualification before production; recorded exceptions only |
+| We carry our own Kata build until upstream catches up | Our pipeline rebuilds the extension and installer for every Talos patch and Kata release | The upstream contribution; Renovate tracking both |
 | Talos and its Image Factory belong to one vendor | Sidero was acquired in September 2026 | Mirrored installer digests (VIK-2144), recipes in git |
 
 ## Delivery
@@ -292,23 +381,32 @@ ClusterMesh fixes these at install and requires them to be unique, so they are a
 Each step is one pull request with its mutation test, stacked like #10 to #16.
 
 1. Version bumps: Cilium 1.20.4, hcloud-csi 2.24.1, CCM 1.39.2.
-2. Address plan and Cilium cluster ID; Talos host firewall, workload isolation, user-namespace sysctl, kubelet credential re-checks.
-3. Authentication through Google OIDC with CEL claim rules; audit policy; break-glass alerting.
-4. CEL policy set (tier 2) and mutating defaults (tier 3), in Audit.
-5. FQDN-only egress; `kube-system` and `flux-system` into default deny, in audit mode.
-6. Observability stack with the alerts above, and ntfy on the off-site box.
-7. Zot mirror, Talos registry mirrors and `ImageVerificationConfig`, then Kyverno image policies.
-8. Encrypted StorageClass, OpenBao, External Secrets, CNPG with the barman-cloud plugin.
-9. Cloudflare Tunnel, Gateway API, external-dns, DNSSEC and CAA.
-10. Agent plane: RuntimeClasses, the `gvisor` pool with cluster-autoscaler, NATS JetStream, Tetragon Run policies, LiteLLM guardrails, then Ploeg's Watch in shadow mode.
-11. Spikes, in parallel: KMS disk encryption, static admission manifests, Tetragon LSM enforcement, SELinux enforcing, agent-sandbox warm pools.
-12. Policies from Audit to Deny, one at a time, each after its mutation test.
+2. Address plan and Cilium cluster ID; disk encryption with the KMS VM; SELinux enforcing in the node image; Talos host firewall, workload isolation, user-namespace sysctl, kubelet credential re-checks, NTS.
+3. Object storage at both providers; the etcd backups of #16 and the OpenTofu state move onto it.
+4. The Kata 4 extension and installer pipeline, and the upstream contribution.
+5. Authentication through Google OIDC with CEL claim rules; audit policy; break-glass alerting.
+6. CEL policy set (tier 2) and mutating defaults (tier 3), in Audit.
+7. FQDN-only egress; `kube-system` and `flux-system` into default deny, in audit mode.
+8. Observability stack with the alerts above, and ntfy on the off-site box.
+9. Zot mirror, Talos registry mirrors and `ImageVerificationConfig`, then Kyverno image policies.
+10. Encrypted StorageClass, OpenBao, External Secrets, cert-manager on OpenBao PKI, CNPG with the barman-cloud plugin and certificate-only `pg_hba`.
+11. Cloudflare Tunnel, Gateway API, external-dns, DNSSEC and CAA.
+12. Agent plane: RuntimeClasses, the `gvisor` pool with cluster-autoscaler, NATS JetStream, Tetragon Run policies, LiteLLM guardrails, then Ploeg's Watch in shadow mode.
+13. CI pool or cell, Kubescape, gitleaks and RBAC review in CI.
+14. Spikes, in parallel: the KMS server, static admission manifests, Tetragon LSM enforcement, agent-sandbox warm pools.
+15. Qualification before production, then policies from Audit to Deny, one at a time, each after its mutation test.
 
-## Decisions for the owner
+## Decisions
 
-1. **KMS VM for disk encryption** on the cloud nodes: one CX-class VM on the private network, about €4 a month, or accept unencrypted cloud disks.
-2. **Where database backups and audit evidence live:** the off-site Garage with LUKS under it, or a second provider with encryption at rest and object lock.
-3. **SELinux enforcing:** run the spike now, or after the cluster is live.
-4. **Burst capacity for `isolated` Runs:** hourly bare metal at Scaleway as burst cells, or only Hetzner servers ordered by a person.
+Decided on 2026-10-24:
 
-Decided on 2026-10-24: Kyverno authors the best-practice catalogue in CEL and is the one admission webhook (section 3).
+- Kyverno authors the best-practice catalogue in CEL and is the one admission webhook (section 3).
+- Cloud and bare-metal disks are encrypted with keys from a KMS server on its own VM.
+- SELinux enforcing is tested on this cluster before it becomes production.
+- `isolated` capacity grows both ways: Hetzner servers ordered by a person, and hourly bare-metal burst cells.
+- We stay on current Kata: an upstream contribution, and our own build until it lands.
+
+Open:
+
+1. **Object storage:** Hetzner Object Storage plus OVHcloud, as [proposed](#object-storage).
+2. **CI:** start with option A and move to B, or go to B straight away and raise the cap by about €60 a month.
