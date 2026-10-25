@@ -144,3 +144,9 @@ variable "etcd_backup_age_recipient" {
     error_message = "etcd_backup_age_recipient must be an age public key, starting with age1."
   }
 }
+
+variable "tailnet_key_generation" {
+  description = "Changing this makes the next apply read fresh tailnet pre-auth keys from unfold-headscale instead of reusing the ones in the state. Bump it after expiring keys that leaked."
+  type        = string
+  default     = "2026-10-25"
+}

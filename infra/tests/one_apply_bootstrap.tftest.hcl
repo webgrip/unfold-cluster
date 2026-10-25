@@ -215,3 +215,26 @@ run "the_pod_security_defaults_leave_the_talos_exemptions_alone" {
     error_message = "Talos already exempts kube-system; a patch that names it again lists it twice, and the API server refuses the PodSecurity config"
   }
 }
+
+run "the_tailnet_keys_never_show_in_a_plan" {
+  command = plan
+
+  override_resource {
+    target = terraform_data.control_plane_tailnet_key
+    values = {
+      output = "hskey-auth-mocked-control-plane"
+    }
+  }
+
+  override_resource {
+    target = terraform_data.worker_tailnet_key
+    values = {
+      output = "hskey-auth-mocked-worker"
+    }
+  }
+
+  assert {
+    condition     = alltrue([for patch in values(local.tailscale_patch) : issensitive(patch)])
+    error_message = "the Tailscale patch carries a pre-auth key; unmarked, it prints in the public plan log"
+  }
+}
