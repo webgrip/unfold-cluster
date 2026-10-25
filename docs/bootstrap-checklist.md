@@ -29,6 +29,7 @@ Almost everything is created by OpenTofu or Flux. These few things cannot be, an
 | --- | --- |
 | The Hetzner Cloud project | Hetzner's API works inside a project; it has no call to create one. |
 | The three Hetzner API tokens | Tokens are created only in the Hetzner Console; the API cannot mint tokens. Their values then go into OpenBao like every other secret. |
+| The Robot webservice user | Robot creates it only in its UI, one per account. Ordering, the vSwitch, the firewall and the Talos install of the metal node all go through it ([metal node](runbooks/metal-node.md)). |
 | The Garage buckets and keys | The off-site Garage is a hand-run box outside both clusters, with no declarative controller. |
 | The values in OpenBao | Tokens, bucket keys, the state passphrase and the age key are provided values: someone has to create them where they are issued and put them in OpenBao once (homelab-cluster ADR-0055). The bridge carries them from there. |
 
@@ -42,6 +43,7 @@ No longer by hand:
 | The Talos secrets escrow | Every apply writes the bundle to OpenBao `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it, so a rebuild keeps the cluster's CAs and service-account key (and with them the homelab OpenBao's trust and `access/unfold-oidc.kubeconfig.yaml`). |
 | The etcd bucket's 30-day expiry rule | Every apply puts it with the etcd write key (`scripts/set-etcd-backup-lifecycle.sh`). |
 | Replacing `unfold-headscale` | Raise `headscale_generation`; the apply lifts the delete protection of exactly that server because the reviewed plan deletes it, and every node re-joins with a fresh key in the same run. |
+| Ordering the AX41 | The apply orders `unfold-metal-1` through the Robot webservice, once, within its price ceiling, and installs Talos on it from the rescue system ([metal node](runbooks/metal-node.md)). |
 | The Talos snapshot | The apply run builds it with `scripts/build-talos-snapshot.sh` when no snapshot carries the labels of the pinned Talos version and schematic; OpenTofu finds it by those labels. |
 
 ## A. Hetzner project and tokens
@@ -172,6 +174,7 @@ What each value is:
 | `secret/hetzner/unfold-tofu` | `HCLOUD_TOKEN` | Hetzner token, 64 characters | A2 |
 | `secret/hetzner/unfold-cluster` | `HCLOUD_TOKEN_CLUSTER` | Hetzner token | A2 |
 | `secret/hetzner/unfold-vip` | `HCLOUD_TOKEN_VIP` | Hetzner token | A2 |
+| `secret/hetzner/unfold-robot` | `ROBOT_USER`, `ROBOT_PASSWORD` | Robot webservice user and password | Robot, *Settings* → *Web service and app settings*; `just secret-set hetzner/unfold-robot ROBOT_USER` and `... ROBOT_PASSWORD` |
 | `secret/unfold-cluster/tofu-state` | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | Garage Key ID (`GK…`) and Secret key | B3 |
 | `secret/unfold-cluster/tofu-state` | `STATE_PASSPHRASE` | at least 32 characters | B1 |
 | `secret/unfold-cluster/etcd-backup` | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | Garage key pair, write only | B3 |

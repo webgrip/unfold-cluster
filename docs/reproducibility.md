@@ -23,6 +23,9 @@ Every piece of state the estate depends on, how it came to exist, and what happe
 | Hetzner project | the owner, in the Console | no: Hetzner has no API to create one | seed, once per project (A1) |
 | Hetzner API tokens (`unfold-tofu`, `unfold-cluster`, `unfold-vip`) | the owner, in the Console | no: tokens are issued only in the Console | seed into OpenBao (A2); everything after reads them per run |
 | Network, subnet, firewalls, placement group, SSH key, servers | OpenTofu | yes | |
+| Robot server `unfold-metal-1`, its order | `scripts/robot.sh order` in the apply | yes: ordered once, the order and server number recorded in `secret/unfold-cluster/metal/unfold-metal-1`; a rebuild finds the server by its name | cancelling stays a person's act in Robot |
+| vSwitch `unfold-main`, the server's membership, its Robot firewall | the apply | yes | |
+| Talos on the metal node | `scripts/robot.sh install` from the rescue system | yes, once per server; a node running Talos is never reinstalled unless `install_generation` is raised | |
 | Talos snapshot | `scripts/build-talos-snapshot.sh` in the apply run | yes: built when no snapshot carries the pinned labels | |
 | Talos secrets (cluster CAs, service-account key, etcd CA) | OpenTofu, in the encrypted state; formerly also a manual export to the password manager | **now yes** | every apply escrows the bundle to `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it (`talos_secrets_import_file`), so the cluster keeps its identity. The homelab OpenBao's `jwt-unfold-main` key and `access/unfold-oidc.kubeconfig.yaml` stay valid |
 | etcd bootstrap of a cluster rebuilt with a surviving state | nothing: `talos_machine_bootstrap` is a no-op on update | **now yes** | the bootstrap is replaced when the Cloud Network is new (`replace_triggered_by = [hcloud_network.cluster.id]`), and each machine config apply when its server is new |
@@ -65,6 +68,7 @@ What a person still puts into OpenBao, once, from a homelab-cluster checkout. Ev
 | `secret/unfold-cluster/etcd-backup` | the write and read key pairs, `ETCD_BACKUP_AGE_IDENTITY` | Garage; `age-keygen` once |
 | `secret/unfold-cluster/vars` | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION`, `ADMIN_CIDRS`, `ADMIN_SSH_PUBLIC_KEY`, `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK`, `REBUILD_DRILL` | the owner |
 | `secret/hetzner/unfold-drill` | `HCLOUD_TOKEN` | Hetzner Console, the drill project (only for the drill) |
+| `secret/hetzner/unfold-robot` | `ROBOT_USER`, `ROBOT_PASSWORD` | Robot, *Settings* → *Web service and app settings* (its UI is the only way to create it) |
 
 A rebuild into a new Hetzner project needs only the three Hetzner tokens of that project replaced; the rest stays.
 

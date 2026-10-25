@@ -9,7 +9,7 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 | `pinned-approved-images` | an image without `@sha256:` or outside the approved registry prefixes, in containers, init and ephemeral containers and image volumes | every namespace but `kube-system`, `flux-system` | Deny |
 | `pod-security-restricted` | the PodSecurity `restricted` profile, checked separately: root, privilege escalation, capabilities beyond dropping ALL (plus `NET_BIND_SERVICE`), unconfined seccomp, other volume types, `procMount`, unsafe sysctls, unconfined AppArmor, SELinux user or role | every namespace but `kube-system` | Audit, Warn |
 | `host-access` | privileged containers, `hostNetwork`, `hostPID`, `hostIPC`, `hostPath`, `hostPort`, Windows host processes | every namespace but `kube-system` | Audit, Warn |
-| `sandbox-annotations` | pod annotations under `io.katacontainers.` or `dev.gvisor.` | every namespace | Audit, Warn |
+| `sandbox-annotations` | pod annotations under `io.katacontainers.` or `dev.gvisor.` | every namespace | Deny, since the metal node brought Kata ([ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md)) |
 | `sandboxed-workloads` | a sandboxed pod on the wrong RuntimeClass or with its service-account token mounted, or an unknown isolation class | pods labelled, or in a namespace labelled, `ploeg.webgrip.dev/isolation-class`, and the `ci` namespace | Audit, Warn |
 | `immutable-image-references` | an image without a digest, or one naming the `latest` tag | every namespace | Audit, Warn |
 | `resource-limits` | a container without cpu and memory requests, a memory limit or an ephemeral-storage limit, an `emptyDir` without `sizeLimit` | every namespace but `kube-system` | Audit, Warn |
