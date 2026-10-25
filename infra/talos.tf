@@ -154,7 +154,12 @@ data "talos_machine_configuration" "worker" {
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {
-  for_each = hcloud_server.control_plane
+  for_each = {
+    for name, server in hcloud_server.control_plane : name => {
+      ipv4_address = server.ipv4_address
+      private_mac  = one([for attachment in server.network : attachment.mac_address])
+    }
+  }
 
   client_configuration        = talos_machine_secrets.cluster.client_configuration
   machine_configuration_input = data.talos_machine_configuration.control_plane.machine_configuration
@@ -173,19 +178,19 @@ resource "talos_machine_configuration_apply" "control_plane" {
       kind       = "LinkAliasConfig"
       name       = local.private_link_alias
       selector = {
-        match = "mac(link.permanent_addr) == \"${lower(one([for attachment in each.value.network : attachment.mac_address]))}\""
+        match = "mac(link.permanent_addr) == \"${lower(each.value.private_mac)}\""
       }
     }),
   ]
 }
 
 resource "talos_machine_configuration_apply" "unfold_worker" {
-  for_each = hcloud_server.unfold_worker
+  for_each = { for name, server in hcloud_server.unfold_worker : name => server.ipv4_address }
 
   client_configuration        = talos_machine_secrets.cluster.client_configuration
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
-  node                        = each.value.ipv4_address
-  endpoint                    = each.value.ipv4_address
+  node                        = each.value
+  endpoint                    = each.value
   config_patches = [
     local.unfold_worker_patch,
     local.tailscale_patch[each.key],
