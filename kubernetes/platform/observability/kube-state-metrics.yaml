@@ -44,6 +44,7 @@ spec:
         memory: 64Mi
       limits:
         memory: 256Mi
+        ephemeral-storage: 256Mi
     tolerations:
       - key: node.webgrip.io/pool
         operator: Equal

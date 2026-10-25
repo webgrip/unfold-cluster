@@ -85,6 +85,7 @@ spec:
                 memory: 32Mi
               limits:
                 memory: 128Mi
+                ephemeral-storage: 512Mi
             volumeMounts:
               - name: tools
                 mountPath: /opt/ci/bin
@@ -114,6 +115,7 @@ spec:
                 memory: 16Mi
               limits:
                 memory: 64Mi
+                ephemeral-storage: 256Mi
             volumeMounts:
               - name: tools
                 mountPath: /opt/ci/bin

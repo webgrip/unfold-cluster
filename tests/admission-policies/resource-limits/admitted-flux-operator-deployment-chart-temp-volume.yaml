@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flux-operator
+  namespace: flux-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flux-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flux-operator
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: manager
+          image: ghcr.io/controlplaneio-fluxcd/flux-operator:v0.61.0@sha256:71041d9fff7f7b05f1a8123ebe73c73b7b156f4aacfe1e8e19b5aa953a98892c
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+          volumeMounts:
+            - name: temp
+              mountPath: /temp
+      volumes:
+        - name: temp
+          emptyDir: {}
