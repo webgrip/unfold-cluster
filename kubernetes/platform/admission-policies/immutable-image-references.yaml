@@ -1,0 +1,49 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: immutable-image-references
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods", "pods/ephemeralcontainers"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)
+    - name: images
+      expression: >-
+        variables.spec.?containers.orValue([]).map(c, c.image)
+        + variables.spec.?initContainers.orValue([]).map(c, c.image)
+        + variables.spec.?ephemeralContainers.orValue([]).map(c, c.image)
+        + variables.spec.?volumes.orValue([]).filter(v, has(v.image)).map(v, v.image.?reference.orValue(''))
+    - name: mutable
+      expression: >-
+        variables.images.filter(i, !i.contains('@sha256:') || i.split('@')[0].endsWith(':latest'))
+  validations:
+    - expression: variables.mutable.size() == 0
+      messageExpression: >-
+        'every image must be pinned by digest and must not name the latest tag; refused: '
+        + variables.mutable.join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: immutable-image-references
+spec:
+  policyName: immutable-image-references
+  validationActions: ["Audit", "Warn"]
