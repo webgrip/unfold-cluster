@@ -5,13 +5,21 @@
   "tagOwners": {
     "tag:cp": ["group:admin"],
     "tag:node": ["group:admin"],
-    "tag:homelab-gateway": ["group:admin"]
+    "tag:homelab-gateway": ["group:admin"],
+    "tag:headscale": ["group:admin"]
   },
   "acls": [
     {
       "action": "accept",
-      "src": ["group:admin"],
-      "dst": ["*:*"]
+      "src": ["autogroup:member"],
+      "dst": [
+        "autogroup:member:*",
+        "tag:cp:*",
+        "tag:node:*",
+        "tag:headscale:*",
+        "tag:homelab-gateway:8200,8427,9150",
+        "${node_route}:*"
+      ]
     },
     {
       "action": "accept",
@@ -22,6 +30,11 @@
       "action": "accept",
       "src": ["tag:node"],
       "dst": ["tag:homelab-gateway:9150"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:headscale"],
+      "dst": ["tag:homelab-gateway:443"]
     }
   ],
   "autoApprovers": {

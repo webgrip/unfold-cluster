@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly usage="usage: push-to-headscale.sh install|policy
+readonly usage="usage: push-to-headscale.sh install|policy|config|oidc-secret|host
 
 OpenTofu's local-exec for unfold-headscale. Sends CONTENT_B64, decoded, on
 stdin to unfold-tailnet-key on the server over SSH: 'install' replaces the
-program itself, 'policy' runs 'policy set' with the Headscale policy.
+program itself, 'policy' runs 'policy set' with the Headscale policy,
+'config' runs 'config set' with the Headscale configuration and
+'oidc-secret' runs 'oidc-secret set' with the OIDC client secret. 'host'
+sends nothing and runs 'host apply TAILSCALE_VERSION TAILSCALE_SHA256'.
+Nothing this program prints contains what it sends.
 
 Environment: HEADSCALE_HOST, HEADSCALE_HOST_PUBLIC_KEY (the pinned ed25519
-host key), HEADSCALE_TOFU_KEY (the tofu user's private key), CONTENT_B64.
+host key), HEADSCALE_TOFU_KEY (the tofu user's private key), CONTENT_B64,
+or for 'host' TAILSCALE_VERSION and TAILSCALE_SHA256.
 SSH trusts nothing but the pinned host key. An unreachable server, or one
 whose Headscale does not answer on its socket yet, is retried for
 UNFOLD_TAILNET_WAIT_SECONDS (default 1500), because a new server answers only
@@ -19,17 +24,26 @@ fail() {
   exit 1
 }
 
+required=(HEADSCALE_HOST HEADSCALE_HOST_PUBLIC_KEY HEADSCALE_TOFU_KEY CONTENT_B64)
 case "${1:-}" in
   -h | --help) echo "$usage"; exit 0 ;;
   install) request="install" ;;
   policy) request="policy set" ;;
+  config) request="config set" ;;
+  oidc-secret) request="oidc-secret set" ;;
+  host)
+    required=(HEADSCALE_HOST HEADSCALE_HOST_PUBLIC_KEY HEADSCALE_TOFU_KEY TAILSCALE_VERSION TAILSCALE_SHA256)
+    [[ "${TAILSCALE_VERSION:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "TAILSCALE_VERSION is not a version"
+    [[ "${TAILSCALE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail "TAILSCALE_SHA256 is not a sha256"
+    request="host apply ${TAILSCALE_VERSION} ${TAILSCALE_SHA256}"
+    ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
 
 for tool in base64 ssh mktemp; do
   command -v "$tool" >/dev/null || fail "$tool is not installed"
 done
-for name in HEADSCALE_HOST HEADSCALE_HOST_PUBLIC_KEY HEADSCALE_TOFU_KEY CONTENT_B64; do
+for name in "${required[@]}"; do
   [ -n "${!name:-}" ] || fail "$name is empty"
 done
 
@@ -38,8 +52,12 @@ trap 'rm -rf "$workdir"' EXIT
 umask 077
 printf '%s\n' "$HEADSCALE_TOFU_KEY" >"${workdir}/id"
 printf '%s %s\n' "$HEADSCALE_HOST" "$HEADSCALE_HOST_PUBLIC_KEY" >"${workdir}/known_hosts"
-printf '%s' "$CONTENT_B64" | base64 -d >"${workdir}/content" || fail "CONTENT_B64 is not base64"
-[ -s "${workdir}/content" ] || fail "nothing to send"
+if [ "$1" = "host" ]; then
+  : >"${workdir}/content"
+else
+  printf '%s' "$CONTENT_B64" | base64 -d >"${workdir}/content" || fail "CONTENT_B64 is not base64"
+  [ -s "${workdir}/content" ] || fail "nothing to send"
+fi
 
 send() {
   ssh -F /dev/null \

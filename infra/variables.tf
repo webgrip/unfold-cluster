@@ -224,7 +224,7 @@ variable "admin_ssh_public_key" {
 }
 
 variable "headscale_admin_user" {
-  description = "The Headscale user whose devices are admins on the tailnet: the only members allowed to reach the nodes and the cluster's private subnet."
+  description = "The Headscale user in group:admin, which owns the tags, and under which a device is registered by hand when the browser login is down. Every device a person registers, by hand or through Authentik, is autogroup:member and may reach the nodes and the cluster's private subnet (docs/runbooks/headscale-browser-login.md)."
   type        = string
   default     = "ryan"
 }
