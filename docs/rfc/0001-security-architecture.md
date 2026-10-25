@@ -326,6 +326,17 @@ Lock-in stays low because every store speaks the same S3 API: SeaweedFS in the c
 
 Until delivery step 3, the OpenTofu state and the etcd snapshots of #16 stay on the off-site Garage, decided on 2026-10-24: they are a few megabytes, cost nothing there, and the cluster holds no client data yet. Step 3 moves them to this layout, and no client data arrives before it.
 
+Until step 3 that Garage copy is not write-only in practice. Garage's `write` permission includes DeleteObject and PutBucketLifecycleConfiguration, so the etcd backup key, which has no `read`, can still delete snapshots and replace the 30-day lifecycle rule. The homelab backup audit of 2026-10-25 recorded this; step 3 closes it.
+
+### Shared backup contract with the homelab
+
+Both clusters follow one backup contract, written up in the homelab's [backup and DR RFC](https://forgejo.webgrip.dev/webgrip/homelab-cluster/src/branch/main/docs/techdocs/docs/rfc/rfc-backup-dr.md):
+
+- **Tiers.** T0 recovery keys (escrowed twice offline, outside every system they unlock), T1 survives the loss of the cluster and of its first off-site copy, T2 survives the loss of the cluster, T3 accepted loss.
+- **Metrics.** Every dataset reports `backup:dataset_copies{dataset, kind, tier, drill, targets}`, `backup:last_success_timestamp_seconds{dataset, kind}` and `backup:restore_last_success_timestamp_seconds{dataset, kind}`, the last fed only by a restore drill that found its canary. One dashboard and one alert set then cover both clusters.
+- **Lock window.** Backups in the OVHcloud copy are locked in compliance mode for 30 days, with noncurrent versions expiring after 37. Security evidence keeps its 365 days.
+- **Vault credentials.** The account that can change or delete the locked copies, and its API token, live with the owner in a provider account that neither cluster, OpenBao nor CI ever holds. The clusters hold write credentials only, one bucket and one key per cluster.
+
 **No lock-in.** The S3 API is the portability layer, kept portable by four rules:
 - Data is encrypted before upload with age, restic or kopia, so no provider's key service is relied on.
 - Copies between providers are made with rclone under separate write-only credentials, never with a provider's replication feature.
