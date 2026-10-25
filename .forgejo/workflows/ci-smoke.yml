@@ -15,6 +15,7 @@ jobs:
 
       - name: Show the sandbox the job runs in
         run: |
+          echo "node: ${NODE_NAME:-unknown}"
           id
           cat /proc/version
           dmesg 2>/dev/null | head -n 5 || echo "dmesg not readable"

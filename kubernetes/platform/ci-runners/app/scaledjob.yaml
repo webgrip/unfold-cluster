@@ -7,7 +7,7 @@ metadata:
 spec:
   pollingInterval: 15
   minReplicaCount: 0
-  maxReplicaCount: 3
+  maxReplicaCount: 6
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   rollout:
@@ -23,6 +23,8 @@ spec:
     activeDeadlineSeconds: 5400
     template:
       metadata:
+        annotations:
+          cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
         labels:
           app.kubernetes.io/name: forgejo-runner
           app.kubernetes.io/part-of: unfold-ci
@@ -33,16 +35,29 @@ spec:
         automountServiceAccountToken: false
         enableServiceLinks: false
         terminationGracePeriodSeconds: 30
+        priorityClassName: ci-runner
+        tolerations:
+          - key: node.webgrip.io/pool
+            operator: Equal
+            value: unfold
+            effect: NoSchedule
         affinity:
           nodeAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
               - weight: 100
                 preference:
                   matchExpressions:
-                    - key: runtime.webgrip.io/kvm
+                    - key: node.webgrip.io/pool
                       operator: In
                       values:
-                        - "true"
+                        - unfold
+              - weight: 50
+                preference:
+                  matchExpressions:
+                    - key: node.webgrip.io/pool
+                      operator: In
+                      values:
+                        - ci
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
@@ -189,6 +204,10 @@ spec:
                 value: unix:///run/buildkit/buildkitd.sock
               - name: DOCKER_CONFIG
                 value: /run/zot-push
+              - name: NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
             workingDir: /work
             securityContext:
               allowPrivilegeEscalation: false
