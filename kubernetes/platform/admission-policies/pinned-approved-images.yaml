@@ -21,7 +21,9 @@ spec:
         'ghcr.io/kedacore/keda-admission-webhooks:',
         'code.forgejo.org/forgejo/runner:',
         'docker.io/moby/buildkit:',
-        'docker.io/library/node:']
+        'docker.io/library/node:',
+        'ghcr.io/project-zot/zot:',
+        'docker.io/alpine/kubectl:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)
