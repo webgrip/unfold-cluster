@@ -129,15 +129,24 @@ run "the_firewall_opens_exactly_the_ports_the_nodes_listen_on_for_others" {
   assert {
     condition = sort([for rule in local.host_firewall_rules.control_plane : "${rule.protocol}/${join(",", [for port in rule.ports : tostring(port)])}"]) == sort([
       "tcp/10250", "udp/8472", "udp/51871", "tcp/4240", "tcp/4244", "tcp/50000", "tcp/6443", "tcp/50001", "tcp/2379-2380",
+      "tcp/9100,9598,9962-9963,9965", "tcp/2383",
     ])
-    error_message = "a control plane opens kubelet, Cilium VXLAN, WireGuard, health and Hubble, apid, the API server, trustd and etcd, nothing more"
+    error_message = "a control plane opens kubelet, Cilium VXLAN, WireGuard, health and Hubble, apid, the API server, trustd, etcd and the metrics ports, nothing more"
   }
 
   assert {
     condition = sort([for rule in local.host_firewall_rules.worker : "${rule.protocol}/${join(",", [for port in rule.ports : tostring(port)])}"]) == sort([
-      "tcp/10250", "udp/8472", "udp/51871", "tcp/4240", "tcp/4244", "tcp/50000",
+      "tcp/10250", "udp/8472", "udp/51871", "tcp/4240", "tcp/4244", "tcp/50000", "tcp/9100,9598,9962-9963,9965",
     ])
     error_message = "a worker runs no API server, trustd or etcd, so it opens none of their ports"
+  }
+
+  assert {
+    condition = alltrue([
+      for rule in concat(local.host_firewall_rules.control_plane, local.host_firewall_rules.worker) :
+      rule.sources == [local.pod_subnet] if contains(["node-metrics", "etcd-metrics"], rule.name)
+    ])
+    error_message = "the metrics ports answer the scraper, which runs as a pod, and nothing else"
   }
 
   assert {
