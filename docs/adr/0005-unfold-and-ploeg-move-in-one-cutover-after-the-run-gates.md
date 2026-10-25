@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-25
 ---
 
-# ADR 0004: Unfold and Ploeg move in one cutover, after the Run gates are on
+# ADR 0005: Unfold and Ploeg move in one cutover, after the Run gates are on
 
 ## Context and problem statement
 
@@ -33,7 +33,7 @@ Chosen option: one cutover.
 2. The executor is switched on, here, against the fixture boards (Ploeg Test and Ploeg Bench) only. That happens after every gate in RFC 0003 §5 is green.
 3. In one window:
    * the homelab stops dispatching and scales to zero;
-   * the data moves ([ADR 0007](0007-ploeg-and-unfold-data-move-as-encrypted-files.md));
+   * the data moves ([ADR 0008](0008-ploeg-and-unfold-data-move-as-encrypted-files.md));
    * this cluster's values gain the real board projects, and the homelab's lose them, in two commits merged in the same window;
    * the webhooks are wired again.
 4. The homelab becomes staging on the fixture boards. A homelab CI check refuses any production project id in its values.

@@ -6,7 +6,7 @@
 | Date | 2026-10-25 |
 | Owner | ryangr0 |
 | Builds on | RFC 0001 (delivery steps 8 to 15), RFC 0002, Unfold ADR-0040, ADR-0043 and ADR-0045, Ploeg ADR-0106, ADR-0107 and ADR-0154, homelab-cluster ADR-0044, ADR-0055, ADR-0070 and ADR-0071 |
-| Proposes | [ADR 0004](../adr/0004-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md), [ADR 0005](../adr/0005-production-reaches-the-homelab-from-the-hub-pool-only.md), [ADR 0006](../adr/0006-production-runs-its-own-litellm.md), [ADR 0007](../adr/0007-ploeg-and-unfold-data-move-as-encrypted-files.md), [ADR 0008](../adr/0008-the-metal-node-is-an-ex44.md) |
+| Proposes | [ADR 0005](../adr/0005-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md), [ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md), [ADR 0007](../adr/0007-production-runs-its-own-litellm.md), [ADR 0008](../adr/0008-ploeg-and-unfold-data-move-as-encrypted-files.md), [ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md) |
 | Facts checked | 2026-10-25: homelab-cluster `main` (files and live metrics), Unfold `development` 44990fe2 (chart 0.4.0-rc.114), Ploeg `development` b07f6d6, this repository's `main` 875006e and open PR #83, Hetzner price pages, the server auction feed and status page |
 
 ## Summary
@@ -15,10 +15,10 @@ Unfold and Ploeg run today in the homelab's `ploeg` namespace as one Helm releas
 
 1. **What moves:** Unfold, ploegd, ploeg-mcp, the Ploeg database, the agent Runs and Unfold's workspaces.
 2. **What stays home at first:** Forgejo, Vikunja, Authentik, OpenBao (still the only original of every secret), Omnigraph and the observability backend.
-3. **LiteLLM moves too.** It gets its own provider keys here ([ADR 0006](../adr/0006-production-runs-its-own-litellm.md)), so client code never passes through the house and the production cluster holds no homelab master key.
-4. **One cutover.** Unfold and Ploeg move in one window, after the Run security gates are on ([ADR 0004](../adr/0004-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)). Everything before that window installs into an empty shadow environment, so nothing has to be rolled back.
-5. **Data:** about 110 MiB in total. It moves as two age-encrypted files ([ADR 0007](../adr/0007-ploeg-and-unfold-data-move-as-encrypted-files.md)). Downtime is about 30 to 60 minutes.
-6. **Runs need bare metal,** and the AX41 is no longer sold. An EX44 at €60.70 a month takes its place ([ADR 0008](../adr/0008-the-metal-node-is-an-ex44.md)).
+3. **LiteLLM moves too.** It gets its own provider keys here ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)), so client code never passes through the house and the production cluster holds no homelab master key.
+4. **One cutover.** Unfold and Ploeg move in one window, after the Run security gates are on ([ADR 0005](../adr/0005-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)). Everything before that window installs into an empty shadow environment, so nothing has to be rolled back.
+5. **Data:** about 110 MiB in total. It moves as two age-encrypted files ([ADR 0008](../adr/0008-ploeg-and-unfold-data-move-as-encrypted-files.md)). Downtime is about 30 to 60 minutes.
+6. **Runs need bare metal,** and the AX41 is no longer sold. An EX44 at €60.70 a month takes its place ([ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md)).
 
 After the move the cluster costs about **€116 a month excluding VAT** (about €140 including it), with the hub still on one node. It rises to about €188 when the hub grows to three nodes before the first client.
 
@@ -30,7 +30,8 @@ After the move the cluster costs about **€116 a month excluding VAT** (about �
 | What is running | Cilium with WireGuard, Flux deploying signed commits only, admission policies in Deny (#78), egress flow evidence ahead of default deny (#79), disk encryption through the KMS (#82), Zot, OIDC login, and External Secrets reading the homelab OpenBao through the homelab gateway |
 | CI pool | `unfold-ci-1` (CX43) is declared at `node_count = 0`, because Hetzner has no CX to place |
 | Metal node | None. Robot no longer sells the AX41-NVMe: plan run 201 failed on it. Open PR #83 sets `metal_servers = {}` and adds an adopt mode and an auction mode |
-| Being built by other streams | The on-demand CPX42 CI node with an autoscaler; RFC 0001 step 10 (cert-manager, encrypted volumes, CNPG); runtime security (Tetragon); supply-chain signature checks. This RFC depends on their outcomes, not on their pull request numbers |
+| Open PR #84 | Runs CI on the hub worker `unfold-app-1` under gVisor (two runners at most, priority -5 so the hub's own pods preempt them), overflows to a CPX42 that the cluster-autoscaler adds from zero, and moves KEDA to the control planes. It claims ADR 0004, so this RFC's ADRs start at 0005 |
+| Being built by other streams | RFC 0001 step 10 (cert-manager, encrypted volumes, CNPG); runtime security (Tetragon); supply-chain signature checks. This RFC depends on their outcomes, not on their pull request numbers |
 | The homelab | Everything Unfold and Ploeg need, in namespace `ploeg` (`kubernetes/apps/ploeg/` in homelab-cluster). It already feeds this cluster OpenBao reads, metrics and logs, and the CI queue length, through the `unfold-gateway` tailnet gateway |
 
 ## 1. Inventory
@@ -61,13 +62,13 @@ Requests and limits are the values the homelab deploys: the chart defaults unles
 | Service | Why it stays | How this cluster reaches it | What that trusts |
 | --- | --- | --- | --- |
 | Forgejo | Unfold ADR-0040 accepts it as a dependency: it holds the repositories and their CI. It is already public through the homelab's Cloudflare Tunnel (`forgejo.webgrip.dev`) | **API and git over HTTPS** at its public name: from the hub, and from Runs through the egress gateway's FQDN allowlist. **Webhooks** reach this cluster's public webhook endpoint, signed with HMAC | Repository text steers Runs, as it does today. The bot users stay the same, but each cluster gets **its own token** for them (no new bot accounts) |
-| Vikunja | It is the tracker. Its route is internal only (`envoy-internal`) | **API** through a new homelab-gateway port, for the hub pool only ([ADR 0005](../adr/0005-production-reaches-the-homelab-from-the-hub-pool-only.md)). **Webhooks** reach the public webhook endpoint with HMAC | The hub can write the board with Ploeg's bot token. A webhook can only make ploegd re-read the tracker: ploegd acts on the API's answer, never on the webhook's body |
+| Vikunja | It is the tracker. Its route is internal only (`envoy-internal`) | **API** through a new homelab-gateway port, for the hub pool only ([ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md)). **Webhooks** reach the public webhook endpoint with HMAC | The hub can write the board with Ploeg's bot token. A webhook can only make ploegd re-read the tracker: ploegd acts on the API's answer, never on the webhook's body |
 | Authentik | It is the identity provider. Only the `unfold-kubernetes` discovery and JWKS are public | **Browsers** use it over the LAN or the tailnet. **Unfold's and ploegd's server-side calls** (token, JWKS) go through the gateway's port 443, which `tag:headscale` already uses | An Authentik outage blocks new logins to Unfold. The owner accepted the same for Headscale |
 | OpenBao | It is the only original of every secret (homelab ADR-0055) | External Secrets, `secret/unfold-main/*`, through the gateway, as today | Every production credential lives in the house. This was already true for the infrastructure (RFC 0001, "A compromised homelab") |
 | Omnigraph | It is the knowledge graph | Off at cutover. Later through the gateway, with tokens that only this cluster holds ([D9](#d9-omnigraph)) | The graph's writers can steer Runs |
 | Observability backend | The cluster has no in-cluster stack yet (RFC 0001 step 8 sends everything home) | Writes as today. **Unfold's reads** of logs, metrics and traces need read paths on the gateway, filtered to `cluster=unfold` ([D7](#d7-unfolds-reads-of-logs-and-metrics)) | The homelab sees all telemetry, as today |
 | Harbor | Not used here. Images come from GHCR through Zot | | |
-| LiteLLM | Moves ([ADR 0006](../adr/0006-production-runs-its-own-litellm.md)) | | |
+| LiteLLM | Moves ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)) | | |
 
 ### Trust, against RFC 0001's homelab-to-production risks
 
@@ -83,7 +84,7 @@ The bigger change runs the other way. The move adds paths **from production into
 
 The tailnet policy today lets every `tag:node` device open the gateway's OpenBao port 8200, and the CI and metal nodes join as `tag:node`. Once `secret/unfold-main/*` holds the application's tokens, that is one control (the OpenBao role's subject binding) between a Run escape and those tokens. RFC 0001 asks for two.
 
-[ADR 0005](../adr/0005-production-reaches-the-homelab-from-the-hub-pool-only.md) splits the tags:
+[ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md) splits the tags:
 
 | Tag | Nodes | May open |
 | --- | --- | --- |
@@ -109,10 +110,12 @@ Talos and the kubelet reserve some of the node, which leaves about 3.7 CPU and 7
 | agent-sandbox controller | 0.05 | 0.13 GiB | 0.25 GiB | estimate |
 | cloudflared, 2 replicas | 0.04 | 0.13 GiB | 0.25 GiB | estimate |
 | CNPG operator (or on the control planes, as step 10 decides) | 0.10 | 0.25 GiB | 0.5 GiB | homelab: the operator once ran out of memory there on less |
-| LiteLLM, its Valkey, its database and the database's sidecar ([ADR 0006](../adr/0006-production-runs-its-own-litellm.md)) | 0.17 | 1.28 GiB | 3 GiB | homelab |
+| LiteLLM, its Valkey, its database and the database's sidecar ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)) | 0.17 | 1.28 GiB | 3 GiB | homelab |
 | **Total** | **~1.2 of 3.7** | **~4.5 of 7.0 GiB** | ~6.6 GiB, before Zot and the agents | |
 
-It fits, at about 65% of memory requested, with no failover. Two things do not fit on top of it:
+It fits, at about 65% of memory requested, with no failover. Three things do not fit on top of it:
+
+* PR #84's CI baseline: two gVisor runners at 1.55 CPU and 3 GiB each. Their priority lets Unfold preempt them, but untrusted CI code would still share a node with `ploeg-db`, the LiteLLM master key and Unfold's store key ([D12](#d12-ci-on-the-hub-after-the-move));
 
 * an in-cluster VMSingle, VLSingle and VictoriaTraces (about 1.5 GiB), and
 * the three replicas each that RFC 0001 asks of Postgres, OpenBao and NATS.
@@ -156,7 +159,7 @@ Live on 2026-10-25:
 | `unfold-app-1` CX33 (hub) | €8.99 | €8.99 | €8.99 |
 | 2 more hub nodes, CPX32, unless CX returns | | | €71.98 |
 | `unfold-headscale` CX23 | €5.99 | €5.99 | €5.99 |
-| Metal node EX44 with IPv4 ([ADR 0008](../adr/0008-the-metal-node-is-an-ex44.md)) | | €60.70 | €60.70 |
+| Metal node EX44 with IPv4 ([ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md)) | | €60.70 | €60.70 |
 | CI node CPX42 on demand, about 100 hours a month | | ~€11.22 | ~€11.22 |
 | Object storage, Hetzner and OVHcloud (RFC 0001) | | ~€10.00 | ~€10.00 |
 | hcloud volumes (Unfold data and LiteLLM, about 20 GB) | | ~€0.88 | ~€0.88 |
@@ -166,7 +169,7 @@ Live on 2026-10-25:
 The total stays under ADR-0040's €185 cap after the move. It also stays under the €280 cap that RFC 0002 set before the first client.
 
 * Models are capped separately, at €100 a month, through LiteLLM's budgets.
-* The CI node is billed hourly, so it is the only line that moves with use. Always on, it would cost €69.99.
+* The CI node is billed hourly, so it is the only line that moves with use. 100 hours is a cautious guess; PR #84 expects €2.24 to €7.00 a month. Always on, it would cost €69.99.
 * In the homelab, the move frees about 0.5 CPU and 3.5 GiB of requests on worker nodes whose memory is nearly full. It saves no power, because the nodes stay on.
 
 ## 3. Public access
@@ -197,7 +200,7 @@ forge / tracker / browser ──► Cloudflare edge (TLS, WAF, Access) ──►
 
 | Dataset | Size | Method | Notes |
 | --- | --- | --- | --- |
-| `ploeg-db` database `app` | 23 MiB | `pg_dump -Fc` from the frozen homelab primary, then `pg_restore` into a fresh CNPG cluster here ([ADR 0007](../adr/0007-ploeg-and-unfold-data-move-as-encrypted-files.md)) | Both sides run PostgreSQL 18. The managed roles are declared again here, not dumped |
+| `ploeg-db` database `app` | 23 MiB | `pg_dump -Fc` from the frozen homelab primary, then `pg_restore` into a fresh CNPG cluster here ([ADR 0008](../adr/0008-ploeg-and-unfold-data-move-as-encrypted-files.md)) | Both sides run PostgreSQL 18. The managed roles are declared again here, not dumped |
 | Unfold data directory | 88 MiB | `sqlite3 .backup` plus the store key file, as one tarball, restored by an init Job before Unfold starts | The store key **must** come with the data, or no stored credential can be decrypted |
 | LiteLLM | | Not migrated. Production starts with an empty LiteLLM: its own keys, budgets and spend log | Per-Run keys live 4 hours. None survives a cutover anyway |
 | Generated secrets | | Generated again here: the worker signing key, the worker bootstrap registry, the webhook secrets, the operator and MCP tokens, the confirmation key and the scaler password | A new webhook secret means the tracker and forge webhooks are wired again. Step 8 includes that |
@@ -254,12 +257,12 @@ Each step is a pull request with its own proof, then a reviewed `infra` apply wh
 
 | # | Pull request | Apply | Proof |
 | --- | --- | --- | --- |
-| 0 | This RFC and ADRs 0004 to 0008 (docs only) | none | The owner's decisions below, recorded in each ADR |
+| 0 | This RFC and ADRs 0005 to 0009 (docs only) | none | The owner's decisions below, recorded in each ADR |
 | 1 | Prerequisites from the other streams: cert-manager with the internal CA, an encrypted hcloud StorageClass and an encrypted local StorageClass on the metal node, the CNPG operator with the barman-cloud plugin, and object storage at both providers (RFC 0001 steps 3 and 10) | yes | A throwaway CNPG cluster backs up, is restored into a second throwaway cluster, and its canary row is found. A PVC on another class is refused |
-| 2 | The metal node: adopt or order the EX44 through PR #83's modes, Kata 4.3.1 and gVisor on KVM, `kvm_intel` ([ADR 0008](../adr/0008-the-metal-node-is-an-ex44.md)) | yes, with a plan whose price line reads €60.70 or less | ADR-0040's check: a `kata` pod reports a guest kernel different from the host's. The disk report shows LUKS2 with the KMS key slot |
-| 3 | Tailnet tags `tag:hub`, `tag:runs` and `tag:ci`, and the gateway's new ports for Vikunja's API and Authentik ([ADR 0005](../adr/0005-production-reaches-the-homelab-from-the-hub-pool-only.md)), in this repository and in homelab-cluster | yes (Headscale policy) | From a hub pod: Vikunja and Authentik answer. From the metal node and a CI pod: 8200 and the new ports are refused, and 8427 is accepted. The policy test pins each case |
+| 2 | The metal node: adopt or order the EX44 through PR #83's modes, Kata 4.3.1 and gVisor on KVM, `kvm_intel` ([ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md)) | yes, with a plan whose price line reads €60.70 or less | ADR-0040's check: a `kata` pod reports a guest kernel different from the host's. The disk report shows LUKS2 with the KMS key slot |
+| 3 | Tailnet tags `tag:hub`, `tag:runs` and `tag:ci`, and the gateway's new ports for Vikunja's API and Authentik ([ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md)), in this repository and in homelab-cluster | yes (Headscale policy) | From a hub pod: Vikunja and Authentik answer. From the metal node and a CI pod: 8200 and the new ports are refused, and 8427 is accepted. The policy test pins each case |
 | 4 | Supply chain: `ghcr.io/webgrip/unfold`, `ghcr.io/webgrip/unfold-agent`, `ghcr.io/ploeg-hq/` and the CNPG Postgres image on `allowedPrefixes`, synced through Zot, with signatures checked at pull and at admission | no | The admission test admits each digest-pinned image, and refuses the same image by tag and an unsigned image |
-| 5 | **Shadow hub:** namespace `ploeg` and an empty `ploeg-db`; LiteLLM with its own database and provider keys ([ADR 0006](../adr/0006-production-runs-its-own-litellm.md)); the `unfold` release with `ploeg.executor.enabled: false` and only the Ploeg Test board; the secrets at `secret/unfold-main/...` | no | ploegd migrates the empty database. Unfold answers its health check. An OIDC login works over the tailnet. A LiteLLM call is metered against its key's budget. **This is also ADR-0040's public install proof:** the release installs from published artifacts with this cluster's values only |
+| 5 | **Shadow hub:** namespace `ploeg` and an empty `ploeg-db`; LiteLLM with its own database and provider keys ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)); the `unfold` release with `ploeg.executor.enabled: false` and only the Ploeg Test board; the secrets at `secret/unfold-main/...` | no | ploegd migrates the empty database. Unfold answers its health check. An OIDC login works over the tailnet. A LiteLLM call is metered against its key's budget. **This is also ADR-0040's public install proof:** the release installs from published artifacts with this cluster's values only |
 | 6 | Public access: Tunnel, Gateway, routes and Access (section 3) | yes (Tunnel in OpenTofu) | From outside: the UI host asks for Access. On the webhook host, an unsigned POST gets 401, a correctly signed test POST gets 2xx, and any other path gets 404. A port scan of every node's public address finds nothing open |
 | 7 | **Run gates, then the executor on the fixture boards only** (Ploeg Test and Ploeg Bench) | as needed | Every gate below green, and one Bench Run completes under `kata` |
 | 8 | **Cutover** (section 4): the homelab config loses the real board projects, and this cluster's config gains them, in two commits merged within the window | no | The comparison script prints no difference. A real ticket is dispatched and opens a pull request. The homelab's ploegd is at 0 replicas |
@@ -292,7 +295,7 @@ Each gate needs its mutation test (RFC 0001 rule 4): it must refuse when the con
 * B. The hub first, with the homelab running Runs as a cell. This needs Ploeg's `ploeg-cell` chart (ADR-0107), which does not exist yet.
 * C. The hub first with no Runs. Agent work stops until the gates are green.
 
-**Recommendation: A** ([ADR 0004](../adr/0004-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)). B is the long-term shape, but it waits on an unbuilt chart. C stops the owner's work for weeks.
+**Recommendation: A** ([ADR 0005](../adr/0005-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)). B is the long-term shape, but it waits on an unbuilt chart. C stops the owner's work for weeks.
 
 #### D2. LiteLLM
 
@@ -300,7 +303,7 @@ Each gate needs its mutation test (RFC 0001 rule 4): it must refuse when the con
 * B. The homelab's LiteLLM through the gateway. ploegd would then hold the homelab master key, and every prompt carrying client code would pass through the house.
 * C. Provider keys straight in ploegd. That skips the metering homelab ADR-0044 requires.
 
-**Recommendation: A** ([ADR 0006](../adr/0006-production-runs-its-own-litellm.md)). The cost is about 1.3 GiB of hub memory and one more provider key per provider. Self-hosted models that only the homelab serves stay out of production until a route is decided.
+**Recommendation: A** ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)). The cost is about 1.3 GiB of hub memory and one more provider key per provider. Self-hosted models that only the homelab serves stay out of production until a route is decided.
 
 #### D3. The metal node
 
@@ -309,7 +312,7 @@ Each gate needs its mutation test (RFC 0001 rule 4): it must refuse when the con
 * C. An AX42: €99.00 plus €49.00 setup, ECC memory, an AMD CPU (SEV-capable, which keeps RFC 0002 phase 0 the same).
 * D. No metal: Runs under gVisor on a CPX42 as `hardened`. Unfold ADR-0045 allows this on cloud VMs, but it gives up Kata for writing Runs.
 
-**Recommendation: A** ([ADR 0008](../adr/0008-the-metal-node-is-an-ex44.md)). Re-check stock on the day of ordering.
+**Recommendation: A** ([ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md)). Re-check stock on the day of ordering.
 
 #### D4. Hub size at cutover
 
@@ -367,7 +370,17 @@ Each gate needs its mutation test (RFC 0001 rule 4): it must refuse when the con
 * A. **Two age-encrypted files** through a short-lived bucket.
 * B. CNPG's `import` bootstrap. It is declarative, but it needs a temporary database port across the tailnet.
 
-**Recommendation: A** ([ADR 0007](../adr/0007-ploeg-and-unfold-data-move-as-encrypted-files.md)).
+**Recommendation: A** ([ADR 0008](../adr/0008-ploeg-and-unfold-data-move-as-encrypted-files.md)).
+
+#### D12. CI on the hub after the move
+
+PR #84 puts the CI baseline on `unfold-app-1`. That is sound while the hub holds nothing but Zot. RFC 0001 says CI does not belong next to the production hub.
+
+* A. **CI leaves the hub before step 5.** The baseline moves to the metal node under gVisor on KVM, as ADR 0002 allows, and overflow stays on the autoscaled CPX42.
+* B. CI stays on the hub, preemptible, under gVisor. Untrusted build code then shares a kernel host with the database and the LiteLLM master key, behind one sandbox.
+* C. One CPX42 always on as the CI baseline: +€69.99 a month.
+
+**Recommendation: A.** Step 5 then also drops the hub preference and the `unfold` toleration from the runner ScaledJob. On the metal node, CI shares a host with Runs, which ADR 0002 already accepted, and holds no production secret.
 
 ### Risks
 
@@ -381,7 +394,7 @@ Two ploegds watching the same boards would run every ticket twice and spend twic
 
 #### R2. A Run escape reaches the house
 
-The tailnet policy today lets every `tag:node` device open OpenBao's port. [ADR 0005](../adr/0005-production-reaches-the-homelab-from-the-hub-pool-only.md) and gate G5 close this before any Run moves.
+The tailnet policy today lets every `tag:node` device open OpenBao's port. [ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md) and gate G5 close this before any Run moves.
 
 #### R3. One hub node, one metal node
 
@@ -401,10 +414,7 @@ If the store key file is lost, every stored link and credential is lost too. Mit
 
 #### R6. The KEDA scaler credential
 
-ADR 0002 runs KEDA where CI runs. Ploeg's PostgreSQL scaler gives KEDA the password of `ploeg_scaler`, which has `pg_read_all_data` in the homelab. That puts a read-everything credential on an untrusted node. Two fixes:
-
-* the scaler's role gets `SELECT` on one counting view only (gate G8);
-* KEDA moves to the hub pool or the CPX42 once CI leaves the metal node.
+Ploeg's PostgreSQL scaler gives KEDA the password of `ploeg_scaler`, which has `pg_read_all_data` in the homelab. ADR 0002 runs KEDA where CI runs, which would put a read-everything credential on an untrusted node. PR #84 moves KEDA to the control planes, which removes the untrusted node, but KEDA still holds the credential. The fix is that the scaler's role gets `SELECT` on one counting view only (gate G8).
 
 #### R7. The homelab is in the intake path
 
@@ -424,4 +434,4 @@ The live numbers for the hub node come from manifests, not measurements. Before 
 
 ## Decisions
 
-None yet. The owner decides D1 to D11, and each recommendation accepted here moves its ADR from `proposed` to `accepted`.
+None yet. The owner decides D1 to D12, and each recommendation accepted here moves its ADR from `proposed` to `accepted`.

@@ -3,11 +3,11 @@ status: proposed
 date: 2026-10-25
 ---
 
-# ADR 0007: Ploeg's and Unfold's data move as two encrypted files, verified on both sides
+# ADR 0008: Ploeg's and Unfold's data move as two encrypted files, verified on both sides
 
 ## Context and problem statement
 
-Two datasets move in the cutover ([ADR 0004](0004-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)):
+Two datasets move in the cutover ([ADR 0005](0005-unfold-and-ploeg-move-in-one-cutover-after-the-run-gates.md)):
 
 * **Ploeg's database**, `app` in the homelab's CNPG cluster `ploeg-db`: 23 MiB, PostgreSQL 18.
 * **Unfold's data directory** on the PVC `unfold-data`: 88 MiB, holding a SQLite database and the store key file that decrypts every stored link and credential.
@@ -16,7 +16,7 @@ Everything else is generated again or starts empty here ([RFC 0003](../rfc/0003-
 
 The two clusters share no network path for data:
 
-* The tailnet carries only named gateway ports from this cluster into the house ([ADR 0005](0005-production-reaches-the-homelab-from-the-hub-pool-only.md)).
+* The tailnet carries only named gateway ports from this cluster into the house ([ADR 0006](0006-production-reaches-the-homelab-from-the-hub-pool-only.md)).
 * The homelab's CNPG backups sit in a bucket whose keys reach every homelab database.
 
 ## Considered options

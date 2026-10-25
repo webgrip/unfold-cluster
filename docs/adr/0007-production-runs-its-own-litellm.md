@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-25
 ---
 
-# ADR 0006: Production runs its own LiteLLM, with its own provider keys
+# ADR 0007: Production runs its own LiteLLM, with its own provider keys
 
 ## Context and problem statement
 

@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-25
 ---
 
-# ADR 0008: The metal node is an EX44, because the AX41 is no longer sold
+# ADR 0009: The metal node is an EX44, because the AX41 is no longer sold
 
 ## Context and problem statement
 

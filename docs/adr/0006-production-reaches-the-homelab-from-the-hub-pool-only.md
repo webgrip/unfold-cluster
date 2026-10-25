@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-25
 ---
 
-# ADR 0005: Production reaches the homelab from the hub pool only
+# ADR 0006: Production reaches the homelab from the hub pool only
 
 ## Context and problem statement
 
@@ -31,9 +31,9 @@ Chosen option: one tag per node role.
 
 | Tag | Nodes | May open on `tag:homelab-gateway` |
 | --- | --- | --- |
-| `tag:cp` | control planes | 8200, 8427 |
+| `tag:cp` | control planes | 8200, 8427, and 9150 once KEDA runs there (PR #84) |
 | `tag:hub` | the hub pool (`node.webgrip.io/pool=unfold`) | 8200, 8427, the Vikunja API port, 443 (Authentik), and the vmauth read path of RFC 0003 D7 |
-| `tag:ci` | CI nodes | 8427, 9150 |
+| `tag:ci` | CI nodes with a tailnet key | 8427 |
 | `tag:runs` | the metal node and any later Run node | 8427 |
 
 Each pool's worker key is minted with its own tag. Within this cluster, Cilium egress rules allow the gateway's name only from the workloads that need it:
@@ -41,7 +41,7 @@ Each pool's worker key is minted with its own tag. Within this cluster, Cilium e
 * External Secrets and vmagent: OpenBao and writes, from the control planes and the hub;
 * ploegd and the tracker-wiring Job: Vikunja;
 * Unfold and ploegd: Authentik;
-* KEDA: the queue-length port.
+* KEDA, on the control planes: the queue-length port.
 
 Run pods get no rule to the gateway at all.
 
