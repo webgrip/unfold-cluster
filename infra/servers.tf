@@ -65,7 +65,7 @@ resource "hcloud_server" "worker" {
   name               = each.key
   server_type        = var.worker_pools[each.value.pool].server_type
   image              = local.talos_image
-  location           = var.location
+  location           = coalesce(var.worker_pools[each.value.pool].location, var.location)
   firewall_ids       = [hcloud_firewall.nodes.id]
   delete_protection  = true
   rebuild_protection = true

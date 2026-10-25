@@ -9,14 +9,34 @@ Renovate updates, agent pull requests and anyone's branch. Everything below foll
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| KEDA | namespace `keda`, Flux Kustomization `keda` | Polls `GET /api/v1/orgs/webgrip/actions/runners/jobs?labels=unfold-ci` every 15 s and starts one Job per waiting CI job. Nothing runs when nothing waits. |
+| KEDA | namespace `keda`, Flux Kustomization `keda` | Every 15 s reads `GET http://unfold-gateway.webgrip.dev:9150/waiting-jobs/unfold-ci` (a `metrics-api` trigger, value `waiting`) and starts one Job per waiting CI job. Nothing runs when nothing waits. |
 | ScaledJob `forgejo-runner` | namespace `ci`, Flux Kustomization `ci-runners` | At most 3 job pods at once, on the CI node only (`node.webgrip.io/pool=ci`, its taint tolerated), RuntimeClass `gvisor`. |
 | Job pod | CI node | `register` (init): registers an ephemeral runner. `buildctl` (init): copies the BuildKit client. `buildkitd` (sidecar): rootless BuildKit. `runner`: `forgejo-runner one-job`, steps run here. |
 | Runner registration token | OpenBao `secret/unfold-main/ci/forgejo-runner`, key `registration-token` | Minted by the homelab's `unfold-ci-runner-provisioner` CronJob. Delivered as Secret `ci/forgejo-runner-registration`, mounted into the `register` init container only. |
-| KEDA scaler token | same path, key `scaler-token` | A `read:organization` token of the homelab bot `unfold-ci-scaler`, an owner of `webgrip` (Forgejo lets only owners read the org's job queue). Delivered as Secret `keda/forgejo-unfold-ci-scaler`, used through the ClusterTriggerAuthentication `forgejo-unfold-ci`. It never enters `ci`. |
+| Job count | homelab `forgejo/forgejo-runner-queue`, behind the homelab gateway's tailnet port 9150 | Answers `{"label":"unfold-ci","waiting":N}`: the `webgrip` jobs in status `waiting` whose `runs-on` is `unfold-ci`. It reads Forgejo with the homelab KEDA scaler's existing token, which never leaves the homelab. Any other label is a 404, any other method a 501, and an unreadable queue a 502, never a zero. |
 
-Both tokens come through the ClusterSecretStore `openbao-homelab` (runbook
-[external-secrets](external-secrets.md)). Nobody creates or copies either of them.
+The registration token comes through the ClusterSecretStore `openbao-homelab` (runbook
+[external-secrets](external-secrets.md)). Nobody creates or copies it.
+
+## Why KEDA reads a number and not Forgejo
+
+Forgejo 15.0 serves the job queue at three levels, and each needs more than KEDA should hold
+(`routers/api/v1/api.go` at v15.0.10): the org's `/orgs/{org}/actions/runners/jobs` needs an
+org owner (`reqOrgOwnership`), a repository's `/repos/{owner}/{repo}/actions/runners/jobs`
+needs the repository's owner, which for an org repository is again an org owner
+(`reqOwner`, access mode owner), and `/admin/actions/runners/jobs` needs a site admin. There
+is no read-only or label-limited permission for it, no job-queued webhook (only
+`action_run_success`, `action_run_failure` and `action_run_recover`), and no autoscaler of
+its own. The homelab already has a site-admin scaler token for its own runners, so the
+homelab counts the queue with it and publishes only the number. A CI job, this cluster or a
+leaked Unfold secret can learn how many `unfold-ci` jobs wait, and nothing else.
+
+A fixed pool of idle runners would need no count at all, and on a CX43 that is billed per
+month it costs no money. It costs capacity and traffic instead: three idle job pods hold 4.5
+vCPU and 9 GiB of requests on the node, every idle runner polls Forgejo's `FetchTask` about
+every two seconds over the internet, around 130,000 requests a day for three, and a burst
+beyond three waits. Restarting a pod after its one job also needs a controller, which is
+what KEDA is. The count costs one small pod in the homelab and one request every 15 s.
 
 ## Why each pod registers its own ephemeral runner
 
@@ -27,6 +47,12 @@ included. Forgejo's answer is the ephemeral runner, which receives at most one j
 removed by Forgejo itself. So each pod registers a fresh ephemeral runner in an init container,
 which is the only container that mounts the registration token. The runner container gets the
 ephemeral runner's file and nothing else; after the one job, its token is worthless.
+
+The registration token is the `webgrip` org's, the narrowest scope that serves every repository
+of the org: Forgejo 15.0 has registration tokens for the instance, an owner or one repository
+(`ActionRunnerToken` holds an owner id, a repository id and nothing else), none limited to a
+label, and the API has no way to reset one. A token per repository would need a ScaledJob per
+repository. What keeps it narrow is where it lives: only the `register` init container mounts it.
 
 A pod that dies before it gets a job leaves an offline ephemeral runner behind; Forgejo keeps those
 until someone removes them. The homelab provisioner removes offline `unfold-ci-*` ephemeral runners
@@ -82,15 +108,20 @@ If rootless BuildKit cannot run under gVisor on the node at all, the fallback is
 A job pod reaches `forgejo.webgrip.dev:443` (its task, the checkout, the actions it uses) and Zot on
 5000, and nothing else. A pipeline that needs another host, such as a package registry, adds its own
 egress rule to `kubernetes/platform/ci-runners/app/networkpolicy.yaml` with the reason in the rule's
-description. KEDA's operator reaches `forgejo.webgrip.dev:443` and the API server.
+description. KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on
+the internet.
 
 Talos's host firewall (runbook `host-firewall.md`) filters only inbound connections to node
 addresses. Job pods open connections outward and receive nothing, and the API server reaches the
 KEDA and External Secrets webhooks over the pod network, so no host rule is needed for any of this.
 
-The homelab routes `/api/actions` and `/api/actions_pipeline` straight to Forgejo, past the Anubis
-bot check, like `/api/v1`: those are the runner protocol and the artifact API, and a challenge page
-there would stall every runner outside the homelab.
+The homelab sends exactly these requests straight to Forgejo, past the Anubis bot check, because a
+challenge page there would stall every runner outside the homelab: `POST` to
+`/api/actions/runner.v1.RunnerService/*` and `/api/actions/ping.v1.PingService/*`, `GET` of a job's
+OIDC token (`/api/actions/_apis/pipelines/workflows/<run>/idtoken`) and of the issuer metadata
+under `/api/actions/.well-known/`, and the artifact API under
+`/api/actions_pipeline/_apis/pipelines/workflows/<run>/artifacts` with the methods Forgejo serves
+there. Any other request under those prefixes meets Anubis.
 
 ## Writing a workflow for `unfold-ci`
 
@@ -109,8 +140,7 @@ After the Zot (#52), CI node (#50), External Secrets (#58) and CI runner pull re
 link to OpenBao is up:
 
 1. `kubectl --kubeconfig ~/.kube/unfold.yaml -n ci get externalsecret` shows
-   `forgejo-runner-registration` `SecretSynced`, and `-n keda get externalsecret` shows
-   `forgejo-unfold-ci-scaler` the same.
+   `forgejo-runner-registration` `SecretSynced`.
 2. `kubectl --kubeconfig ~/.kube/unfold.yaml get scaledjob -n ci forgejo-runner` shows `READY True`
    and `ACTIVE False`.
 3. In Forgejo, open `webgrip/unfold-cluster`, Actions, `ci-smoke`, Run workflow on `main`.
@@ -126,7 +156,7 @@ link to OpenBao is up:
 
 | Symptom | Look at |
 | --- | --- |
-| Job waits, no pod | `kubectl -n keda logs deploy/keda-operator` for the scaler's Forgejo calls; `kubectl -n ci describe scaledjob forgejo-runner`. A 403 means the scaler bot is no longer an owner of `webgrip`. |
+| Job waits, no pod | `kubectl -n ci describe scaledjob forgejo-runner` and `kubectl -n keda logs deploy/keda-operator` for the `metrics-api` call. A connection error is the tailnet path (the gateway pod, the `unfold-gateway` DNS record, the Headscale policy's port 9150); a 502 is the homelab endpoint failing to read Forgejo: `kubectl -n forgejo logs deploy/forgejo-runner-queue` in the homelab. |
 | Pod stuck `ContainerCreating` | `forgejo-runner-registration` Secret missing: the ExternalSecret, then the store. |
 | Push answers 401 | `kubectl -n ci get secret zot-push-credentials`; if missing, the Zot Job's log says `skipped ci` until the RoleBinding exists and `ci` is in its `CONSUMER_NAMESPACES`. |
 | `register` fails | Its log. A refused token means the org's registration token was reset; the next provisioner run publishes the new one within 30 minutes, ESO within the hour. |

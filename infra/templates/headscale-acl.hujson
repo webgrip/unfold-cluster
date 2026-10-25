@@ -17,6 +17,11 @@
       "action": "accept",
       "src": ["tag:cp", "tag:node"],
       "dst": ["tag:homelab-gateway:8200,8427"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:node"],
+      "dst": ["tag:homelab-gateway:9150"]
     }
   ],
   "autoApprovers": {

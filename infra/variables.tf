@@ -27,9 +27,10 @@ variable "control_plane_server_type" {
 }
 
 variable "worker_pools" {
-  description = "The fixed worker pools OpenTofu creates, by pool name. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB), whose CI jobs run under the gvisor RuntimeClass. Nodes a cluster-autoscaler adds are not listed here."
+  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB) in Nuremberg because Falkenstein had no CX43 to place on 2026-10-25, whose CI jobs run under the gvisor RuntimeClass. Nodes a cluster-autoscaler adds are not listed here."
   type = map(object({
     server_type = string
+    location    = optional(string)
     node_count  = number
     name_prefix = string
     first_host  = number
@@ -47,6 +48,7 @@ variable "worker_pools" {
     }
     ci = {
       server_type = "cx43"
+      location    = "nbg1"
       node_count  = 1
       name_prefix = "unfold-ci"
       first_host  = 31
@@ -58,6 +60,11 @@ variable "worker_pools" {
   validation {
     condition     = alltrue([for pool in values(var.worker_pools) : !startswith(lower(pool.server_type), "cax")])
     error_message = "CAX servers are Arm; the Talos snapshot and the Headscale package are x86 (amd64)."
+  }
+
+  validation {
+    condition     = alltrue([for pool in values(var.worker_pools) : pool.location == null || contains(["fsn1", "nbg1"], pool.location)])
+    error_message = "A pool lives in fsn1 or nbg1: both sit in Hetzner's eu-central network zone, so the private network reaches it."
   }
 
   validation {

@@ -6,6 +6,7 @@ metadata:
 spec:
   interval: 1h
   releaseName: keda
+  timeout: 15m
   chart:
     spec:
       chart: keda
@@ -16,7 +17,7 @@ spec:
   install:
     crds: CreateReplace
     remediation:
-      retries: 3
+      retries: -1
   upgrade:
     crds: CreateReplace
     cleanupOnFail: true

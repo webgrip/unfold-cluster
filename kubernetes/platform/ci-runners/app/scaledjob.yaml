@@ -258,11 +258,10 @@ spec:
               secretName: forgejo-runner-registration
               defaultMode: 0440
   triggers:
-    - type: forgejo-runner
+    - type: metrics-api
+      name: waiting-unfold-ci-jobs
       metadata:
-        address: https://forgejo.webgrip.dev
-        org: webgrip
-        labels: unfold-ci
-      authenticationRef:
-        kind: ClusterTriggerAuthentication
-        name: forgejo-unfold-ci
+        url: http://unfold-gateway.webgrip.dev:9150/waiting-jobs/unfold-ci
+        format: json
+        valueLocation: waiting
+        targetValue: "1"

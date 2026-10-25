@@ -208,3 +208,34 @@ run "the_snapshot_every_worker_boots_carries_gvisor" {
     error_message = "the gvisor RuntimeClass schedules CI pods onto nodes booted from the cloud schematic; without siderolabs/gvisor in it their runsc handler does not exist"
   }
 }
+
+run "the_ci_node_lands_in_nuremberg_and_the_hub_worker_stays_in_falkenstein" {
+  command = plan
+
+  assert {
+    condition     = hcloud_server.worker["unfold-ci-1"].location == "nbg1" && hcloud_server.worker["unfold-app-1"].location == "fsn1"
+    error_message = "the CI pool names nbg1 and the hub pool, without a location, follows var.location (fsn1)"
+  }
+}
+
+run "a_pool_outside_the_eu_central_network_zone_is_refused" {
+  command = plan
+
+  variables {
+    worker_pools = {
+      ci = {
+        server_type = "cx43"
+        location    = "hel1"
+        node_count  = 1
+        name_prefix = "unfold-ci"
+        first_host  = 31
+        labels      = { "node.webgrip.io/pool" = "ci" }
+        taints      = {}
+      }
+    }
+  }
+
+  expect_failures = [
+    var.worker_pools,
+  ]
+}

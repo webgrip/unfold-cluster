@@ -60,9 +60,9 @@ spec:
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: keda-operator-forgejo
+  name: keda-operator-runner-queue
 spec:
-  description: The operator polls the Forgejo API for waiting CI jobs. Its lookups go through Cilium's DNS proxy, which is how the policy learns Forgejo's addresses.
+  description: The operator reads the number of waiting unfold-ci jobs from the homelab gateway at unfold-gateway.webgrip.dev:9150, which answers with that number only. It holds no Forgejo token. Its lookups go through Cilium's DNS proxy, which is how the policy learns the gateway's tailnet address.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: keda-operator
@@ -81,8 +81,8 @@ spec:
             dns:
               - matchPattern: "*"
     - toFQDNs:
-        - matchName: forgejo.webgrip.dev
+        - matchName: unfold-gateway.webgrip.dev
       toPorts:
         - ports:
-            - port: "443"
+            - port: "9150"
               protocol: TCP
