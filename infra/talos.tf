@@ -63,6 +63,8 @@ locals {
     }),
     local.pod_security_patch,
     local.etcd_backup_access_patch,
+    local.kube_authentication_patch,
+    local.kube_audit_policy_patch,
   ]
 
   etcd_backup_access_patch = yamlencode({
