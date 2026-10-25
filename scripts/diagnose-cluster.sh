@@ -242,7 +242,6 @@ report_metal_nodes() {
   for node in "${metal_ips[@]}"; do
     check "${node}: system extensions (expect kata-containers 4.3.1-webgrip, gvisor, tailscale)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get extensions
     check "${node}: gVisor runtime config (expect platform kvm, oci-seccomp)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" read /etc/unfold-sandbox/runsc.toml
-    check "${node}: Kata containerd handler (expect empty annotation lists)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" read /etc/cri/conf.d/10-kata-containers.part
     check "${node}: /dev/kvm" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" ls /dev/kvm
     check "${node}: links (expect vswitch0 with MTU 1400)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get links
   done
@@ -256,7 +255,7 @@ metadata:
   name: annotation-guard-probe
   namespace: sandbox-probes
   annotations:
-    io.katacontainers.config.hypervisor.kernel_params: "agent.debug_console"
+    io.katacontainers.config.unfold-probe: "refused"
 spec:
   runtimeClassName: kata
   automountServiceAccountToken: false

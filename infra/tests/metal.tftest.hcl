@@ -104,10 +104,12 @@ override_data {
 }
 
 variables {
-  state_passphrase     = "mock-passphrase-of-at-least-thirty-two-characters"
-  admin_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
-  admin_cidrs          = ["203.0.113.7/32"]
-  metal_image_file     = "tests/fixtures/metal-image-pinned.yaml"
+  state_passphrase          = "mock-passphrase-of-at-least-thirty-two-characters"
+  admin_ssh_public_key      = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
+  admin_cidrs               = ["203.0.113.7/32"]
+  metal_image_file          = "tests/fixtures/metal-image-pinned.yaml"
+  metal_image_pull_username = "webgrip-ci"
+  metal_image_pull_token    = "mock-read-package-token"
 }
 
 run "the_ax41_is_ordered_once_with_its_price_in_the_reviewed_plan" {
@@ -175,8 +177,19 @@ run "the_metal_node_is_a_tainted_kata_and_gvisor_pool_named_by_its_robot_number"
   }
 
   assert {
-    condition     = yamldecode(local.metal_install_patch).installer.image == "forgejo.webgrip.dev/webgrip/talos-installer-unfold-metal:v1.14.4-kata4.3.1-webgrip.1@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    condition     = yamldecode(local.metal_install_patch).installer.image == "forgejo.webgrip.dev/webgrip-talos/installer-unfold-metal:v1.14.4-kata4.3.1-webgrip.1@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     error_message = "the metal node upgrades with the pinned Kata 4.3.1 installer"
+  }
+
+  assert {
+    condition = yamldecode(nonsensitive(local.metal_registry_auth_patch)) == {
+      apiVersion = "v1alpha1"
+      kind       = "RegistryAuthConfig"
+      name       = "forgejo.webgrip.dev"
+      username   = "webgrip-ci"
+      password   = "mock-read-package-token"
+    }
+    error_message = "the node pulls its installer from the private registry with the read-only pull token"
   }
 
   assert {
@@ -272,7 +285,7 @@ run "an_unpinned_image_orders_and_wires_the_server_but_installs_nothing" {
 
   assert {
     condition     = length(terraform_data.metal_order) == 1 && length(terraform_data.metal_robot_firewall) == 1 && length(terraform_data.metal_install) == 0 && length(talos_machine_configuration_apply.metal) == 0
-    error_message = "until talos/metal-image.yaml is pinned, the server is ordered, firewalled and on the vSwitch, and nothing is installed"
+    error_message = "while talos/metal-image.yaml holds Renovate's placeholder digests, the server is ordered, firewalled and on the vSwitch, and nothing is installed"
   }
 }
 
@@ -285,6 +298,30 @@ run "an_installer_for_another_talos_version_is_refused" {
 
   expect_failures = [
     terraform_data.metal_install,
+  ]
+}
+
+run "an_installer_and_disk_image_of_different_releases_are_refused" {
+  command = plan
+
+  variables {
+    metal_image_file = "tests/fixtures/metal-image-mismatched.yaml"
+  }
+
+  expect_failures = [
+    terraform_data.metal_install,
+  ]
+}
+
+run "a_node_without_the_pull_token_gets_no_config" {
+  command = plan
+
+  variables {
+    metal_image_pull_token = ""
+  }
+
+  expect_failures = [
+    talos_machine_configuration_apply.metal,
   ]
 }
 

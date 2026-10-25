@@ -1,4 +1,3 @@
 ---
-installerImage: forgejo.webgrip.dev/webgrip/talos-installer-unfold-metal:v1.13.10-kata4.3.1-webgrip.1@sha256:1111111111111111111111111111111111111111111111111111111111111111
-diskImageUrl: https://forgejo.webgrip.dev/api/packages/webgrip/generic/talos-metal-unfold/v1.13.10-kata4.3.1-webgrip.1/metal-amd64.raw.zst
-diskImageSha256: 2222222222222222222222222222222222222222222222222222222222222222
+installerImage: forgejo.webgrip.dev/webgrip-talos/installer-unfold-metal:v1.13.10-kata4.3.1-webgrip.1@sha256:1111111111111111111111111111111111111111111111111111111111111111
+diskImage: forgejo.webgrip.dev/webgrip-talos/disk-unfold-metal:v1.13.10-kata4.3.1-webgrip.1@sha256:2222222222222222222222222222222222222222222222222222222222222222

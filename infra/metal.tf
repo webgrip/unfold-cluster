@@ -1,17 +1,26 @@
 locals {
-  robot_program        = "${path.module}/../scripts/robot.sh"
-  metal_record_prefix  = "unfold-cluster/metal"
-  metal_name_prefix    = "unfold-metal-"
-  metal_vswitch_name   = "unfold-main"
-  metal_vswitch_link   = "vswitch0"
-  metal_public_link    = "public0"
-  metal_vswitch_mtu    = 1400
-  metal_system_disk    = "nvme0n1"
-  metal_vswitch_router = cidrhost(local.vswitch_subnet_range, 1)
+  robot_program           = "${path.module}/../scripts/robot.sh"
+  metal_record_prefix     = "unfold-cluster/metal"
+  metal_image_pull_record = "unfold-cluster/metal-image-pull"
+  metal_name_prefix       = "unfold-metal-"
+  metal_vswitch_name      = "unfold-main"
+  metal_vswitch_link      = "vswitch0"
+  metal_public_link       = "public0"
+  metal_vswitch_mtu       = 1400
+  metal_system_disk       = "nvme0n1"
+  metal_vswitch_router    = cidrhost(local.vswitch_subnet_range, 1)
 
-  metal_image        = yamldecode(file("${path.module}/${var.metal_image_file}"))
-  metal_image_pinned = alltrue([for key in ["installerImage", "diskImageUrl", "diskImageSha256"] : try(local.metal_image[key], "") != ""])
-  metal_installable  = local.metal_image_pinned ? var.metal_servers : {}
+  metal_image                = yamldecode(file("${path.module}/${var.metal_image_file}"))
+  metal_image_digest_pattern = "@sha256:[0-9a-f]{64}$"
+  metal_image_unpinned       = "@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  metal_image_pinned = alltrue([
+    for key in ["installerImage", "diskImage"] : can(regex(local.metal_image_digest_pattern, local.metal_image[key])) && !endswith(local.metal_image[key], local.metal_image_unpinned)
+  ])
+  metal_image_registry = split("/", local.metal_image.installerImage)[0]
+  metal_image_tag = {
+    for key in ["installerImage", "diskImage"] : key => try(regex(":([^:@/]+)@sha256:", local.metal_image[key])[0], "")
+  }
+  metal_installable = local.metal_image_pinned ? var.metal_servers : {}
 
   metal_nodes = {
     for name, server in var.metal_servers : name => {
@@ -232,13 +241,13 @@ resource "terraform_data" "metal_install" {
 
   lifecycle {
     precondition {
-      condition     = can(regex(":${replace(local.talos_version, ".", "\\.")}-[^@/]+@sha256:[0-9a-f]{64}$", local.metal_image.installerImage))
-      error_message = "talos/metal-image.yaml must pin its installer by digest, with a tag that starts with Talos ${local.talos_version} from talos/talenv.yaml."
+      condition     = startswith(local.metal_image_tag.installerImage, "${local.talos_version}-")
+      error_message = "talos/metal-image.yaml must pin an installer whose tag starts with Talos ${local.talos_version} from talos/talenv.yaml."
     }
 
     precondition {
-      condition     = can(regex("^[0-9a-f]{64}$", local.metal_image.diskImageSha256)) && startswith(local.metal_image.diskImageUrl, "https://")
-      error_message = "talos/metal-image.yaml pins the disk image by sha256 and fetches it over https."
+      condition     = local.metal_image_tag.installerImage == local.metal_image_tag.diskImage && split("/", local.metal_image.diskImage)[0] == local.metal_image_registry
+      error_message = "talos/metal-image.yaml pins the installer and the disk image of one release, from one registry."
     }
   }
 
@@ -249,8 +258,8 @@ resource "terraform_data" "metal_install" {
       SERVER_NUMBER      = data.external.metal_server[each.key].result.server_number
       SERVER_IP          = data.external.metal_server[each.key].result.server_ip
       INSTALL_GENERATION = tostring(each.value.install_generation)
-      DISK_IMAGE_URL     = local.metal_image.diskImageUrl
-      DISK_IMAGE_SHA256  = local.metal_image.diskImageSha256
+      DISK_IMAGE         = local.metal_image.diskImage
+      PULL_CREDENTIAL    = local.metal_image_pull_record
       EXPECTED_DISK      = local.metal_system_disk
       RECORD_PATH        = "${local.metal_record_prefix}/${each.key}"
     }
@@ -303,6 +312,16 @@ resource "terraform_data" "metal_tailnet_key" {
   }
 }
 
+locals {
+  metal_registry_auth_patch = sensitive(yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "RegistryAuthConfig"
+    name       = local.metal_image_registry
+    username   = var.metal_image_pull_username
+    password   = var.metal_image_pull_token
+  }))
+}
+
 data "talos_machine_configuration" "metal" {
   cluster_name       = local.cluster_name
   cluster_endpoint   = local.cluster_endpoint
@@ -337,7 +356,7 @@ locals {
     for name, server in local.metal_installable : name => concat(
       local.disk_encryption_patches[name],
       local.gvisor_runtime_patches[server.gvisor_platform],
-      [local.metal_tailscale_patch[name]],
+      [local.metal_tailscale_patch[name], local.metal_registry_auth_patch],
       module.metal_node_patches[name].patches,
     )
   }
@@ -367,5 +386,10 @@ resource "talos_machine_configuration_apply" "metal" {
 
   lifecycle {
     replace_triggered_by = [terraform_data.metal_install[each.key].id]
+
+    precondition {
+      condition     = var.metal_image_pull_username != "" && var.metal_image_pull_token != ""
+      error_message = "The metal node pulls its installer from the private webgrip-talos registry; the infra workflow reads the pull token from OpenBao unfold-cluster/metal-image-pull, which homelab-cluster's unfold-metal-image-provisioner fills."
+    }
   }
 }

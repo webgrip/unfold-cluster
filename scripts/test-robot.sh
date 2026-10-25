@@ -25,18 +25,35 @@ mkdir -p "${work}/bin"
 
 cat >"${work}/bin/curl" <<'STUB'
 #!/usr/bin/env bash
-method=GET out="" url="" fields=()
+method=GET out="" url="" fields=() config=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -X) method="$2"; shift 2 ;;
     -o) out="$2"; shift 2 ;;
-    -w | --max-time) shift 2 ;;
+    -w | --max-time | --retry | -H) shift 2 ;;
     --data-urlencode) fields+=("$2"); shift 2 ;;
-    --config) cat >/dev/null; shift 2 ;;
+    --config) config="$(cat)"; shift 2 ;;
     -*) shift ;;
     *) url="$1"; shift ;;
   esac
 done
+case "$url" in
+  https://registry.invalid/*)
+    echo "registry ${url#https://registry.invalid}" >>"${STUB_DIR}/calls"
+    case "$url" in
+      */v2/token*)
+        grep -qF 'user = "webgrip-ci:pull-token"' <<<"$config" || exit 22
+        echo '{"token":"registry-bearer"}' ;;
+      */manifests/*)
+        grep -qF 'Bearer registry-bearer' <<<"$config" || exit 22
+        cp "${STUB_DIR}/disk.manifest.json" "$out" ;;
+      */blobs/*)
+        grep -qF 'Bearer registry-bearer' <<<"$config" || exit 22
+        cp "${STUB_DIR}/disk.raw.zst" "$out" ;;
+      *) exit 22 ;;
+    esac
+    exit 0 ;;
+esac
 path="${url#https://robot.invalid}"
 state="${STUB_DIR}/state"
 field() { local f; for f in "${fields[@]}"; do [ "${f%%=*}" = "$1" ] && { printf '%s' "${f#*=}"; return; }; done; }
@@ -136,6 +153,7 @@ cat >"${work}/bin/ssh" <<'STUB'
 echo "ssh $*" >>"${STUB_DIR}/calls"
 case "$*" in
   *" reboot") echo maintenance >"${STUB_DIR}/talos-state"; exit 0 ;;
+  *"cat > /tmp/talos.raw.zst") cat >"${STUB_DIR}/uploaded.raw.zst"; exit 0 ;;
 esac
 program="$(cat)"
 echo "$program" >"${STUB_DIR}/rescue-program"
@@ -156,6 +174,10 @@ export STUB_DIR="$work" PATH="${work}/bin:${PATH}" ROBOT_ENDPOINT="https://robot
 export OPENBAO_KV="${work}/bin/openbao-kv" ORDER_POLL_SECONDS=0 VSWITCH_POLL_SECONDS=0 FIREWALL_POLL_SECONDS=0 INSTALL_POLL_SECONDS=0
 RESCUE_HOST_FINGERPRINT="$(ssh-keygen -E sha256 -lf "${work}/host.pub" | awk '{print $2}' | sed 's/^SHA256://')"
 export RESCUE_HOST_FINGERPRINT
+head -c 4096 /dev/urandom >"${work}/disk.raw.zst"
+jq -nc --arg layer "sha256:$(sha256sum "${work}/disk.raw.zst" | cut -d' ' -f1)" \
+  '{schemaVersion: 2, mediaType: "application/vnd.oci.image.manifest.v1+json", artifactType: "application/vnd.webgrip.talos.metal-disk.v1", layers: [{digest: $layer, size: 4096}]}' >"${work}/disk.manifest.json"
+printf 'sha256:%s' "$(sha256sum "${work}/disk.manifest.json" | cut -d' ' -f1)" >"${work}/disk.manifest.digest"
 failures=0
 
 reset_state() {
@@ -202,9 +224,10 @@ order() {
 }
 
 install() {
+  [ -s "${work}/kv_unfold-cluster_metal-image-pull" ] || printf '{"username":"webgrip-ci","token":"%s"}' "${PULL_TOKEN:-pull-token}" >"${work}/kv_unfold-cluster_metal-image-pull"
   NAME=unfold-metal-1 SERVER_NUMBER=2345678 SERVER_IP=198.51.100.40 INSTALL_GENERATION="${INSTALL_GENERATION:-1}" \
-    DISK_IMAGE_URL=https://forgejo.invalid/metal-amd64.raw.zst DISK_IMAGE_SHA256="$(printf 'a%.0s' $(seq 64))" \
-    RECORD_PATH=unfold-cluster/metal/unfold-metal-1 "$tool" install >"${work}/out" 2>&1
+    DISK_IMAGE="registry.invalid/webgrip-talos/disk-unfold-metal:v1.14.4-kata4.3.1-webgrip.1@${DISK_MANIFEST_DIGEST:-$(cat "${work}/disk.manifest.digest")}" \
+    PULL_CREDENTIAL=unfold-cluster/metal-image-pull RECORD_PATH=unfold-cluster/metal/unfold-metal-1 "$tool" install >"${work}/out" 2>&1
 }
 
 export tool work
@@ -290,6 +313,9 @@ expect "the rescue key is removed from Robot afterwards" grep -q "^DELETE /key/"
 expect "it was reset into the rescue system once" test "$(wc -l <"${work}/resets")" = 1
 expect "the install recorded the MAC address" test "$(recorded mac)" = "a8:a1:59:0b:1c:2d"
 expect "the rescue program checks the image before writing it" grep -q 'sha256sum -c' "${work}/rescue-program"
+expect "the disk image came from the private registry with the pull token" grep -q "^registry /v2/webgrip-talos/disk-unfold-metal/blobs/sha256:" "${work}/calls"
+expect "the rescue system received exactly the pinned layer" cmp -s "${work}/disk.raw.zst" "${work}/uploaded.raw.zst"
+expect "the rescue checks the layer digest again" grep -q "DISK_IMAGE_SHA256=$(sha256sum "${work}/disk.raw.zst" | cut -d' ' -f1)" "${work}/calls"
 expect "the rescue program refuses Talos disks unless a wipe is allowed" grep -q 'ALLOW_WIPE_OF_TALOS" != "yes"' "${work}/rescue-program"
 expect "the first install does not allow wiping Talos" grep -q 'ALLOW_WIPE_OF_TALOS=no' "${work}/calls"
 expect "a rerun on the installed node does nothing" bash -c '"$1" && [ "$(wc -l < "$2/resets")" = 1 ]' _ install "$work"
@@ -310,6 +336,18 @@ cp "${work}/host.pub.line" "${work}/host.pub.keep"
 cp "${work}/host.pub.line.real" "${work}/host.pub.line"
 expect "a rescue host key Robot did not announce gets nothing" bash -c 'RESCUE_WAIT_SECONDS=0 "$1"; [ "$?" != 0 ] && ! grep -q "bash -s" "$2/calls"' _ install "$work"
 cp "${work}/host.pub.keep" "${work}/host.pub.line"
+
+reset_state
+expect "a wrong pull token stops the install before the server is touched" bash -c 'PULL_TOKEN=wrong "$1"; [ "$?" != 0 ] && [ ! -s "$2/resets" ] && ! grep -q "/rescue" "$2/calls"' _ install "$work"
+
+reset_state
+expect "a disk image whose manifest does not match its pin is refused before the reset" bash -c 'DISK_MANIFEST_DIGEST="sha256:$(printf "3%.0s" $(seq 64))" "$1"; [ "$?" != 0 ] && [ ! -s "$2/resets" ]' _ install "$work"
+
+reset_state
+cp "${work}/disk.raw.zst" "${work}/disk.keep"
+head -c 4096 /dev/urandom >"${work}/disk.raw.zst"
+expect "a blob that does not match the manifest's layer is refused before the reset" bash -c '! "$1" && [ ! -s "$2/resets" ]' _ install "$work"
+cp "${work}/disk.keep" "${work}/disk.raw.zst"
 
 reset_state
 expect "without credentials nothing is called" bash -c '! printf "{}" | env -u ROBOT_PASSWORD "$1" quote >/dev/null 2>&1 && [ ! -s "$2/calls" ]' _ "$tool" "$work"

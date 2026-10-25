@@ -503,6 +503,42 @@ in_maintenance_mode() {
   [ "$(talos_state)" = "maintenance" ]
 }
 
+registry_get() {
+  local bearer="$1" url="$2" accept="$3" out="$4"
+  curl -fsSL --retry 3 --max-time 1800 -o "$out" -H "Accept: ${accept}" --config - "$url" <<CURLCONFIG
+header = $(curl_config_quoted "Authorization: Bearer ${bearer}")
+CURLCONFIG
+}
+
+sha256_hex() {
+  sha256sum "$1" | cut -d' ' -f1
+}
+
+fetch_disk_image() {
+  local reference="$1" out="$2"
+  local host="${reference%%/*}" path="${reference#*/}"
+  local repository="${path%%:*}" digest="${reference##*@}"
+  local username token bearer layer
+  username="$("$openbao_kv" get "$PULL_CREDENTIAL" username)"
+  token="$("$openbao_kv" get "$PULL_CREDENTIAL" token)"
+  [ -n "$username" ] && [ -n "$token" ] || fail "no pull credential at OpenBao ${PULL_CREDENTIAL}; homelab-cluster's unfold-metal-image-provisioner writes it"
+  bearer="$(curl -fsS --max-time 30 --config - "https://${host}/v2/token?scope=repository:${repository}:pull&service=container_registry" <<CURLCONFIG | jq -r '.token // empty'
+user = $(curl_config_quoted "${username}:${token}")
+CURLCONFIG
+)" || fail "${host} refused the pull credential for ${repository}"
+  [ -n "$bearer" ] || fail "${host} returned no registry token for ${repository}"
+  registry_get "$bearer" "https://${host}/v2/${repository}/manifests/${digest}" "application/vnd.oci.image.manifest.v1+json" "${workdir}/disk.manifest.json" \
+    || fail "no manifest ${digest} in ${host}/${repository}"
+  [ "sha256:$(sha256_hex "${workdir}/disk.manifest.json")" = "$digest" ] || fail "the manifest of ${reference} does not match its digest"
+  layer="$(jq -r 'if (.layers | length) == 1 then .layers[0].digest else empty end' "${workdir}/disk.manifest.json")"
+  [[ "$layer" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "${reference} is not a single-file disk image artifact"
+  registry_get "$bearer" "https://${host}/v2/${repository}/blobs/${layer}" "application/octet-stream" "$out" \
+    || fail "downloading the disk image ${layer} failed"
+  [ "sha256:$(sha256_hex "$out")" = "$layer" ] || fail "the downloaded disk image does not match ${layer}"
+  say "fetched ${reference} ($(du -h "$out" | cut -f1)), layer ${layer}"
+  echo "${layer#sha256:}"
+}
+
 readonly rescue_install_program='
 set -euo pipefail
 talos_labels="$(lsblk -rno LABEL,PARTLABEL 2>/dev/null | grep -wE "STATE|EPHEMERAL|META" || true)"
@@ -517,7 +553,6 @@ target="$(head -n 1 <<<"$disks")"
 interface="$(ip -o route get 1.1.1.1 | sed -E "s/.* dev ([^ ]+).*/\1/")"
 echo "MAC=$(cat "/sys/class/net/${interface}/address")"
 command -v zstd >/dev/null || { apt-get update -qq && apt-get install -y -qq zstd >/dev/null; }
-curl -fsSL --retry 3 -o /tmp/talos.raw.zst "$DISK_IMAGE_URL"
 echo "$DISK_IMAGE_SHA256  /tmp/talos.raw.zst" | sha256sum -c --quiet -
 mdadm --stop --scan >/dev/null 2>&1 || true
 for disk in $disks; do
@@ -530,11 +565,10 @@ echo INSTALLED
 
 command_install() {
   require_credentials
-  for variable in NAME SERVER_NUMBER SERVER_IP INSTALL_GENERATION DISK_IMAGE_URL DISK_IMAGE_SHA256 RECORD_PATH; do
+  for variable in NAME SERVER_NUMBER SERVER_IP INSTALL_GENERATION DISK_IMAGE PULL_CREDENTIAL RECORD_PATH; do
     [ -n "${!variable:-}" ] || fail "${variable} is not set"
   done
-  [[ "$DISK_IMAGE_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail "DISK_IMAGE_SHA256 is not a sha256"
-  [[ "$DISK_IMAGE_URL" == https://* ]] || fail "DISK_IMAGE_URL must be https"
+  [[ "$DISK_IMAGE" =~ ^[a-z0-9.-]+/[a-z0-9._/-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$ ]] || fail "DISK_IMAGE must be pinned by tag and digest: ${DISK_IMAGE}"
   ensure_talosctl
 
   local state allow_wipe="no"
@@ -559,7 +593,8 @@ command_install() {
       ;;
   esac
 
-  local expected_host_keys output mac
+  local expected_host_keys output mac disk_sha256
+  disk_sha256="$(fetch_disk_image "$DISK_IMAGE" "${workdir}/disk.raw.zst")"
   new_session_key "rescue-${NAME}"
 
   robot_call GET "/boot/${SERVER_NUMBER}/rescue"
@@ -577,11 +612,11 @@ command_install() {
   robot_expect "POST /reset/${SERVER_NUMBER}" 200
   wait_until "the rescue system of ${SERVER_IP} answering SSH" "${RESCUE_WAIT_SECONDS:-900}" pin_rescue_host_key "$expected_host_keys"
 
+  ssh_rescue "cat > /tmp/talos.raw.zst" <"${workdir}/disk.raw.zst" || fail "copying the disk image into the rescue system of ${NAME} failed"
   output="$(ssh_rescue env \
     "ALLOW_WIPE_OF_TALOS=${allow_wipe}" \
     "EXPECTED_DISK=${EXPECTED_DISK:-nvme0n1}" \
-    "DISK_IMAGE_URL=${DISK_IMAGE_URL}" \
-    "DISK_IMAGE_SHA256=${DISK_IMAGE_SHA256}" \
+    "DISK_IMAGE_SHA256=${disk_sha256}" \
     bash -s <<<"$rescue_install_program" 2>&1)" || {
     grep -E '^REFUSED' <<<"$output" >&2 || true
     fail "the install in the rescue system of ${NAME} failed; the server stays in rescue until the next reset"

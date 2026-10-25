@@ -72,9 +72,11 @@ ranges, the tailnet and the private network, and the cluster's ports from the pr
    install has run: nothing happens. If it answers as a configured Talos, the install refuses.
 2. A fresh SSH key is registered in Robot, the rescue system armed with it, the server reset. The
    rescue host key must be one Robot announced.
-3. In the rescue system the install refuses if any disk holds Talos partitions, then records the
-   MAC address of the public link, downloads the disk image, checks its sha256, wipes both NVMe
-   disks and writes the image to `nvme0n1`. The SSH key is removed from Robot.
+3. Before that, the runner downloads the disk image from the private registry with the pull
+   token and checks its manifest and layer digests; a wrong pin or token stops here, before the
+   server is touched. The image is copied into the rescue system, which refuses if any disk holds
+   Talos partitions, records the MAC address of the public link, checks the image again, wipes
+   both NVMe disks and writes it to `nvme0n1`. The SSH key is removed from Robot.
 4. The server reboots into Talos maintenance mode and the machine config follows.
 
 **Reinstalling** wipes the node. Raise `install_generation` of that server in `infra/variables.tf`
@@ -82,17 +84,16 @@ in a reviewed pull request; nothing else lifts the guard.
 
 ## The image pin
 
-`talos/metal-image.yaml` pins the installer and disk image. Merging a version bump in
-`webgrip/talos-kata-extension` releases it without a click, and its release job opens the pull
-request here that pins the new values with `scripts/pin-metal-image.sh`. Without that pull
-request, the release's notes carry the three values, and the script writes them the same way:
+`talos/metal-image.yaml` pins the installer and the disk image by tag and digest. Merging a
+version bump in `webgrip/talos-kata-extension` releases both to the private organisation
+`webgrip-talos`; Renovate here sees the new tag and opens one pull request for both, and CI runs
+`scripts/check-metal-image.sh` on it. Merge it, then plan and apply. Until the first release the
+file holds all-zero digests and nothing is installed.
 
-```sh
-./scripts/pin-metal-image.sh <installerImage> <diskImageUrl> <diskImageSha256>
-```
-
-The installer and disk image are public packages of the `webgrip` organisation, so the node and
-the rescue system pull them without credentials; the extension's source repository stays private.
+The images are private. The pull token is minted through Forgejo's API by homelab-cluster's
+`unfold-metal-image-provisioner`: user `webgrip-ci`, scope `read:package` only, in OpenBao
+`unfold-cluster/metal-image-pull`. It can download any package `webgrip-ci` can read and do
+nothing else; Forgejo has no narrower scope for packages (ADR 0001).
 
 ## Fallbacks
 

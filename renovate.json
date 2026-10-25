@@ -54,6 +54,30 @@
       "registryUrlTemplate": "https://forgejo.webgrip.dev",
       "versioningTemplate": "semver",
       "depTypeTemplate": "action"
+    },
+    {
+      "customType": "regex",
+      "description": "The metal node's installer in talos/metal-image.yaml, published by webgrip/talos-kata-extension to the private webgrip-talos registry. The tag carries the Talos version as compatibility, so a bump stays on the Talos release talos/talenv.yaml pins; the digest moves with it. All zeros is the placeholder before the first release.",
+      "managerFilePatterns": [
+        "/^talos/metal-image\\.yaml$/"
+      ],
+      "matchStrings": [
+        "installerImage:\\s*(?<depName>forgejo\\.webgrip\\.dev/webgrip-talos/installer-unfold-metal):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^(?<compatibility>v\\d+\\.\\d+\\.\\d+)-kata(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-webgrip\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The metal node's disk image in talos/metal-image.yaml, published by webgrip/talos-kata-extension to the private webgrip-talos registry. The tag carries the Talos version as compatibility, so a bump stays on the Talos release talos/talenv.yaml pins; the digest moves with it. All zeros is the placeholder before the first release.",
+      "managerFilePatterns": [
+        "/^talos/metal-image\\.yaml$/"
+      ],
+      "matchStrings": [
+        "diskImage:\\s*(?<depName>forgejo\\.webgrip\\.dev/webgrip-talos/disk-unfold-metal):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^(?<compatibility>v\\d+\\.\\d+\\.\\d+)-kata(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-webgrip\\.(?<build>\\d+)$"
     }
   ],
   "packageRules": [
@@ -180,6 +204,15 @@
         "hashicorp/terraform"
       ],
       "enabled": false
+    },
+    {
+      "description": "The metal node's installer and disk image come from one talos-kata-extension release and must move together; scripts/check-metal-image.sh refuses a pin that mixes releases. Merging the pull request changes nothing until the next reviewed infra apply: a node that runs Talos upgrades with the installer, and only a metal server without Talos is installed from the disk image.",
+      "matchDepNames": [
+        "forgejo.webgrip.dev/webgrip-talos/installer-unfold-metal",
+        "forgejo.webgrip.dev/webgrip-talos/disk-unfold-metal"
+      ],
+      "groupName": "unfold metal image",
+      "pinDigests": true
     }
   ]
 }

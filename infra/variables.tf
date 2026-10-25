@@ -343,3 +343,16 @@ variable "metal_image_file" {
   type        = string
   default     = "../talos/metal-image.yaml"
 }
+
+variable "metal_image_pull_username" {
+  description = "The Forgejo user whose read:package token pulls the private metal images: webgrip-ci, read from OpenBao unfold-cluster/metal-image-pull, where homelab-cluster's unfold-metal-image-provisioner keeps it."
+  type        = string
+  default     = ""
+}
+
+variable "metal_image_pull_token" {
+  description = "The read:package token that pulls the private metal images; the node's registry auth for upgrades. Minted by homelab-cluster's unfold-metal-image-provisioner, read from OpenBao unfold-cluster/metal-image-pull."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

@@ -80,6 +80,8 @@ jobs:
             TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
             ROBOT_USER=secret/data/hetzner/unfold-robot#ROBOT_USER
             ROBOT_PASSWORD=secret/data/hetzner/unfold-robot#ROBOT_PASSWORD
+            TF_VAR_metal_image_pull_username=secret/data/unfold-cluster/metal-image-pull#username
+            TF_VAR_metal_image_pull_token=secret/data/unfold-cluster/metal-image-pull#token
 
       - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
         working-directory: .

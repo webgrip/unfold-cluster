@@ -25,7 +25,7 @@ on:
       - scripts/set-etcd-backup-lifecycle.sh
       - scripts/rebuild-drill.sh
       - scripts/robot.sh
-      - scripts/pin-metal-image.sh
+      - scripts/check-metal-image.sh
       - talos/**
       - scripts/test-*.sh
       - .forgejo/workflows/rebuild-drill.yml
@@ -85,9 +85,11 @@ jobs:
         working-directory: .
         run: ./scripts/test-robot.sh
 
-      - name: Test the metal image pin a talos-kata-extension release writes
+      - name: Check the metal image pin Renovate maintains, and the check itself
         working-directory: .
-        run: ./scripts/test-pin-metal-image.sh
+        run: |
+          ./scripts/check-metal-image.sh
+          ./scripts/test-check-metal-image.sh
 
 
   token-mask-canary:

@@ -43,6 +43,7 @@ No longer by hand:
 | The Talos secrets escrow | Every apply writes the bundle to OpenBao `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it, so a rebuild keeps the cluster's CAs and service-account key (and with them the homelab OpenBao's trust and `access/unfold-oidc.kubeconfig.yaml`). |
 | The etcd bucket's 30-day expiry rule | Every apply puts it with the etcd write key (`scripts/set-etcd-backup-lifecycle.sh`). |
 | Replacing `unfold-headscale` | Raise `headscale_generation`; the apply lifts the delete protection of exactly that server because the reviewed plan deletes it, and every node re-joins with a fresh key in the same run. |
+| The metal image and its pull token | Released to the private org `webgrip-talos` when a version bump merges in `talos-kata-extension`; pinned here by Renovate. homelab `unfold-metal-image-provisioner` keeps the org private and mints the `read:package` token into OpenBao `unfold-cluster/metal-image-pull`. |
 | Ordering the AX41 | The apply orders `unfold-metal-1` through the Robot webservice, once, within its price ceiling, and installs Talos on it from the rescue system ([metal node](runbooks/metal-node.md)). |
 | The Talos snapshot | The apply run builds it with `scripts/build-talos-snapshot.sh` when no snapshot carries the labels of the pinned Talos version and schematic; OpenTofu finds it by those labels. |
 

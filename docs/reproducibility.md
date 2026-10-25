@@ -25,6 +25,7 @@ Every piece of state the estate depends on, how it came to exist, and what happe
 | Network, subnet, firewalls, placement group, SSH key, servers | OpenTofu | yes | |
 | Robot server `unfold-metal-1`, its order | `scripts/robot.sh order` in the apply | yes: ordered once, the order and server number recorded in `secret/unfold-cluster/metal/unfold-metal-1`; a rebuild finds the server by its name | cancelling stays a person's act in Robot |
 | vSwitch `unfold-main`, the server's membership, its Robot firewall | the apply | yes | |
+| Private org `webgrip-talos` and the metal image pull token (`read:package`, user `webgrip-ci`) | homelab `unfold-metal-image-provisioner`, through Forgejo's API, into OpenBao `unfold-cluster/metal-image-pull` | yes | |
 | Talos on the metal node | `scripts/robot.sh install` from the rescue system | yes, once per server; a node running Talos is never reinstalled unless `install_generation` is raised | |
 | Talos snapshot | `scripts/build-talos-snapshot.sh` in the apply run | yes: built when no snapshot carries the pinned labels | |
 | Talos secrets (cluster CAs, service-account key, etcd CA) | OpenTofu, in the encrypted state; formerly also a manual export to the password manager | **now yes** | every apply escrows the bundle to `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it (`talos_secrets_import_file`), so the cluster keeps its identity. The homelab OpenBao's `jwt-unfold-main` key and `access/unfold-oidc.kubeconfig.yaml` stay valid |
