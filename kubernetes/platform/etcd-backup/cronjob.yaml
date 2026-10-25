@@ -65,6 +65,7 @@ spec:
                   memory: 128Mi
                 limits:
                   memory: 512Mi
+                  ephemeral-storage: 3Gi
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
@@ -75,9 +76,11 @@ spec:
                   readOnly: true
           volumes:
             - name: tmp
-              emptyDir: {}
+              emptyDir:
+                sizeLimit: 2Gi
             - name: talos-config
-              emptyDir: {}
+              emptyDir:
+                sizeLimit: 16Mi
             - name: talos-secrets
               secret:
                 secretName: talos-backup

@@ -27,6 +27,19 @@ spec:
       tag: v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     hostNetwork: true
     hostPID: true
+    securityContext:
+      fsGroup: 65534
+      runAsGroup: 65534
+      runAsNonRoot: true
+      runAsUser: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
     hostRootFsMount:
       enabled: true
       mountPropagation: HostToContainer
@@ -39,6 +52,7 @@ spec:
         memory: 32Mi
       limits:
         memory: 128Mi
+        ephemeral-storage: 256Mi
     tolerations:
       - operator: Exists
     prometheus:

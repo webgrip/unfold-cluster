@@ -38,10 +38,27 @@ spec:
       expression: >-
         variables.containers.filter(c,
           !c.?resources.?limits[?'ephemeral-storage'].hasValue()).map(c, c.name)
+    - name: controllingOwners
+      expression: >-
+        object.metadata.?ownerReferences.orValue([]).filter(o, o.?controller.orValue(false))
+    - name: podTemplateHash
+      expression: object.metadata.?labels[?'pod-template-hash'].orValue('')
+    - name: workload
+      expression: >-
+        variables.controllingOwners.size() != 1
+        ? request.namespace + '/' + object.kind + '/' + object.metadata.name
+        : (variables.controllingOwners[0].kind == 'ReplicaSet' && variables.podTemplateHash != ''
+            && variables.controllingOwners[0].name.endsWith('-' + variables.podTemplateHash)
+          ? request.namespace + '/Deployment/' + variables.controllingOwners[0].name.substring(0,
+              variables.controllingOwners[0].name.size() - variables.podTemplateHash.size() - 1)
+          : request.namespace + '/' + variables.controllingOwners[0].kind + '/' + variables.controllingOwners[0].name)
+    - name: unboundedEmptyDirGrants
+      expression: "{'flux-system/Deployment/flux-operator': ['temp']}"
     - name: unboundedEmptyDirs
       expression: >-
         variables.spec.?volumes.orValue([]).filter(v,
-          has(v.emptyDir) && !v.emptyDir.?sizeLimit.hasValue()).map(v, v.name)
+          has(v.emptyDir) && !v.emptyDir.?sizeLimit.hasValue()
+          && !(v.name in variables.unboundedEmptyDirGrants[?variables.workload].orValue([]))).map(v, v.name)
   validations:
     - expression: variables.withoutRequests.size() == 0
       messageExpression: >-
@@ -59,6 +76,7 @@ spec:
     - expression: variables.unboundedEmptyDirs.size() == 0
       messageExpression: >-
         'every emptyDir must set sizeLimit; missing on: ' + variables.unboundedEmptyDirs.join(', ')
+        + ' in ' + variables.workload
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -67,7 +85,7 @@ metadata:
   name: resource-limits
 spec:
   policyName: resource-limits
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
   matchResources:
     namespaceSelector:
       matchExpressions:

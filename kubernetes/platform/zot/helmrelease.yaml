@@ -75,6 +75,7 @@ spec:
         memory: 256Mi
       limits:
         memory: 1Gi
+        ephemeral-storage: 2Gi
     startupProbe:
       initialDelaySeconds: 5
       periodSeconds: 10
