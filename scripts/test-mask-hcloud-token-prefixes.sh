@@ -70,16 +70,18 @@ main() {
     *) echo "$usage" >&2; exit 2 ;;
   esac
 
-  local tofu_token cluster_token vip_token
+  local tofu_token cluster_token vip_token autoscaler_token
   tofu_token="$(fake_token tofu)"
   cluster_token="$(fake_token cluster)"
   vip_token="$(fake_token vip)"
+  autoscaler_token="$(fake_token autoscaler)"
 
   local -a masks
   mapfile -t masks < <(
     HCLOUD_TOKEN="$tofu_token" \
       TF_VAR_hcloud_cluster_token="$cluster_token" \
       TF_VAR_hcloud_vip_token="$vip_token" \
+      TF_VAR_hcloud_autoscaler_token="$autoscaler_token" \
       "$mask_script" | masks_from
   )
 
@@ -91,7 +93,7 @@ main() {
     "$(hetzner_rate_limit_line "${tofu_token:0:32}")"
 
   local name token
-  for name in tofu cluster vip; do
+  for name in tofu cluster vip autoscaler; do
     token="$(fake_token "$name")"
     expect "${name} token: Hetzner's 429 quote of 32 characters" \
       "$(apply_masks "$(hetzner_rate_limit_line "${token:0:32}")" "${masks[@]}")" \

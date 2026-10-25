@@ -27,7 +27,7 @@ variable "control_plane_server_type" {
 }
 
 variable "worker_pools" {
-  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB) in Nuremberg because Falkenstein had no CX43 to place on 2026-10-25, whose CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
+  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33; until the Unfold application or the metal node takes its place, it also runs up to two CI jobs under gVisor, the baseline that needs no cold node (docs/adr/0004-ci-baseline-on-the-hub-and-autoscaled-overflow.md). ci is the CI pool of RFC 0001 step 13; it has no fixed node (node_count 0) and the cluster-autoscaler grows it from zero with CPX42 servers in Nuremberg when CI overflows the hub worker (autoscaled_worker_pools); its CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
   type = map(object({
     server_type = string
     location    = optional(string)
@@ -43,7 +43,7 @@ variable "worker_pools" {
       node_count  = 1
       name_prefix = "unfold-app"
       first_host  = 21
-      labels      = { "node.webgrip.io/pool" = "unfold" }
+      labels      = { "node.webgrip.io/pool" = "unfold", "runtime.webgrip.io/gvisor" = "true" }
       taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
     }
     ci = {
@@ -180,6 +180,24 @@ variable "hcloud_cluster_token" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "hcloud_autoscaler_token" {
+  description = "Hetzner Cloud API token of the cluster-autoscaler, read from OpenBao secret/hetzner/unfold-autoscaler HCLOUD_TOKEN_AUTOSCALER. A fourth token, so the one that creates and deletes servers can be revoked alone. The apply writes it, with the worker config the autoscaler boots new nodes with, to the Secret cluster-autoscaler/cluster-autoscaler-hcloud. Empty writes nothing, and the autoscaler waits for its Secret (docs/runbooks/ci-autoscaler.md)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "autoscaled_worker_pools" {
+  description = "The worker pools the cluster-autoscaler grows from zero. Each names a pool in worker_pools, whose labels, taints and gVisor config its nodes boot with; the node group's server type, location and size live in the cluster-autoscaler HelmRelease (kubernetes/platform/cluster-autoscaler)."
+  type        = set(string)
+  default     = ["ci"]
+
+  validation {
+    condition     = alltrue([for pool in var.autoscaled_worker_pools : contains(keys(var.worker_pools), pool)])
+    error_message = "An autoscaled pool must be a pool in worker_pools, which holds its labels and taints."
+  }
 }
 
 variable "hcloud_vip_token" {
