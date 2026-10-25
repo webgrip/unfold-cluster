@@ -14,6 +14,7 @@ resources:
   - ../../platform/external-secrets
   - ../../platform/cert-manager
   - ../../platform/volume-encryption
+  - ../../platform/cloudnative-pg
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
   - ../../platform/human-access
