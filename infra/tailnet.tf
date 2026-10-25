@@ -75,13 +75,13 @@ locals {
     {
       for name in keys(local.control_planes) : name => {
         authkey    = terraform_data.control_plane_tailnet_key[name].output
-        extra_args = "${local.tailscale_login_args} --advertise-tags=tag:cp --advertise-routes=${local.cloud_subnet_range}"
+        extra_args = "${local.tailscale_login_args} --advertise-routes=${local.cloud_subnet_range}"
       }
     },
     {
       for name in keys(local.unfold_worker) : name => {
         authkey    = terraform_data.worker_tailnet_key[name].output
-        extra_args = "${local.tailscale_login_args} --advertise-tags=tag:node"
+        extra_args = local.tailscale_login_args
       }
     },
   )

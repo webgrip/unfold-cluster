@@ -157,14 +157,21 @@ run "an_apply_run_boots_nodes_from_the_labelled_snapshot_with_the_key_read_from_
   assert {
     condition = alltrue([
       for name in keys(local.control_planes) :
-      strcontains(local.tailscale_join[name].extra_args, "--advertise-tags=tag:cp --advertise-routes=10.64.0.0/24")
+      strcontains(local.tailscale_join[name].extra_args, "--advertise-routes=10.64.0.0/24")
     ])
-    error_message = "control planes join as tag:cp and advertise the cloud subnet"
+    error_message = "control planes advertise the cloud subnet"
   }
 
   assert {
-    condition     = strcontains(local.tailscale_join["unfold-app-1"].extra_args, "--advertise-tags=tag:node") && !strcontains(local.tailscale_join["unfold-app-1"].extra_args, "--advertise-routes")
-    error_message = "the worker joins as tag:node and advertises no route"
+    condition     = !strcontains(local.tailscale_join["unfold-app-1"].extra_args, "--advertise-routes")
+    error_message = "the worker advertises no route"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, node in local.tailscale_join : !strcontains(node.extra_args, "--advertise-tags")
+    ])
+    error_message = "Headscale refuses a pre-auth key registration that also requests tags, so every node takes its tags from its key alone"
   }
 
   assert {
