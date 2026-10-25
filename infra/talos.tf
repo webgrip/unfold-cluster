@@ -7,7 +7,7 @@ locals {
   cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
 
-  common_patches = [
+  common_patches = concat([
     yamlencode({
       cluster = {
         externalCloudProvider = {
@@ -50,7 +50,7 @@ locals {
       kind       = "KubeProxyConfig"
       "$patch"   = "delete"
     }),
-  ]
+  ], local.registry_mirror_patches)
 
   control_plane_patches = [
     yamlencode({
