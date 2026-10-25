@@ -1,0 +1,92 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tetragon
+spec:
+  interval: 1h
+  releaseName: tetragon
+  timeout: 10m
+  chart:
+    spec:
+      chart: tetragon
+      version: 1.7.1
+      sourceRef:
+        kind: HelmRepository
+        name: cilium
+  install:
+    disableWait: true
+    remediation:
+      retries: 3
+  upgrade:
+    disableWait: true
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    priorityClassName: ""
+    tolerations:
+      - operator: Exists
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+    exportDirectory: /var/log/tetragon
+    extraHostPathMounts:
+      - name: sys-kernel-tracing
+        mountPath: /sys/kernel/tracing
+        readOnly: true
+    tetragon:
+      image:
+        repository: quay.io/cilium/tetragon
+        # renovate: datasource=docker depName=quay.io/cilium/tetragon
+        tag: v1.7.1@sha256:afc9458ba4bc3f2795da3df6b03d88ce50e175ac3903027de8036e2046b84a02
+      clusterName: unfold
+      extraEnv:
+        - name: KUBERNETES_SERVICE_HOST
+          value: localhost
+        - name: KUBERNETES_SERVICE_PORT
+          value: "7445"
+      processCacheSize: 16384
+      exportFilename: tetragon.log
+      exportFilePerm: "600"
+      exportFileMaxSizeMB: 10
+      exportFileMaxBackups: 2
+      exportRateLimit: 3000
+      exportAllowList: |-
+        {"event_set":["PROCESS_EXEC","PROCESS_KPROBE","PROCESS_LSM","PROCESS_TRACEPOINT"]}
+      exportDenyList: |-
+        {"health_check":true}
+      redactionFilters: |-
+        {"redact":["(?i)(?:--?(?:password|passwd|token|secret|api[-_]?key)(?:\\s+|=))(\\S+)"]}
+        {"redact":["(?i)(?:AWS_SECRET_ACCESS_KEY|HCLOUD_TOKEN|GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|FORGEJO_TOKEN|LITELLM_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|VAULT_TOKEN|BAO_TOKEN)=([^\\s]+)"]}
+        {"redact":["(?i)authorization:\\s*(?:bearer|token|basic)\\s+(\\S+)"]}
+        {"redact":["(sk-[A-Za-z0-9_-]{16,})"]}
+      enableK8sAPI: true
+      enableProcessCred: true
+      enableProcessNs: false
+      processAncestors:
+        enabled: ""
+      prometheus:
+        enabled: false
+      gops:
+        enabled: false
+      cri:
+        enabled: true
+        socketHostPath: /run/containerd/containerd.sock
+      cgidmap:
+        enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 384Mi
+        limits:
+          cpu: "1"
+          memory: 384Mi
+          ephemeral-storage: 64Mi
+    tetragonOperator:
+      enabled: false
+    export:
+      mode: none
+    crds:
+      installMethod: helm

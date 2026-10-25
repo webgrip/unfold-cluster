@@ -27,6 +27,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 | source-controller, kustomize-controller, helm-controller | notification-controller | 9090 | their Kubernetes events, through the `notification-controller` Service |
 | source-controller | `github.com` | 443 | the GitRepository `flux-system` (this repository) |
 | source-controller | `charts.hetzner.cloud` | 443 | the `hetzner` HelmRepository index and its chart archives, served from the same host |
+| source-controller | `helm.cilium.io` | 443 | the `cilium` HelmRepository index and the Tetragon chart archive ([runtime security](runtime-security.md)) |
 | source-controller | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | OCI charts on ghcr.io (Zot, External Secrets, Flux operator charts); blob downloads redirect to the second host |
 | source-controller | `quay.io`, `*.quay.io` | 443 | the Cilium chart; blob downloads redirect to `cdn*.quay.io` |
 | flux-operator | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | the `flux-operator-manifests` distribution artifact |

@@ -5,7 +5,7 @@ metadata:
   name: source-controller-egress
   namespace: flux-system
 spec:
-  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, the Tetragon chart from helm.cilium.io, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: source-controller
@@ -37,6 +37,7 @@ spec:
     - toFQDNs:
         - matchName: github.com
         - matchName: charts.hetzner.cloud
+        - matchName: helm.cilium.io
         - matchName: ghcr.io
         - matchName: pkg-containers.githubusercontent.com
         - matchName: quay.io

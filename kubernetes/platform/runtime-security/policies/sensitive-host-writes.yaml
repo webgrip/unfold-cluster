@@ -1,0 +1,73 @@
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: runtime-sensitive-host-writes
+spec:
+  options:
+    - name: policy-mode
+      value: monitor
+  podSelector: {}
+  kprobes:
+    - call: security_file_permission
+      syscall: false
+      message: "A pod wrote to a node, kubelet, container runtime or account file"
+      tags:
+        - runtime-security
+        - host-tampering
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/kubernetes
+                - /var/lib/kubelet
+                - /var/lib/etcd
+                - /var/lib/containerd
+                - /run/containerd
+                - /var/run/containerd
+                - /system
+                - /proc/sys
+                - /sys/kernel
+                - /host
+                - /etc/ld.so.preload
+                - /etc/passwd
+                - /etc/shadow
+                - /etc/sudoers
+                - /root/.ssh
+            - index: 1
+              operator: Mask
+              values:
+                - "2"
+    - call: security_path_truncate
+      syscall: false
+      message: "A pod truncated a node, kubelet, container runtime or account file"
+      tags:
+        - runtime-security
+        - host-tampering
+      args:
+        - index: 0
+          type: path
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/kubernetes
+                - /var/lib/kubelet
+                - /var/lib/etcd
+                - /var/lib/containerd
+                - /run/containerd
+                - /var/run/containerd
+                - /system
+                - /host
+                - /etc/ld.so.preload
+                - /etc/passwd
+                - /etc/shadow
+                - /etc/sudoers
+                - /root/.ssh

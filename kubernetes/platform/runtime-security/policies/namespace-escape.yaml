@@ -1,0 +1,46 @@
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: runtime-namespace-escape
+spec:
+  options:
+    - name: policy-mode
+      value: monitor
+  podSelector: {}
+  kprobes:
+    - call: sys_ptrace
+      syscall: true
+      message: "A pod called ptrace"
+      tags:
+        - runtime-security
+        - container-escape
+      args:
+        - index: 0
+          type: int
+        - index: 1
+          type: int
+    - call: sys_mount
+      syscall: true
+      message: "A pod called mount"
+      tags:
+        - runtime-security
+        - container-escape
+      args:
+        - index: 0
+          type: string
+        - index: 1
+          type: string
+        - index: 2
+          type: string
+    - call: sys_setns
+      syscall: true
+      message: "A pod joined another namespace with setns"
+      tags:
+        - runtime-security
+        - container-escape
+      args:
+        - index: 0
+          type: int
+        - index: 1
+          type: int

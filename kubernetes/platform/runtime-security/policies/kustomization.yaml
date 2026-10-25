@@ -1,0 +1,10 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - sensitive-host-writes.yaml
+  - kubernetes-credentials.yaml
+  - privilege-escalation.yaml
+  - kernel-modules.yaml
+  - outbound-connects.yaml
+  - namespace-escape.yaml
