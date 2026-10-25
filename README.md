@@ -36,16 +36,11 @@ Flux applies whatever is on the GitHub mirror's `main`, so a push made straight 
 | Key | Signs |
 | --- | --- |
 | `ryan.sshpub` | the owner's own commits |
+| `forgejo.sshpub` | every pull request merge made with Forgejo's merge button, signed by the instance key (published at `/api/v1/signing-key.ssh`) |
 
-A refused commit leaves the cluster on the last verified one and marks the GitRepository not ready. Forgejo's instance key is deliberately not trusted: it signs merges and web edits in every repository on the instance, so any user who can create a repository could get an arbitrary tree signed by it. Pull requests, Renovate's included, are therefore not merged with the button; the owner merges them locally with a signed merge commit and pushes:
+A refused commit leaves the cluster on the last verified one and marks the GitRepository not ready. Pull requests, Renovate's included, are merged with Forgejo's merge button; Forgejo signs the merge commit with its instance key, which Flux trusts. Only the owner may push or merge on `main` (branch protection in homelab-cluster's `repo-config`), and Renovate never pushes straight to `main`.
 
-```sh
-git fetch origin && git switch main && git pull --ff-only
-git merge --no-ff -S origin/<branch>
-git push origin main
-```
-
-A merge made with the button, or Renovate pushing straight to `main`, is unsigned by a trusted key, so Flux refuses it and the cluster stays where it is. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest.
+Trusting the instance key is a deliberate trade-off (owner decision, 2026-10-25). The key signs merges and web edits in every repository on the instance, so someone who can create a repository there can get an arbitrary tree signed. That commit still has to reach the GitHub mirror's `main`, which only Forgejo's mirror push and the protected Forgejo `main` feed; the mirror's own branch protection, below, closes the direct route. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest.
 
 Verification checks only the newest commit, so it does not stop a rollback: a force-push of an older signed commit to the mirror would deploy. The GitHub mirror's `main` therefore needs branch protection that refuses force-pushes and deletion and allows pushes only from the mirror's token. That setting lives in GitHub, not here.
 
