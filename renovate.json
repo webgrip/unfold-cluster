@@ -184,7 +184,8 @@
     {
       "description": "kube-apiserver, kubectl and etcd for the admission-policy fixtures are installed from pinned checksums in scripts/test-admission-policies.sh, which Renovate cannot update. Kubernetes should match the cluster's version, so both wait for approval.",
       "matchFileNames": [
-        "scripts/test-admission-policies.sh"
+        "scripts/test-admission-policies.sh",
+        "scripts/test-runtime-security.sh"
       ],
       "matchDepNames": [
         "kubernetes/kubernetes",
@@ -192,7 +193,7 @@
       ],
       "dependencyDashboardApproval": true,
       "prBodyNotes": [
-        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`."
+        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`. scripts/test-runtime-security.sh pins the same binaries and needs the same checksums."
       ]
     },
     {
@@ -213,6 +214,30 @@
       ],
       "groupName": "unfold metal image",
       "pinDigests": true
+    },
+    {
+      "description": "Tetragon's chart and image are released together and move in one PR. The chart comes from the HTTP repository helm.cilium.io, which Flux cannot pin by digest, so scripts/test-runtime-security.sh pins the chart archive's SHA-256 and fails until a person has read the new chart.",
+      "matchDepNames": [
+        "tetragon",
+        "quay.io/cilium/tetragon"
+      ],
+      "groupName": "tetragon",
+      "prBodyNotes": [
+        "Read the chart's diff and the release's upgrade notes (TracingPolicy fields have changed between minors), then set `tetragon_chart_version` and `tetragon_chart_sha256` in `scripts/test-runtime-security.sh` from `https://helm.cilium.io/index.yaml`. `runtime-security-check` fails until both match."
+      ]
+    },
+    {
+      "description": "Vector for the runtime-security unit tests is installed from a pinned checksum in scripts/test-runtime-security.sh, which Renovate cannot update. It should match the image the DaemonSet runs.",
+      "matchFileNames": [
+        "scripts/test-runtime-security.sh"
+      ],
+      "matchDepNames": [
+        "vectordotdev/vector"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update `vector_sha256_linux_amd64_musl` from the release's `vector-<version>-SHA256SUMS`, and keep the version equal to the `docker.io/timberio/vector` image in `kubernetes/platform/observability/vector/daemonset.yaml`."
+      ]
     }
   ]
 }
