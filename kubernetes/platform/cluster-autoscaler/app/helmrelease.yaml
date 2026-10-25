@@ -1,0 +1,84 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cluster-autoscaler
+spec:
+  interval: 1h
+  releaseName: cluster-autoscaler
+  timeout: 10m
+  chart:
+    spec:
+      chart: cluster-autoscaler
+      version: 9.59.0
+      sourceRef:
+        kind: HelmRepository
+        name: kubernetes-autoscaler
+  install:
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+  values:
+    cloudProvider: hetzner
+    autoscalingGroups:
+      - name: ci
+        minSize: 0
+        maxSize: 1
+        instanceType: cpx42
+        region: nbg1
+    envFromSecret: cluster-autoscaler-hcloud
+    image:
+      repository: registry.k8s.io/autoscaling/cluster-autoscaler
+      # renovate: datasource=docker depName=registry.k8s.io/autoscaling/cluster-autoscaler
+      tag: v1.36.1@sha256:461388d03eb5b55db58941ee7a81d9a619dd15302b01cbab9f5a9946715994b4
+      pullPolicy: IfNotPresent
+    extraArgs:
+      logtostderr: true
+      stderrthreshold: info
+      v: 2
+      expander: least-waste
+      scale-down-enabled: true
+      scale-down-unneeded-time: 10m
+      scale-down-delay-after-add: 10m
+      scale-down-unready-time: 10m
+      max-node-provision-time: 15m
+      ignore-daemonsets-utilization: true
+      skip-nodes-with-local-storage: false
+      cordon-node-before-terminating: true
+      balance-similar-node-groups: false
+    podAnnotations:
+      checksum/hcloud-config: ${CLUSTER_AUTOSCALER_REVISION:=unseeded}
+    priorityClassName: system-cluster-critical
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: 20m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+        ephemeral-storage: 256Mi
+    rbac:
+      create: true
+      serviceAccount:
+        create: true
+        name: cluster-autoscaler

@@ -1,0 +1,33 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cluster-autoscaler
+spec:
+  description: The cluster-autoscaler watches pods and nodes through the Kubernetes API and creates and deletes the CI servers through the Hetzner Cloud API at api.hetzner.cloud, and nothing else. Its lookups go through Cilium's DNS proxy, which is how the policy learns the API's addresses. Nothing reaches the pod but the kubelet's health check.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hetzner-cluster-autoscaler
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: api.hetzner.cloud
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: api.hetzner.cloud
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
