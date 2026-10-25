@@ -1,0 +1,43 @@
+---
+tests:
+  - name: vulnerability report
+    inputs:
+      - insert_at: report_records
+        type: vrl
+        source: |
+          . = {"verb": "update", "operatorObject": {"kind": "VulnerabilityReport", "metadata": {"name": "statefulset-zot-zot", "namespace": "zot", "labels": {"trivy-operator.resource.kind": "StatefulSet", "trivy-operator.resource.name": "zot", "trivy-operator.container.name": "zot"}}, "report": {"summary": {"criticalCount": 2, "highCount": 3}, "registry": {"server": "ghcr.io"}, "artifact": {"repository": "project-zot/zot", "digest": "sha256:abc"}, "vulnerabilities": [{"vulnerabilityID": "CVE-1", "severity": "CRITICAL", "resource": "openssl", "installedVersion": "1", "fixedVersion": "2"}, {"vulnerabilityID": "CVE-2", "severity": "CRITICAL", "resource": "zlib", "installedVersion": "1", "fixedVersion": ""}, {"vulnerabilityID": "CVE-3", "severity": "HIGH", "resource": "x", "installedVersion": "1", "fixedVersion": "2"}]}}}
+    outputs:
+      - extract_from: report_records
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.kind, "VulnerabilityReport")
+              assert_eq!(.workload, "StatefulSet/zot")
+              assert_eq!(.image, "ghcr.io/project-zot/zot@sha256:abc")
+              assert_eq!(.critical_fixable, ["CVE-1 openssl 1 -> 2"])
+              assert_eq!(.message, "VulnerabilityReport zot StatefulSet/zot critical=2 high=3 critical_fixable=1")
+  - name: sbom report keeps only the component count
+    inputs:
+      - insert_at: report_records
+        type: vrl
+        source: |
+          . = {"verb": "update", "operatorObject": {"kind": "SbomReport", "metadata": {"name": "s", "namespace": "zot", "labels": {}}, "report": {"summary": {"componentsCount": 3}, "components": {"components": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}}}}
+    outputs:
+      - extract_from: report_records
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.sbom_components, 3)
+              assert!(!exists(.components))
+  - name: config audit lists failed checks
+    inputs:
+      - insert_at: report_records
+        type: vrl
+        source: |
+          . = {"verb": "update", "operatorObject": {"kind": "ConfigAuditReport", "metadata": {"name": "c", "namespace": "zot", "labels": {}}, "report": {"summary": {"criticalCount": 0, "highCount": 1}, "checks": [{"checkID": "KSV001", "severity": "HIGH", "title": "t", "success": false}, {"checkID": "KSV002", "severity": "LOW", "title": "u", "success": true}]}}}
+    outputs:
+      - extract_from: report_records
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.failed_checks, ["HIGH KSV001 t"])
