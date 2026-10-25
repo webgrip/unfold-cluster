@@ -4,6 +4,7 @@ packages:
   - curl
   - unattended-upgrades
   - jq
+  - podman
 users:
   - default
   - name: admin
@@ -89,6 +90,71 @@ write_files:
 
       [Install]
       WantedBy=timers.target
+  - path: /etc/unfold-kms/master.key
+    permissions: "0400"
+    owner: root:root
+    encoding: b64
+    content: "${kms_master_key_b64}"
+  - path: /usr/local/sbin/unfold-kms-cert
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      cache=/var/lib/headscale/cache
+      target=/etc/unfold-kms/tls.pem
+      for name in "${hostname}" "${hostname}+rsa"; do
+        source="$cache/$name"
+        [ -s "$source" ] && grep -q 'BEGIN CERTIFICATE' "$source" || continue
+        if cmp -s "$source" "$target"; then
+          exit 0
+        fi
+        install -m 0400 -o root -g root "$source" "$target.new"
+        mv "$target.new" "$target"
+        [ "$${1:-}" = reload ] && systemctl try-restart unfold-kms.service
+        exit 0
+      done
+      echo "unfold-kms-cert: Headscale has no certificate for ${hostname} yet" >&2
+      exit 1
+  - path: /etc/systemd/system/unfold-kms.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Talos disk-encryption KMS, sealing the nodes' LUKS2 keys
+      After=network-online.target headscale.service
+      Wants=network-online.target
+      StartLimitIntervalSec=0
+
+      [Service]
+      ExecStartPre=/usr/local/sbin/unfold-kms-cert
+      ExecStartPre=-/usr/bin/podman rm --force --ignore unfold-kms
+      ExecStart=/usr/bin/podman run --rm --name unfold-kms --network host --read-only --cap-drop all --security-opt no-new-privileges --pull missing --volume /etc/unfold-kms:/etc/unfold-kms:ro ${kms_image} --kms-api-endpoint :${kms_port} --key-path /etc/unfold-kms/master.key --tls-enable --tls-cert-path /etc/unfold-kms/tls.pem --tls-key-path /etc/unfold-kms/tls.pem
+      ExecStop=/usr/bin/podman stop --time 10 unfold-kms
+      Restart=always
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /etc/systemd/system/unfold-kms-cert.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Hand Headscale's renewed certificate to the disk KMS
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/unfold-kms-cert reload
+  - path: /etc/systemd/system/unfold-kms-cert.path
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Watch Headscale's certificate cache for a renewal
+
+      [Path]
+      PathChanged=/var/lib/headscale/cache
+      Unit=unfold-kms-cert.service
+
+      [Install]
+      WantedBy=paths.target
   - path: /etc/headscale/acl.hujson
     permissions: "0644"
     content: |
@@ -160,3 +226,5 @@ runcmd:
   - [sh, -c, "for attempt in $(seq 180); do resolvectl query --cache=no --legend=no -4 ${hostname} 2>/dev/null | grep -qwF '${ipv4}' && break; sleep 10; done"]
   - [systemctl, enable, --now, headscale]
   - [systemctl, enable, --now, unfold-tailnet-key.timer]
+  - [sh, -c, "for attempt in $(seq 30); do podman pull ${kms_image} && break; sleep 10; done"]
+  - [systemctl, enable, --now, unfold-kms-cert.path, unfold-kms.service]

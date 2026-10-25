@@ -11,7 +11,7 @@ This page is the inventory behind that claim, the minimal seed list, the rebuild
 | git, `webgrip/unfold-cluster` | every Hetzner resource, the Talos machine configs, the Headscale server and its program, policy and settings, the seed Talos installs, everything Flux runs, the trusted signers, the workflows and the drill | a merged pull request |
 | git, `webgrip/homelab-cluster` | the OpenBao roles and policies (`kubernetes/apps/security/openbao/bootstrap/`), the `unfold-infra` runner, the variables bridge, the Forgejo repository settings and branch protection (`repo-config`), the homelab gateway, the DNS records of `headscale` and `unfold-gateway`, the Authentik OIDC client, the Unfold alert rules | a commit on `main` |
 | OpenBao, provided once | the Hetzner tokens, the Garage keys, the state passphrase, the age key, `ADMIN_CIDRS`, `ADMIN_SSH_PUBLIC_KEY` | the owner, `just secret-set` |
-| OpenBao, written by the apply | the Talos secrets bundle, the Headscale address, the homelab gateway's tailnet key | every `infra` apply |
+| OpenBao, written by the apply | the Talos secrets bundle, the Headscale address, the homelab gateway's tailnet key, the disk KMS master key (once) | every `infra` apply |
 | made by the apply, nowhere else | the Talos snapshot, the tailnet pre-auth keys, the Headscale server's SSH keys, the cluster's certificates (from the escrowed secrets), the Zot push credentials | the run that needs them |
 
 ## Inventory
@@ -29,6 +29,7 @@ Every piece of state the estate depends on, how it came to exist, and what happe
 | Headscale server | OpenTofu with cloud-init | yes | |
 | Headscale database: nodes, preauth keys | Headscale, on the server's disk | **now yes, by re-joining, not by restore** | a new server mints new keys in the same apply; every node and the gateway log in again on their own (below) |
 | Headscale policy | cloud-init, then `policy set` pushed by the apply | yes | |
+| Disk KMS on `unfold-headscale` and its master key | cloud-init installs `kms-server`; the first apply run mints the key into OpenBao `secret/unfold-cluster/disk-kms` (`scripts/disk-kms-key.sh`) | yes: a rebuilt server, or a rebuild from an empty state, reads the same key from OpenBao, so every encrypted disk still opens | never replace the stored key: it opens every encrypted disk ([ADR 0003](adr/0003-disk-encryption-key-source.md)) |
 | `unfold-tailnet-key` and its sudoers rule on the live server | cloud-init of 2026-10-24, an older version | **was no**: needed `install-headscale-key-tool.sh` by hand | `headscale_generation` 3 replaces the server in one apply; the script is deleted ([below](#the-live-headscale-server)) |
 | Delete protection blocking a Headscale replacement | Hetzner refuses; the provider does not lift it | **now yes** | `scripts/lift-headscale-protection.sh` lifts it between the digest check and the apply, only when the reviewed plan deletes `unfold-headscale` |
 | Admin devices on the tailnet | the owner, `tailscale up` and `headscale nodes register` | no: a person's device | re-register after a Headscale rebuild; Headscale OIDC through Authentik would make it a browser login (open) |

@@ -31,7 +31,8 @@ mock_provider "hcloud" {
 
   mock_resource "hcloud_server" {
     defaults = {
-      id = "106"
+      id           = "106"
+      ipv4_address = "198.51.100.10"
     }
   }
 
@@ -495,5 +496,14 @@ run "every_apply_rewrites_the_seeded_secrets_into_the_running_cluster" {
   assert {
     condition     = issensitive(local.cluster_secrets_apply_body) && issensitive(terraform_data.cluster_secrets.triggers_replace)
     error_message = "the Secret values must stay sensitive, or the plan log prints them"
+  }
+}
+
+override_data {
+  target = data.external.disk_kms_master_key
+  values = {
+    result = {
+      master_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    }
   }
 }

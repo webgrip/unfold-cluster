@@ -89,6 +89,8 @@ resource "hcloud_server" "headscale" {
   delete_protection  = true
   rebuild_protection = true
 
+  ignore_remote_firewall_ids = true
+
   public_net {
     ipv4_enabled = true
     ipv4         = hcloud_primary_ip.headscale.id
@@ -110,6 +112,9 @@ resource "hcloud_server" "headscale" {
     tailnet_key_script  = local.tailnet_key_tool
     tailnet_key_sudoers = local.tailnet_key_sudoers
     acl                 = local.headscale_policy
+    kms_image           = local.disk_kms_server_image
+    kms_port            = local.disk_kms_port
+    kms_master_key_b64  = local.disk_kms_master_key
   })
 
   labels = {
@@ -120,6 +125,11 @@ resource "hcloud_server" "headscale" {
   lifecycle {
     ignore_changes       = [user_data, image]
     replace_triggered_by = [terraform_data.headscale_generation]
+
+    precondition {
+      condition     = !var.talos_snapshot_required || length(base64decode(local.disk_kms_master_key)) == 32
+      error_message = "OpenBao secret/unfold-cluster/disk-kms holds no 32-byte disk KMS master key; scripts/disk-kms-key.sh mints it on apply runs."
+    }
   }
 }
 

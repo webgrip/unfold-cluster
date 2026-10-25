@@ -211,7 +211,7 @@ variable "host_firewall_enabled" {
 }
 
 variable "disk_encryption_kms_endpoint" {
-  description = "The KMS server that seals the LUKS2 keys of the Talos STATE and EPHEMERAL volumes, as https://host:port with a certificate from a public CA (STATE is unlocked before the machine config, and its custom CAs, are read). Empty until the key server exists; see docs/disk-encryption.md."
+  description = "The KMS server that seals the LUKS2 keys of the Talos STATE and EPHEMERAL volumes, as https://host:port with a certificate from a public CA (STATE is unlocked before the machine config, and its custom CAs, are read). Empty means the KMS this repository runs on unfold-headscale (disk-kms.tf, ADR 0003); set it only to move the KMS elsewhere."
   type        = string
   default     = ""
 
@@ -222,14 +222,9 @@ variable "disk_encryption_kms_endpoint" {
 }
 
 variable "disk_encryption_nodes" {
-  description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so a node may join this list only when it is created or in the same run that wipes those two volumes; see docs/disk-encryption.md."
+  description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so adding a running cloud node here re-installs it: the apply drains it, takes a control plane out of etcd, wipes both volumes and applies the encrypted config (disk-encryption-rollout.tf). One running node per reviewed plan; scripts/guard-encryption-rollout.sh refuses more. A node created while listed is encrypted from its first boot. See docs/disk-encryption.md."
   type        = set(string)
   default     = []
-
-  validation {
-    condition     = length(var.disk_encryption_nodes) == 0 || var.disk_encryption_kms_endpoint != ""
-    error_message = "Disk encryption needs disk_encryption_kms_endpoint: the cloud servers have no TPM, and a nodeID or static key would sit beside the disk it protects."
-  }
 
   validation {
     condition     = alltrue([for name in var.disk_encryption_nodes : contains(keys(local.cluster_nodes), name)])
@@ -244,9 +239,9 @@ variable "homelab_gateway_key_generation" {
 }
 
 variable "headscale_generation" {
-  description = "The generation of unfold-headscale. Raising it replaces the server through a reviewed plan: the apply lifts its delete protection first (scripts/lift-headscale-protection.sh), the new server starts from the current cloud-init, and every node, the homelab gateway included, re-joins with a fresh key the same apply hands it. Generation 3 replaced the server of 2026-10-25, whose program and sudoers rule predate the apply's install and policy steps."
+  description = "The generation of unfold-headscale. Raising it replaces the server through a reviewed plan: the apply lifts its delete protection first (scripts/lift-headscale-protection.sh), the new server starts from the current cloud-init, and every node, the homelab gateway included, re-joins with a fresh key the same apply hands it. Generation 3 replaced the server of 2026-10-25, whose program and sudoers rule predate the apply's install and policy steps. Generation 4 adds the disk KMS (disk-kms.tf), which only a new server's cloud-init installs."
   type        = number
-  default     = 3
+  default     = 4
 
   validation {
     condition     = var.headscale_generation >= 1 && floor(var.headscale_generation) == var.headscale_generation

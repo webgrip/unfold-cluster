@@ -31,7 +31,8 @@ mock_provider "hcloud" {
 
   mock_resource "hcloud_server" {
     defaults = {
-      id = "106"
+      id           = "106"
+      ipv4_address = "198.51.100.10"
     }
   }
 
