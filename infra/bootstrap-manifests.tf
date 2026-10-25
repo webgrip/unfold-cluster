@@ -1,16 +1,6 @@
 locals {
-  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator
-  flux_operator_chart_version = "0.61.0"
-  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/flux-operator
-  flux_operator_image_tag = "v0.61.0@sha256:71041d9fff7f7b05f1a8123ebe73c73b7b156f4aacfe1e8e19b5aa953a98892c"
-  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-instance
-  flux_instance_chart_version = "0.61.0"
-  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/flux-operator-manifests
-  flux_manifests_tag = "v0.61.0@sha256:a94070768dc353efb3aaf7a28ae2d57566e8d20d8dc5287aacb6c10e169b7137"
-  # renovate: datasource=github-releases depName=fluxcd/flux2 extractVersion=^v(?<version>.+)$
-  flux_version = "2.9.6"
-
   flux_platform_dir = "${path.module}/../kubernetes/platform"
+  flux_sync_dir     = "${path.module}/../kubernetes/clusters/main/flux-system"
 
   cilium_release    = yamldecode(file("${local.flux_platform_dir}/cilium/helmrelease.yaml"))
   cilium_chart_ref  = yamldecode(file("${local.flux_platform_dir}/cilium/ocirepository.yaml")).spec
@@ -53,175 +43,81 @@ data "helm_template" "hcloud_ccm" {
 }
 
 data "helm_template" "flux_operator" {
-  name         = "flux-operator"
-  namespace    = "flux-system"
-  repository   = "oci://ghcr.io/controlplaneio-fluxcd/charts"
-  chart        = "flux-operator"
-  version      = local.flux_operator_chart_version
+  name         = local.flux_operator_release.spec.releaseName
+  namespace    = local.flux_namespace
+  repository   = local.flux_operator_chart_repo
+  chart        = local.flux_operator_chart.chart
+  version      = local.flux_operator_chart.version
   kube_version = local.kubernetes_version
-
-  values = [yamlencode({
-    image = {
-      tag = local.flux_operator_image_tag
-    }
-    tolerations  = local.control_plane_tolerations
-    nodeSelector = local.control_plane_node_selector
-  })]
-}
-
-data "helm_template" "flux_instance" {
-  name         = "flux"
-  namespace    = "flux-system"
-  repository   = "oci://ghcr.io/controlplaneio-fluxcd/charts"
-  chart        = "flux-instance"
-  version      = local.flux_instance_chart_version
-  kube_version = local.kubernetes_version
-
-  values = [yamlencode({
-    instance = {
-      distribution = {
-        version  = local.flux_version
-        artifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:${local.flux_manifests_tag}"
-      }
-      kustomize = {
-        patches = [{
-          target = {
-            kind = "Deployment"
-          }
-          patch = yamlencode([
-            {
-              op    = "add"
-              path  = "/spec/template/spec/tolerations"
-              value = local.control_plane_tolerations
-            },
-            {
-              op    = "add"
-              path  = "/spec/template/spec/nodeSelector"
-              value = local.control_plane_node_selector
-            },
-          ])
-        }]
-      }
-    }
-  })]
+  values       = [local.flux_operator_values]
 }
 
 locals {
-  control_plane_tolerations = [{
-    key      = "node-role.kubernetes.io/control-plane"
-    operator = "Exists"
-    effect   = "NoSchedule"
-  }]
-  control_plane_node_selector = {
-    "node-role.kubernetes.io/control-plane" = ""
+  flux_namespace = "flux-system"
+
+  flux_operator_release    = yamldecode(file("${local.flux_platform_dir}/flux-operator/helmrelease.yaml"))
+  flux_operator_chart      = local.flux_operator_release.spec.chart.spec
+  flux_operator_chart_repo = yamldecode(file("${local.flux_platform_dir}/flux-operator/helmrepository.yaml")).spec.url
+  flux_operator_values     = file("${local.flux_platform_dir}/flux-operator/values.yaml")
+
+  flux_instance           = yamldecode(file("${local.flux_platform_dir}/flux-instance/fluxinstance.yaml"))
+  flux_git_repository     = yamldecode(file("${local.flux_sync_dir}/gitrepository.yaml"))
+  flux_sync_kustomization = yamldecode(file("${local.flux_sync_dir}/sync.yaml"))
+
+  trusted_signers_generator = one([
+    for generator in yamldecode(file("${local.flux_sync_dir}/kustomization.yaml")).secretGenerator :
+    generator if generator.name == "trusted-signers"
+  ])
+  trusted_signers = {
+    for signer_file in local.trusted_signers_generator.files :
+    basename(signer_file) => file("${local.flux_sync_dir}/${signer_file}")
   }
 
-  hcloud_secret_manifest = yamlencode({
+  etcd_backup_namespace = yamldecode(file("${local.flux_platform_dir}/etcd-backup/namespace.yaml"))
+
+  flux_namespace_manifest = yamlencode({
     apiVersion = "v1"
-    kind       = "Secret"
+    kind       = "Namespace"
     metadata = {
-      name      = "hcloud"
-      namespace = "kube-system"
-    }
-    stringData = {
-      token   = var.hcloud_cluster_token
-      network = tostring(hcloud_network.cluster.id)
+      name = local.flux_namespace
     }
   })
 
-  trusted_signers = {
-    for file in fileset("${path.module}/trusted-signers", "*.sshpub") :
-    file => trimspace(file("${path.module}/trusted-signers/${file}"))
-  }
+  flux_instance_manifest = yamlencode(merge(local.flux_instance, {
+    metadata = merge(local.flux_instance.metadata, { namespace = local.flux_namespace })
+  }))
 
   flux_sync_manifest = join("\n---\n", [
     yamlencode({
       apiVersion = "v1"
       kind       = "Secret"
       metadata = {
-        name      = "trusted-signers"
-        namespace = "flux-system"
+        name        = local.trusted_signers_generator.name
+        namespace   = local.flux_namespace
+        annotations = local.trusted_signers_generator.options.annotations
       }
       stringData = local.trusted_signers
     }),
-    yamlencode({
-      apiVersion = "source.toolkit.fluxcd.io/v1"
-      kind       = "GitRepository"
-      metadata = {
-        name      = "flux-system"
-        namespace = "flux-system"
-      }
-      spec = {
-        interval = "1m"
-        url      = var.gitops_url
-        ref = {
-          branch = "main"
-        }
-        verify = {
-          mode = "HEAD"
-          secretRef = {
-            name = "trusted-signers"
-          }
-        }
-      }
-    }),
-    yamlencode({
-      apiVersion = "kustomize.toolkit.fluxcd.io/v1"
-      kind       = "Kustomization"
-      metadata = {
-        name      = "flux-system"
-        namespace = "flux-system"
-      }
-      spec = {
-        interval = "10m"
-        path     = "./kubernetes/clusters/main"
-        prune    = true
-        sourceRef = {
-          kind = "GitRepository"
-          name = "flux-system"
-        }
-      }
-    }),
+    yamlencode(merge(local.flux_git_repository, {
+      metadata = merge(local.flux_git_repository.metadata, { namespace = local.flux_namespace })
+    })),
+    yamlencode(merge(local.flux_sync_kustomization, {
+      metadata = merge(local.flux_sync_kustomization.metadata, { namespace = local.flux_namespace })
+    })),
   ])
 
   etcd_backup_manifest = join("\n---\n", [
-    yamlencode({
-      apiVersion = "v1"
-      kind       = "Namespace"
-      metadata = {
-        name = "etcd-backup"
-      }
-    }),
-    yamlencode({
-      apiVersion = "v1"
-      kind       = "Secret"
-      metadata = {
-        name      = "etcd-backup"
-        namespace = "etcd-backup"
-      }
-      stringData = {
-        AWS_ACCESS_KEY_ID     = var.etcd_backup_s3_access_key
-        AWS_SECRET_ACCESS_KEY = var.etcd_backup_s3_secret_key
-        AGE_X25519_PUBLIC_KEY = var.etcd_backup_age_recipient
-      }
-    }),
+    yamlencode(local.etcd_backup_namespace),
+    local.cluster_secret_manifests["etcd-backup"],
   ])
-
-  flux_namespace_manifest = yamlencode({
-    apiVersion = "v1"
-    kind       = "Namespace"
-    metadata = {
-      name = "flux-system"
-    }
-  })
 
   inline_manifests = [
     { name = "cilium", contents = data.helm_template.cilium.manifest },
-    { name = "hcloud-secret", contents = local.hcloud_secret_manifest },
+    { name = "hcloud-secret", contents = local.cluster_secret_manifests["hcloud"] },
     { name = "hcloud-cloud-controller-manager", contents = data.helm_template.hcloud_ccm.manifest },
     { name = "flux-system-namespace", contents = local.flux_namespace_manifest },
     { name = "flux-operator", contents = data.helm_template.flux_operator.manifest },
-    { name = "flux-instance", contents = data.helm_template.flux_instance.manifest },
+    { name = "flux-instance", contents = local.flux_instance_manifest },
     { name = "flux-sync", contents = local.flux_sync_manifest },
     { name = "etcd-backup", contents = local.etcd_backup_manifest },
   ]

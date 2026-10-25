@@ -61,7 +61,7 @@ variable "state_passphrase" {
 }
 
 variable "hcloud_cluster_token" {
-  description = "Hetzner Cloud API token for the cloud controller and the CSI driver, delivered to kube-system through a Talos inline manifest. A different token from CI's, so either can be revoked alone."
+  description = "Hetzner Cloud API token for the cloud controller and the CSI driver, seeded into kube-system by a Talos inline manifest and rewritten into the running cluster by every apply that changes it. A different token from CI's, so either can be revoked alone."
   type        = string
   sensitive   = true
   default     = ""
@@ -78,12 +78,6 @@ variable "talos_cloud_schematic" {
   description = "Image Factory schematic id of talos/schematics/cloud.yaml."
   type        = string
   default     = "bd06ca487272b755c51239191fb53b48470a1daf0fe0b628e424b67dd66cf1f4"
-}
-
-variable "gitops_url" {
-  description = "Repository Flux reconciles from: the public GitHub mirror, so production keeps reconciling when the homelab is down."
-  type        = string
-  default     = "https://github.com/webgrip/unfold-cluster.git"
 }
 
 variable "headscale_server_type" {
@@ -121,7 +115,7 @@ variable "headscale_admin_user" {
 }
 
 variable "etcd_backup_s3_access_key" {
-  description = "Access key of the Garage key that may write, but not read, the etcd backup bucket. Delivered to the etcd-backup namespace through a Talos inline manifest."
+  description = "Access key of the Garage key that may write, but not read, the etcd backup bucket. Seeded into the etcd-backup namespace by a Talos inline manifest and rewritten into the running cluster by every apply that changes it."
   type        = string
   sensitive   = true
   default     = ""

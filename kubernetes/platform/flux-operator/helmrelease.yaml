@@ -1,0 +1,27 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: flux-operator
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  interval: 1h
+  releaseName: flux-operator
+  chart:
+    spec:
+      chart: flux-operator
+      version: 0.61.0
+      sourceRef:
+        kind: HelmRepository
+        name: controlplaneio-fluxcd
+  install:
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+  valuesFrom:
+    - kind: ConfigMap
+      name: flux-operator-values
+      valuesKey: values.yaml

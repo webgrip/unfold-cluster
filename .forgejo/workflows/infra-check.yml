@@ -11,6 +11,10 @@ on:
       - kubernetes/platform/cilium/**
       - kubernetes/platform/hcloud-cloud-controller-manager/**
       - kubernetes/platform/hetzner-charts/**
+      - kubernetes/platform/flux-operator/**
+      - kubernetes/platform/flux-instance/**
+      - kubernetes/platform/etcd-backup/namespace.yaml
+      - scripts/write-cluster-secrets.sh
 
 env:
   TF_IN_AUTOMATION: "1"

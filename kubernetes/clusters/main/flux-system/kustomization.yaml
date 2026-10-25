@@ -1,0 +1,16 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+resources:
+  - gitrepository.yaml
+  - sync.yaml
+secretGenerator:
+  - name: trusted-signers
+    files:
+      - trusted-signers/forgejo.sshpub
+      - trusted-signers/ryan.sshpub
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        kustomize.toolkit.fluxcd.io/prune: disabled
