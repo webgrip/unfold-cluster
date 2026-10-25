@@ -82,12 +82,27 @@ override_data {
   }
 }
 
-run "only_the_metal_node_is_encrypted_by_default" {
+run "no_node_is_encrypted_by_default_and_a_declared_metal_node_always_is" {
   command = plan
 
   assert {
+    condition     = alltrue([for patches in values(local.disk_encryption_patches) : length(patches) == 0])
+    error_message = "every running cloud node stays plain until it is listed, because listing it wipes it, and no metal node is declared"
+  }
+}
+
+run "a_declared_metal_node_is_encrypted_from_its_first_install" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = 2345678, product_prefix = "EX44", cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+    }
+  }
+
+  assert {
     condition     = alltrue([for name, patches in local.disk_encryption_patches : length(patches) == (name == "unfold-metal-1" ? 2 : 0)])
-    error_message = "unfold-metal-1 is encrypted from its first install; every running cloud node stays plain until it is listed, because listing it wipes it"
+    error_message = "unfold-metal-1 is encrypted from its first install without being listed in disk_encryption_nodes"
   }
 
   assert {
@@ -205,8 +220,14 @@ run "an_unlisted_worker_keeps_its_tailnet_key_slot" {
 run "the_metal_node_reaches_the_kms" {
   command = plan
 
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = 2345678, product_prefix = "EX44", cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+    }
+  }
+
   assert {
-    condition     = length(local.disk_kms_metal_client_ipv4s) == length(var.metal_servers)
+    condition     = local.disk_kms_metal_client_ipv4s == ["198.51.100.40"]
     error_message = "every metal node's public address is a source of the KMS firewall, or its STATE never opens"
   }
 }

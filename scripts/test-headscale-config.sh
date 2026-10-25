@@ -10,8 +10,11 @@ with tofu, downloads the Headscale package pinned in infra/headscale.tf
 
   configtest accepts the configuration, and refuses it with oidc.expiry, the
     key Headscale 0.29 removed in favour of node.expiry;
-  policy check accepts the policy, and refuses it when tag:headscale has no
-    owner;
+  policy check accepts the policy, and refuses it when tag:headscale or a
+    worker role tag has no owner;
+  on a running Headscale with the rendered policy, unfold-tailnet-key's nodes
+    tag gives a node its role tag, leaves it alone the second time, and fails
+    when the policy does not define the tag, which is what retires tag:node;
   with the identity provider down, Headscale still starts, answers /health and
     logs that it fell back, so the tailnet keeps working when Authentik does
     not answer, which is what the server's idp reconcile heals later;
@@ -80,7 +83,9 @@ render() {
 }
 
 templates="${repo}/infra/templates"
-render "jsonencode(templatefile(\"${templates}/headscale-acl.hujson\", { admin_user = \"ryan\", node_route = \"10.64.0.0/24\" }))" >"${work}/acl.hujson"
+worker_tags="$(sed -n '/^  tailnet_tag_by_pool = {$/,/^  }$/s/^ *[a-z0-9_]* *= *"\(tag:[a-z0-9-]*\)"$/\1/p' "${repo}/infra/headscale.tf" | sort -u | jq -R . | jq -sc .)"
+[ "$worker_tags" != "[]" ] || fail "no tailnet_tag_by_pool in infra/headscale.tf"
+render "jsonencode(templatefile(\"${templates}/headscale-acl.hujson\", { admin_user = \"ryan\", node_route = \"10.64.0.0/24\", worker_tags = ${worker_tags} }))" >"${work}/acl.hujson"
 render "jsonencode(templatefile(\"${templates}/headscale-config.yaml.tftpl\", {
   hostname                = \"headscale.invalid\"
   ipv4                    = \"198.51.100.23\"
@@ -148,6 +153,58 @@ check "Headscale ${version} accepts the rendered policy" \
 
 check "Headscale ${version} refuses the policy when tag:headscale has no owner, so the check above can fail" \
   bash -c 'grep -v "\"tag:headscale\": \[\"group:admin\"\]" "$1" >"$1.unowned" && ! "$0" -c "$2" --force policy check --bypass-grpc-and-access-database-directly -f "$1.unowned" >/dev/null 2>&1' "$headscale" "${work}/acl.hujson" "${work}/config.yaml"
+
+check "Headscale ${version} refuses the policy when tag:hub has no owner, so every role tag the template adds is defined" \
+  bash -c 'jq "del(.tagOwners[\"tag:hub\"])" "$1" >"$1.hub-unowned" && ! "$0" -c "$2" --force policy check --bypass-grpc-and-access-database-directly -f "$1.hub-unowned" >/dev/null 2>&1' "$headscale" "${work}/acl.hujson" "${work}/config.yaml"
+
+mkdir -p "${work}/bin" "${work}/tailnet-state"
+printf '#!/bin/sh\nexec "%s" -c "%s" "$@"\n' "$headscale" "${work}/config.yaml" >"${work}/bin/headscale"
+chmod +x "${work}/bin/headscale"
+cat >"${work}/settings.env" <<EOF
+NODE_USER=nodes
+ADMIN_USER=ryan
+CONTROL_PLANE_TAG=tag:cp
+CONTROL_PLANE_KEY_LIFETIME_HOURS=2160
+RENEW_WHEN_DAYS_LEFT=45
+WORKER_KEY_LIFETIME_HOURS=24
+STATE_DIR=${work}/tailnet-state
+HEALTH_URL=http://127.0.0.1:${port}/health
+HEALTH_CONNECT_TO=127.0.0.1:${port}:127.0.0.1:${port}
+EOF
+tailnet_key="${work}/tailnet-key"
+node_tags="${work}/node-tags"
+printf '#!/bin/sh\nPATH="%s:$PATH" UNFOLD_TAILNET_SETTINGS="%s" exec sh "%s" "$@"\n' "${work}/bin" "${work}/settings.env" "${templates}/unfold-tailnet-key.sh" >"$tailnet_key"
+printf '#!/bin/sh\n"%s" nodes list -o json | jq -c --arg name "$1" %s\n' "${work}/bin/headscale" "'[.[] | select(.name == \$name) | .tags]'" >"$node_tags"
+chmod +x "$tailnet_key" "$node_tags"
+
+"$headscale" -c "${work}/config.yaml" serve >"${work}/serve-tags.log" 2>&1 &
+server_pid=$!
+deadline=$((SECONDS + 60))
+until curl -fsS --max-time 2 "http://127.0.0.1:${port}/health" >/dev/null 2>&1 || [ "$SECONDS" -ge "$deadline" ]; do
+  sleep 1
+done
+"$tailnet_key" nodes list >/dev/null || fail "unfold-tailnet-key cannot reach the running Headscale"
+auth_id="hskey-authreq-$(head -c 18 /dev/urandom | base64 | tr '+/' '-_')"
+"${work}/bin/headscale" debug create-node --name unfold-app-1 --user nodes --key "$auth_id" -o json >/dev/null \
+  || fail "could not create a test node"
+"${work}/bin/headscale" auth register --auth-id "$auth_id" --user nodes -o json >/dev/null \
+  || fail "could not register the test node"
+
+check "Headscale ${version} gives a node its role tag through unfold-tailnet-key" \
+  bash -c '[ "$("$0" nodes tag unfold-app-1 tag:hub)" = "unfold-app-1 now has tag:hub" ] && [ "$("$1" unfold-app-1)" = "[[\"tag:hub\"]]" ]' "$tailnet_key" "$node_tags"
+
+check "Headscale ${version} leaves a node with its role tag alone" \
+  bash -c '[ "$("$0" nodes tag unfold-app-1 tag:hub)" = "unfold-app-1 already has tag:hub" ]' "$tailnet_key"
+
+check "Headscale ${version} moves a node to another role and drops the earlier tag" \
+  bash -c '"$0" nodes tag unfold-app-1 tag:ci >/dev/null && [ "$("$1" unfold-app-1)" = "[[\"tag:ci\"]]" ]' "$tailnet_key" "$node_tags"
+
+check "Headscale ${version} refuses a tag the policy does not define, so a retired tag:node can never come back" \
+  bash -c '! PATH="$0:$PATH" headscale nodes tag --identifier 1 --tags tag:node -o json >/dev/null 2>&1 && [ "$("$1" unfold-app-1)" = "[[\"tag:ci\"]]" ]' "${work}/bin" "$node_tags"
+
+kill "$server_pid" 2>/dev/null || true
+wait "$server_pid" 2>/dev/null || true
+server_pid=""
 
 if answers_health_within "${work}/config.yaml" 60 "${work}/serve.log" \
   && grep -qF 'falling back to CLI based authentication' "${work}/serve.log"; then

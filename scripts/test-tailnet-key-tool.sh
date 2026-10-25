@@ -6,8 +6,8 @@ readonly usage="usage: test-tailnet-key-tool.sh
 
 Runs infra/templates/unfold-tailnet-key.sh, the program OpenTofu calls on
 unfold-headscale over SSH, against a stubbed headscale and systemctl, and
-checks the policy, config, OIDC secret, host, identity provider, install and
-gateway key modes: what they change, what they refuse, that a policy or
+checks the policy, config, OIDC secret, host, identity provider, install,
+gateway key, worker key and node tag modes: what they change, what they refuse, that a policy or
 configuration Headscale cannot start with is rolled back, that the client
 secret is never printed, and that Headscale is restarted for OIDC only when
 it started without it and the identity provider answers."
@@ -33,6 +33,7 @@ case "$1 $2" in
   "users create") echo '{}' ;;
   "preauthkeys create") echo '{"key": "hskey-auth-stub", "id": 5}' ;;
   "policy check") ! grep -q REFUSED "$4" ;;
+  "nodes tag") [ ! -e "${STUB_DIR}/refuse-tag" ] && echo '{}' ;;
   "nodes list")
     if [ -e "${STUB_DIR}/nodes.json" ]; then
       cat "${STUB_DIR}/nodes.json"
@@ -89,7 +90,6 @@ ADMIN_USER=admin
 CONTROL_PLANE_TAG=tag:cp
 CONTROL_PLANE_KEY_LIFETIME_HOURS=2160
 RENEW_WHEN_DAYS_LEFT=45
-WORKER_TAG=tag:node
 WORKER_KEY_LIFETIME_HOURS=24
 STATE_DIR=${work}/state
 HEALTH_URL=https://headscale.invalid/health
@@ -183,8 +183,23 @@ check "nodes list never prints a key" \
 check "nodes takes only list" \
   bash -c 'sh "$0" nodes delete 2>/dev/null; [ $? -eq 2 ]' "$tool"
 
-check "the worker mode still reads nothing for an unknown server" \
-  bash -c '[ -z "$(sh "$0" worker 42 read)" ]' "$tool"
+check "the worker mode reads nothing for an unknown slot" \
+  bash -c '[ -z "$(sh "$0" worker 42 tag:hub read)" ]' "$tool"
+
+check "a worker key is minted with its pool's role tag" \
+  bash -c '[ "$(sh "$0" worker 42 tag:hub mint)" = "hskey-auth-stub" ] && tail -n 1 "$1" | grep -q -- "preauthkeys create --user 1 --tags tag:hub --expiration 24h"' "$tool" "$STUB_LOG"
+
+check "a second mint of the same slot and tag makes no new key" \
+  bash -c 'before="$(grep -c "preauthkeys create" "$1")"; sh "$0" worker 42 tag:hub mint >/dev/null && [ "$(grep -c "preauthkeys create" "$1")" = "$before" ]' "$tool" "$STUB_LOG"
+
+check "the same slot under another role gets its own key, never the stored one of the earlier role" \
+  bash -c '[ -z "$(sh "$0" worker 42 tag:ci read)" ] && sh "$0" worker 42 tag:ci mint >/dev/null && tail -n 1 "$1" | grep -q -- "--tags tag:ci "' "$tool" "$STUB_LOG"
+
+check "a worker key is never minted for the control planes, the gateway, Headscale or the retired tag:node" \
+  bash -c 'for tag in tag:cp tag:homelab-gateway tag:headscale tag:node "tag:hub tag:cp"; do sh "$0" worker 42 "$tag" mint 2>/dev/null; [ $? -eq 2 ] || exit 1; done' "$tool"
+
+check "the worker mode without a tag is a usage error" \
+  bash -c 'sh "$0" worker 42 read 2>/dev/null; [ $? -eq 2 ]' "$tool"
 
 cat >"${work}/config.yaml" <<'EOF'
 server_url: https://headscale.invalid
@@ -305,6 +320,35 @@ check "no mode printed or kept the client secret outside its file" \
   bash -c '! grep -rqF "$0" "$1" "$2"' "$client_secret" "$STUB_LOG" "${work}/state"
 
 echo "restarts: $(restarts)"
+cat >"${work}/nodes.json" <<'EOF'
+[
+  {"id": 11, "name": "unfold-app-1", "given_name": "unfold-app-1", "tags": ["tag:node"]},
+  {"id": 12, "name": "unfold-app-1", "given_name": "unfold-app-1-stale", "tags": ["tag:node"]},
+  {"id": 3, "name": "unfold-cp-1", "given_name": "unfold-cp-1", "tags": ["tag:cp"]}
+]
+EOF
+: >"$STUB_LOG"
+check "nodes tag gives every node of that name the role tag, the stale entry included" \
+  bash -c '[ "$(sh "$0" nodes tag unfold-app-1 tag:hub)" = "unfold-app-1 now has tag:hub" ] && grep -qx "headscale nodes tag --identifier 11 --tags tag:hub -o json" "$1" && grep -qx "headscale nodes tag --identifier 12 --tags tag:hub -o json" "$1" && ! grep -q -- "--identifier 3 " "$1"' "$tool" "$STUB_LOG"
+
+: >"$STUB_LOG"
+check "nodes tag leaves a node that already has its role tag alone" \
+  bash -c '[ "$(sh "$0" nodes tag unfold-cp-1 tag:cp)" = "unfold-cp-1 already has tag:cp" ] && ! grep -q "nodes tag" "$1"' "$tool" "$STUB_LOG"
+
+check "nodes tag leaves a node not on the tailnet yet to the key it joins with" \
+  bash -c '[ "$(sh "$0" nodes tag unfold-ci-1 tag:ci)" = "unfold-ci-1 is not on the tailnet yet; it joins with a tag:ci key" ] && ! grep -q "nodes tag" "$1"' "$tool" "$STUB_LOG"
+
+check "nodes tag replaces a node carrying its role tag and another" \
+  bash -c 'echo "[{\"id\": 3, \"name\": \"unfold-cp-1\", \"tags\": [\"tag:cp\", \"tag:hub\"]}]" >"$2/nodes.json"; sh "$0" nodes tag unfold-cp-1 tag:cp >/dev/null && grep -qx "headscale nodes tag --identifier 3 --tags tag:cp -o json" "$1"' "$tool" "$STUB_LOG" "$work"
+
+touch "${work}/refuse-tag"
+check "nodes tag fails when Headscale refuses the tag" \
+  bash -c '! (sh "$0" nodes tag unfold-cp-1 tag:cp >/dev/null 2>&1)' "$tool"
+rm -f "${work}/refuse-tag"
+
+check "nodes tag never hands out the gateway, Headscale or retired tag, nor takes a name that is not one" \
+  bash -c 'for tag in tag:homelab-gateway tag:headscale tag:node; do sh "$0" nodes tag unfold-app-1 "$tag" 2>/dev/null; [ $? -eq 2 ] || exit 1; done; sh "$0" nodes tag "app;id" tag:hub 2>/dev/null; [ $? -eq 2 ]' "$tool"
+
 if [ "$failures" -gt 0 ]; then
   echo "${failures} check(s) failed" >&2
   exit 1

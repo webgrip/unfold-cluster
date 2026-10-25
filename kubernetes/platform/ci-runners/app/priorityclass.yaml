@@ -1,0 +1,9 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ci-runner
+value: -5
+preemptionPolicy: Never
+globalDefault: false
+description: CI runner pods yield to every other workload. On the hub worker, an Unfold pod at the default priority preempts a runner rather than wait behind it, and a runner never preempts anything. The value stays above the cluster-autoscaler's expendable cutoff of -10, so a pending runner still makes it add a CI node.

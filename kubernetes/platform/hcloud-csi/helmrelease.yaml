@@ -57,5 +57,17 @@ spec:
           tag: v2.20.0@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8
     storageClasses:
       - name: hcloud-volumes
+        defaultStorageClass: false
+        reclaimPolicy: Retain
+      - name: hcloud-luks
         defaultStorageClass: true
         reclaimPolicy: Retain
+        extraParameters:
+          csi.storage.k8s.io/node-publish-secret-name: hcloud-luks
+          csi.storage.k8s.io/node-publish-secret-namespace: volume-encryption
+      - name: hcloud-luks-drill
+        defaultStorageClass: false
+        reclaimPolicy: Delete
+        extraParameters:
+          csi.storage.k8s.io/node-publish-secret-name: hcloud-luks
+          csi.storage.k8s.io/node-publish-secret-namespace: volume-encryption

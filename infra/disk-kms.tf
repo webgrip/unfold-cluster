@@ -8,7 +8,7 @@ locals {
 
   disk_encryption_kms_endpoint = coalesce(var.disk_encryption_kms_endpoint, local.disk_kms_on_headscale)
 
-  disk_kms_metal_client_ipv4s = [for name in keys(var.metal_servers) : data.external.metal_server[name].result.server_ip]
+  disk_kms_metal_client_ipv4s = [for name in keys(local.metal_active) : data.external.metal_server[name].result.server_ip]
 
   disk_kms_client_cidrs = distinct(concat(
     [for server in hcloud_server.control_plane : "${server.ipv4_address}/32"],
@@ -42,7 +42,7 @@ resource "hcloud_firewall" "disk_kms" {
 
   lifecycle {
     precondition {
-      condition     = length([for name in var.disk_encryption_nodes : name if startswith(name, "unfold-metal-")]) <= length(local.disk_kms_metal_client_ipv4s)
+      condition     = length(setintersection(local.encrypted_nodes, keys(local.metal_active))) <= length(local.disk_kms_metal_client_ipv4s)
       error_message = "A metal node listed in disk_encryption_nodes must reach the KMS: add its public IPv4 to disk_kms_metal_client_ipv4s, or its STATE never unlocks."
     }
   }

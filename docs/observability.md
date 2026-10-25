@@ -16,7 +16,7 @@ Unfold collects its own metrics and logs and sends them to the homelab over the 
 
 ## Who may connect
 
-The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets `tag:cp` and `tag:node` open `tag:homelab-gateway` on 8200 and 8427, and `tag:node` alone on 9150, and nothing else; besides them only the devices people register (`autogroup:member`) reach those ports, and only the Headscale server (`tag:headscale`) reaches 443, Authentik's way in ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only the vmagent, External Secrets and KEDA operator pods have a Cilium egress rule to the gateway name, and Vector runs on the host network. Metrics and logs carry no bearer token yet; External Secrets now exists on Unfold, so a vmauth token minted in the homelab can follow.
+The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets every node role open `tag:homelab-gateway` on 8427 (Vector ships each node's logs from its host network), and `tag:cp` alone on 8200 and 9150 (External Secrets and KEDA run only on the control planes), and nothing else ([node roles](runbooks/infra-workflow.md#node-roles-on-the-tailnet)); besides them only the devices people register (`autogroup:member`) reach those ports, and only the Headscale server (`tag:headscale`) reaches 443, Authentik's way in ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only the vmagent, External Secrets and KEDA operator pods have a Cilium egress rule to the gateway name, and Vector runs on the host network. Metrics and logs carry no bearer token yet; External Secrets now exists on Unfold, so a vmauth token minted in the homelab can follow.
 
 ## How the policy and the key get there, with nobody typing them
 

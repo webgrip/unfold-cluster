@@ -15,6 +15,13 @@ spec:
     - name: allowedPrefixes
       expression: >-
         ['ghcr.io/siderolabs/',
+        'quay.io/jetstack/cert-manager-controller:',
+        'quay.io/jetstack/cert-manager-webhook:',
+        'quay.io/jetstack/cert-manager-cainjector:',
+        'ghcr.io/cloudnative-pg/cloudnative-pg:',
+        'ghcr.io/cloudnative-pg/postgresql:',
+        'ghcr.io/cloudnative-pg/plugin-barman-cloud:',
+        'ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:',
         'ghcr.io/external-secrets/external-secrets:',
         'ghcr.io/kedacore/keda:',
         'ghcr.io/kedacore/keda-metrics-apiserver:',
@@ -34,7 +41,8 @@ spec:
         'ghcr.io/kyverno/kyvernopre:',
         'ghcr.io/kyverno/reports-controller:',
         'ghcr.io/kyverno/kyverno-cli:',
-        'ghcr.io/kyverno/readiness-checker:']
+        'ghcr.io/kyverno/readiness-checker:',
+        'registry.k8s.io/autoscaling/cluster-autoscaler:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)

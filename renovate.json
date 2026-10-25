@@ -134,6 +134,17 @@
       "groupName": "zot"
     },
     {
+      "description": "The cluster-autoscaler chart and its image, pinned by digest, move in one PR. The image's minor version follows the cluster's Kubernetes minor (talos/talenv.yaml), never ahead of it.",
+      "matchDepNames": [
+        "cluster-autoscaler",
+        "registry.k8s.io/autoscaling/cluster-autoscaler"
+      ],
+      "groupName": "cluster autoscaler",
+      "prBodyNotes": [
+        "Check that the image's minor version is not newer than the Kubernetes version in `talos/talenv.yaml`. Flux restarts the autoscaler on merge; a new or removed provider setting belongs in `infra/ci-autoscaler.tf` and reaches the cluster with the next `infra` apply."
+      ]
+    },
+    {
       "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",
       "matchDepNames": [
         "quay.io/cilium/charts/cilium"

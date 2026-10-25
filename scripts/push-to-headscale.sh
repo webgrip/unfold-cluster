@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly usage="usage: push-to-headscale.sh install|policy|config|oidc-secret|host
+readonly usage="usage: push-to-headscale.sh install|policy|config|oidc-secret|host|tag
 
 OpenTofu's local-exec for unfold-headscale. Sends CONTENT_B64, decoded, on
 stdin to unfold-tailnet-key on the server over SSH: 'install' replaces the
@@ -9,11 +9,13 @@ program itself, 'policy' runs 'policy set' with the Headscale policy,
 'config' runs 'config set' with the Headscale configuration and
 'oidc-secret' runs 'oidc-secret set' with the OIDC client secret. 'host'
 sends nothing and runs 'host apply TAILSCALE_VERSION TAILSCALE_SHA256'.
+'tag' sends nothing and runs 'nodes tag NODE_NAME NODE_TAG'.
 Nothing this program prints contains what it sends.
 
 Environment: HEADSCALE_HOST, HEADSCALE_HOST_PUBLIC_KEY (the pinned ed25519
 host key), HEADSCALE_TOFU_KEY (the tofu user's private key), CONTENT_B64,
-or for 'host' TAILSCALE_VERSION and TAILSCALE_SHA256.
+or for 'host' TAILSCALE_VERSION and TAILSCALE_SHA256, or for 'tag'
+NODE_NAME and NODE_TAG.
 SSH trusts nothing but the pinned host key. An unreachable server, or one
 whose Headscale does not answer on its socket yet, is retried for
 UNFOLD_TAILNET_WAIT_SECONDS (default 1500), because a new server answers only
@@ -37,6 +39,12 @@ case "${1:-}" in
     [[ "${TAILSCALE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail "TAILSCALE_SHA256 is not a sha256"
     request="host apply ${TAILSCALE_VERSION} ${TAILSCALE_SHA256}"
     ;;
+  tag)
+    required=(HEADSCALE_HOST HEADSCALE_HOST_PUBLIC_KEY HEADSCALE_TOFU_KEY NODE_NAME NODE_TAG)
+    [[ "${NODE_NAME:-}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || fail "NODE_NAME is not a node name"
+    [[ "${NODE_TAG:-}" =~ ^tag:[a-z][a-z0-9-]*$ ]] || fail "NODE_TAG is not a tag"
+    request="nodes tag ${NODE_NAME} ${NODE_TAG}"
+    ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
 
@@ -52,7 +60,7 @@ trap 'rm -rf "$workdir"' EXIT
 umask 077
 printf '%s\n' "$HEADSCALE_TOFU_KEY" >"${workdir}/id"
 printf '%s %s\n' "$HEADSCALE_HOST" "$HEADSCALE_HOST_PUBLIC_KEY" >"${workdir}/known_hosts"
-if [ "$1" = "host" ]; then
+if [ "$1" = "host" ] || [ "$1" = "tag" ]; then
   : >"${workdir}/content"
 else
   printf '%s' "$CONTENT_B64" | base64 -d >"${workdir}/content" || fail "CONTENT_B64 is not base64"
