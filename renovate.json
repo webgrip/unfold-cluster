@@ -102,6 +102,14 @@
       ]
     },
     {
+      "description": "Zot's image is pinned by digest beside its chart, so the two move in one PR.",
+      "matchDepNames": [
+        "ghcr.io/project-zot/helm-charts/zot",
+        "ghcr.io/project-zot/zot"
+      ],
+      "groupName": "zot"
+    },
+    {
       "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",
       "matchDepNames": [
         "quay.io/cilium/charts/cilium"

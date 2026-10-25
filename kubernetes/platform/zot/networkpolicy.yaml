@@ -1,0 +1,84 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: zot
+spec:
+  description: Zot serves pulls to the nodes' containerd and to the CI namespace, and fetches what it mirrors from the four upstream registries and the CDNs they redirect blob downloads to, over HTTPS only. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: zot
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ci
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: registry-1.docker.io
+              - matchName: auth.docker.io
+              - matchName: production.cloudflare.docker.com
+              - matchName: production.cloudfront.docker.com
+              - matchPattern: docker-images-prod.*.r2.cloudflarestorage.com
+              - matchName: ghcr.io
+              - matchName: pkg-containers.githubusercontent.com
+              - matchName: quay.io
+              - matchPattern: cdn*.quay.io
+              - matchName: registry.k8s.io
+              - matchName: cdn.registry.k8s.io
+              - matchPattern: "*-docker.pkg.dev"
+    - toFQDNs:
+        - matchName: registry-1.docker.io
+        - matchName: auth.docker.io
+        - matchName: production.cloudflare.docker.com
+        - matchName: production.cloudfront.docker.com
+        - matchPattern: docker-images-prod.*.r2.cloudflarestorage.com
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
+        - matchName: quay.io
+        - matchPattern: cdn*.quay.io
+        - matchName: registry.k8s.io
+        - matchName: cdn.registry.k8s.io
+        - matchPattern: "*-docker.pkg.dev"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: zot-push-credentials
+spec:
+  description: The credentials job talks to the Kubernetes API and nothing else. With kube-proxy replacement the connection reaches the API servers on their own port, 6443.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: zot-push-credentials
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

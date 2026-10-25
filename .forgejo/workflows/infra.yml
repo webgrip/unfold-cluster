@@ -74,12 +74,9 @@ jobs:
             TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
             TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
 
-      - name: Mask the Hetzner tokens' first 32 characters, which Hetzner's API errors print
-        shell: bash
-        run: |
-          for token in "${HCLOUD_TOKEN:-}" "${TF_VAR_hcloud_cluster_token:-}" "${TF_VAR_hcloud_vip_token:-}"; do
-            [ -z "$token" ] || echo "::add-mask::${token:0:32}"
-          done
+      - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
+        working-directory: .
+        run: ./scripts/mask-hcloud-token-prefixes.sh
 
       - name: Refuse to run without credentials
         run: |
@@ -182,12 +179,9 @@ jobs:
             AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
             TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
 
-      - name: Mask the Hetzner tokens' first 32 characters, which Hetzner's API errors print
-        shell: bash
-        run: |
-          for token in "${HCLOUD_TOKEN:-}" "${TF_VAR_hcloud_cluster_token:-}" "${TF_VAR_hcloud_vip_token:-}"; do
-            [ -z "$token" ] || echo "::add-mask::${token:0:32}"
-          done
+      - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
+        working-directory: .
+        run: ./scripts/mask-hcloud-token-prefixes.sh
 
       - name: Init
         env:
