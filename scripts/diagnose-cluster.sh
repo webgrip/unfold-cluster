@@ -5,8 +5,9 @@ readonly usage="usage: diagnose-cluster.sh [--redact-test]
 
 Prints a read-only health report of the cluster for a public job log: the
 Hetzner API rate-limit headroom, each node's Talos services, tailnet logs and
-addresses, the etcd members, and the kube-system pods with the cloud
-controller's and Cilium's logs. It changes nothing in Hetzner or the cluster.
+addresses and volume encryption, the etcd members, whether the disk KMS
+answers, and the kube-system pods with the cloud controller's and Cilium's
+logs. It changes nothing in Hetzner or the cluster.
 
 Reads the talosconfig and kubeconfig from the OpenTofu state with
 tofu output, so tofu init must have run in infra/. Both are written with
@@ -176,6 +177,18 @@ report_node() {
   check "${node}: kubelet log, last 60 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs kubelet --tail 60
   check "${node}: SELinux state" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get securitystate
   check "${node}: auditd log with SELinux denials, last 100 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs auditd --tail 100
+  check "${node}: volume encryption of STATE and EPHEMERAL" env TALOSCONFIG="${state_dir}/talosconfig" "${repo_root}/scripts/encrypt-node.sh" status "$node"
+}
+
+report_disk_kms() {
+  local endpoint
+  endpoint="$(tofu -chdir="$infra_dir" output -raw disk_encryption_kms_endpoint 2>/dev/null)" || endpoint=""
+  if [ -z "$endpoint" ]; then
+    section "Disk KMS"
+    echo "the state has no disk_encryption_kms_endpoint yet"
+    return
+  fi
+  check "disk KMS ${endpoint} answers TLS with a certificate that verifies" env KMS_ENDPOINT="$endpoint" "${repo_root}/scripts/encrypt-node.sh" kms
 }
 
 report_etcd() {
@@ -266,6 +279,7 @@ main() {
     report_node "$node"
   done
   report_etcd
+  report_disk_kms
   report_kube_system_via_talos
   report_kubernetes
   summarize
