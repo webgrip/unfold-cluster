@@ -11,7 +11,7 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, and the manifests Talos installs at bootstrap: Cilium and Hetzner's cloud controller (rendered from their `kubernetes/platform/` files), the Flux operator and the Flux instance | OpenTofu, from `.forgejo/workflows/infra.yml` |
 | `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first | Flux in the cluster |
 
 ## From nothing to GitOps
 
@@ -48,6 +48,14 @@ Flux adopts the objects Talos made without recreating them: helm-controller's in
 
 A merge that changes these files deploys through Flux on its own. The `infra` workflow plans on the same merge, because the Talos machine config embeds the same files; apply that plan when convenient so a rebuilt cluster boots with the new seed. Never run `talosctl upgrade-k8s` with machine configs older than `main`: it re-applies the inline manifests and would roll Cilium back to the seed until the next Flux upgrade.
 
+## No kube-proxy
+
+Cilium replaces kube-proxy (`kubeProxyReplacement: true`) and reaches the API server through KubePrism on `localhost:7445`, Talos's local load balancer, so nothing needs a Service before Cilium is up. The control planes' machine config therefore carries `KubeProxyConfig` with `enabled: false`. Deleting that document with `$patch: delete`, as the first configs did, does not work: Talos then falls back to the v1alpha1 default and deploys kube-proxy, which is why the first cluster came up with both. The OpenTofu test in `infra/tests/kube_proxy.tftest.hcl` fails on a `$patch: delete`, on a missing `enabled: false`, and on Cilium values that would need kube-proxy.
+
+Talos installs its bootstrap manifests once and never deletes them: an object in its `talos-bootstrap-manifests-inventory` is skipped from then on, even after the config stops rendering it. So turning kube-proxy off in the config does not remove the DaemonSet that already runs. Flux does that: the Job in [kubernetes/platform/kube-proxy-removal](kubernetes/platform/kube-proxy-removal) deletes the `kube-proxy` DaemonSet, ServiceAccount and ClusterRoleBinding, with a ServiceAccount allowed to get and delete those three names and nothing else. It is idempotent (`--ignore-not-found`) and stays completed, so Flux leaves it alone. Flux cannot take the DaemonSet over instead: Talos owns its fields under the `talos` field manager, and a server-side apply by Flux keeps the `kube-proxy` container beside anything Flux adds.
+
+The `kube-proxy` nftables tables the old pods wrote stay on each node until it reboots, at the next Talos upgrade. They match nothing: Cilium's socket load balancer (coverage `Full`) translates every Service address in `connect()`, before a packet reaches netfilter, and NodePorts are answered by Cilium's BPF program on the interface, also before netfilter.
+
 The Talos seed still installs, and Flux does not yet own, the `hcloud` secret, the Flux operator and instance, the `trusted-signers` secret, the GitRepository and Kustomization `flux-system`, and the etcd backup's namespace and secret. A change to those still needs a `talosctl upgrade-k8s` after the apply, or a new cluster.
 
 ## Only signed commits deploy
@@ -70,6 +78,7 @@ Verification checks only the newest commit, so it does not stop a rollback: a fo
 * **Pod Security `restricted`** is the API server's default for every namespace; Talos exempts `kube-system`, where Cilium and the storage node plugin need host access.
 * **Default-deny networking**: a Cilium clusterwide policy denies all ingress and egress for every pod outside `kube-system` and `flux-system`, except DNS. A workload's namespace adds its own allow policy.
 * **Pinned, approved images**: a native ValidatingAdmissionPolicy refuses any pod outside `kube-system` and `flux-system` whose images, debug containers or image volumes are not pinned by digest or do not come from a repository on its `allowedPrefixes` list (today only `ghcr.io/siderolabs/`); a new workload adds its own prefix. The components in the two exempt namespaces (Cilium, the cloud controller, the CSI driver, the Flux operator and controllers) are pinned by digest in their chart values instead, and Flux at an exact version.
+* **Host firewall**: every node blocks inbound connections except the ports the cluster uses, each from named sources only ([docs/runbooks/host-firewall.md](docs/runbooks/host-firewall.md)). The Talos API and the API server take ADMIN_CIDRS, the tailnet and the private network.
 * **Pod traffic between nodes is encrypted** with Cilium's WireGuard. Traffic between the nodes themselves and from host-network pods is not (`nodeEncryption` is off), so it relies on each protocol's own TLS: etcd, the API server and the kubelet all use it.
 * **Hubble relay** runs, so `hubble observe --verdict DROPPED` shows what default-deny refused.
 
@@ -148,7 +157,7 @@ No job installs anything. The steps run in `infra-runner`, a toolchain image bui
 When nobody can reach Kubernetes, run Actions → `infra` → **Run workflow** on `main` with `diagnose` in the `apply` dropdown; `plan_digest` stays empty. The `diagnose` job reads the same OpenBao credentials as a plan, runs `tofu init` against the state, and stops there: no plan, no apply, and no Hetzner call except one. `scripts/diagnose-cluster.sh` then prints:
 
 * the Hetzner project's API budget, from the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers of one `GET /v1/locations?per_page=1` (the limit is per project, so every token in it shares the budget);
-* per node, through `talosctl` against the public address: `version`, `get members`, `service`, the last 50 lines of `ext-tailscale` and `get addresses`, then `etcd members`;
+* per node, through `talosctl` against the public address: `version`, `get members`, `service`, the last 50 lines of `ext-tailscale`, `get addresses` and the host firewall's `get nftableschains`, then `etcd members`;
 * per node, the Kubernetes containers (`talosctl containers -k`) and the last 100 log lines of every `kube-system` container of the cloud controller and Cilium;
 * through `kubectl`: nodes, pods, `kube-system` events, the cloud controller's log and Flux's sources. The kubeconfig points at the private VIP, so the script asks the first control plane's public address on 6443, which the firewall opens to `ADMIN_CIDRS`, and checks the certificate against the VIP's address, a name the API server's certificate is issued for.
 
