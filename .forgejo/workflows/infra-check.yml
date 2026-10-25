@@ -29,6 +29,9 @@ on:
       - scripts/plan-digest.sh
       - scripts/tofu-plan.sh
       - scripts/rebuild-drill.sh
+      - scripts/robot.sh
+      - scripts/check-metal-image.sh
+      - talos/**
       - scripts/test-*.sh
       - .forgejo/workflows/rebuild-drill.yml
 
@@ -102,6 +105,16 @@ jobs:
       - name: Test the rebuild drill's guard and teardown
         working-directory: .
         run: ./scripts/test-rebuild-drill.sh
+
+      - name: Test the Robot order, vSwitch, firewall and install steps against a stubbed Robot
+        working-directory: .
+        run: ./scripts/test-robot.sh
+
+      - name: Check the metal image pin Renovate maintains, and the check itself
+        working-directory: .
+        run: |
+          ./scripts/check-metal-image.sh
+          ./scripts/test-check-metal-image.sh
 
 
   token-mask-canary:

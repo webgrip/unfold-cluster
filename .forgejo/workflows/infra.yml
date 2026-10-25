@@ -8,6 +8,8 @@ on:
     paths:
       - infra/**
       - .forgejo/workflows/infra.yml
+      - talos/**
+      - scripts/robot.sh
       - kubernetes/clusters/main/**
       - kubernetes/platform/cilium/**
       - kubernetes/platform/hcloud-cloud-controller-manager/**
@@ -81,6 +83,10 @@ jobs:
             TF_VAR_hcloud_vip_token=secret/data/hetzner/unfold-vip#HCLOUD_TOKEN_VIP
             TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
             TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
+            ROBOT_USER=secret/data/hetzner/unfold-robot#ROBOT_USER
+            ROBOT_PASSWORD=secret/data/hetzner/unfold-robot#ROBOT_PASSWORD
+            TF_VAR_metal_image_pull_username=secret/data/unfold-cluster/metal-image-pull#username
+            TF_VAR_metal_image_pull_token=secret/data/unfold-cluster/metal-image-pull#token
 
       - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
         working-directory: .
@@ -89,7 +95,7 @@ jobs:
       - name: Refuse to run without credentials
         run: |
           set -eu
-          for name in HCLOUD_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_admin_cidrs TF_VAR_state_passphrase TF_VAR_admin_ssh_public_key; do
+          for name in HCLOUD_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_admin_cidrs TF_VAR_state_passphrase TF_VAR_admin_ssh_public_key ROBOT_USER ROBOT_PASSWORD; do
             eval "value=\${$name:-}"
             [ -n "$value" ] || { echo "::error::$name is not set for this repository"; exit 1; }
           done
@@ -251,6 +257,8 @@ jobs:
             AWS_ACCESS_KEY_ID=secret/data/unfold-cluster/tofu-state#STATE_S3_ACCESS_KEY
             AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
             TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
+            ROBOT_USER=secret/data/hetzner/unfold-robot#ROBOT_USER
+            ROBOT_PASSWORD=secret/data/hetzner/unfold-robot#ROBOT_PASSWORD
 
       - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
         working-directory: .

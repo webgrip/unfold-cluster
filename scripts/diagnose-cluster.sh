@@ -5,8 +5,12 @@ readonly usage="usage: diagnose-cluster.sh [--redact-test]
 
 Prints a read-only health report of the cluster for a public job log: the
 Hetzner API rate-limit headroom, each node's Talos services, tailnet logs and
-addresses, the etcd members, and the kube-system pods with the cloud
-controller's and Cilium's logs. It changes nothing in Hetzner or the cluster.
+addresses, the etcd members, the kube-system pods with the cloud
+controller's and Cilium's logs, and for the metal nodes their Robot state,
+extensions and sandbox runtimes, with the checks of the sandbox proof: the
+runtime handlers, the Kata and gVisor probes and the annotation guard
+refusing (a server-side dry run, which stores nothing). It changes nothing in
+Hetzner, Robot or the cluster.
 
 Reads the talosconfig and kubeconfig from the OpenTofu state with
 tofu output, so tofu init must have run in infra/. Both are written with
@@ -14,7 +18,8 @@ mode 0600 under RUNNER_TEMP (or TMPDIR) and removed on exit; neither is
 printed. Every line printed passes through a redaction of token-looking
 strings.
 
-Needs HCLOUD_TOKEN in the environment for the rate-limit check. Installs
+Needs HCLOUD_TOKEN in the environment for the rate-limit check, and
+ROBOT_USER and ROBOT_PASSWORD for the metal nodes' Robot state. Installs
 talosctl and kubectl at the pinned versions below, checksum-verified, when
 they are not on PATH.
 
@@ -70,9 +75,11 @@ check() {
   local title="$1"
   shift
   section "$title"
+  local status runner=(timeout "$command_timeout_seconds")
+  declare -F "$1" >/dev/null && runner=()
   set +e
-  timeout "$command_timeout_seconds" "$@" 2>&1 | redact
-  local status="${PIPESTATUS[0]}"
+  "${runner[@]}" "$@" 2>&1 | redact
+  status="${PIPESTATUS[0]}"
   set -e
   if [ "$status" -ne 0 ]; then
     echo "(exit ${status})"
@@ -161,6 +168,11 @@ read_state_outputs() {
   jq -r 'to_entries[] | "\(.key)\tworker \(.value.pool // "unfold")\t\(.value.public_ipv4)\t\(.value.private_ip)"' "${state_dir}/workers.json"
   mapfile -t control_plane_ips < <(jq -r '.[].public_ipv4' "${state_dir}/control_planes.json")
   mapfile -t worker_ips < <(jq -r '.[].public_ipv4' "${state_dir}/workers.json")
+  tofu -chdir="$infra_dir" output -json metal_nodes > "${state_dir}/metal_nodes.json" 2>/dev/null || echo '{}' > "${state_dir}/metal_nodes.json"
+  jq -r 'to_entries[] | "\(.key)\tmetal (Robot \(.value.server_number))\t\(.value.public_ipv4)\t\(.value.private_ip)"' "${state_dir}/metal_nodes.json"
+  mapfile -t metal_ips < <(jq -r '.[].public_ipv4 | select(. != "")' "${state_dir}/metal_nodes.json")
+  mapfile -t metal_names < <(jq -r 'keys[]' "${state_dir}/metal_nodes.json")
+  mapfile -t metal_server_numbers < <(jq -r '.[].server_number' "${state_dir}/metal_nodes.json")
   [ "${#control_plane_ips[@]}" -gt 0 ] || fail "the state holds no control planes"
 }
 
@@ -209,7 +221,7 @@ kube_system_containers() {
 
 report_kube_system_via_talos() {
   local node container
-  for node in "${control_plane_ips[@]}" "${worker_ips[@]}"; do
+  for node in "${control_plane_ips[@]}" "${worker_ips[@]}" "${metal_ips[@]}"; do
     check "${node}: Kubernetes containers" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" containers -k
     while IFS= read -r container; do
       check "${node}: log of ${container}, last 100 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs -k "$container" --tail 100
@@ -231,6 +243,60 @@ report_kubernetes() {
   check "kube-system events" "${kube[@]}" get events -n kube-system --sort-by=.lastTimestamp
   check "hcloud-cloud-controller-manager log, last 100 lines" "${kube[@]}" logs -n kube-system deploy/hcloud-cloud-controller-manager --tail 100 --all-containers
   check "Flux sources and kustomizations" "${kube[@]}" get gitrepositories,kustomizations -A
+  report_sandboxes "${kube[@]}"
+}
+
+report_metal_nodes() {
+  local index node
+  for index in "${!metal_server_numbers[@]}"; do
+    check "${metal_names[$index]}: Robot server, rescue, firewall and vSwitches" "${repo_root}/scripts/robot.sh" status "${metal_server_numbers[$index]}"
+  done
+  for node in "${metal_ips[@]}"; do
+    check "${node}: system extensions (expect kata-containers 4.3.1-webgrip, gvisor, tailscale)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get extensions
+    check "${node}: gVisor runtime config (expect platform kvm, oci-seccomp)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" read /etc/unfold-sandbox/runsc.toml
+    check "${node}: /dev/kvm" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" ls /dev/kvm
+    check "${node}: links (expect vswitch0 with MTU 1400)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get links
+  done
+}
+
+annotation_guard_probe() {
+  "$@" create --dry-run=server -f - <<'POD'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotation-guard-probe
+  namespace: sandbox-probes
+  annotations:
+    io.katacontainers.config.unfold-probe: "refused"
+spec:
+  runtimeClassName: kata
+  automountServiceAccountToken: false
+  containers:
+    - name: probe
+      image: docker.io/alpine/kubectl:1.37.1@sha256:a5d0fbecab3f7b6c2ab7398f1daa73a3e0ed6ece18556d21698233e9e3759cc7
+POD
+}
+
+expect_refusal() {
+  local output
+  if output="$("$@" 2>&1)"; then
+    printf '%s\n' "$output"
+    echo "the API server admitted it; the guard did not refuse"
+    return 1
+  fi
+  printf '%s\n' "$output"
+  grep -q "sandbox-annotations" <<<"$output"
+}
+
+report_sandboxes() {
+  local kube=("$@")
+  check "runtime handlers per node (expect kata and runsc on the metal nodes)" "${kube[@]}" get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.node\.webgrip\.io/pool}{"\t"}{.status.nodeInfo.kernelVersion}{"\t"}{range .status.runtimeHandlers[*]}{.name}{" "}{end}{"\n"}{end}'
+  check "RuntimeClasses" "${kube[@]}" get runtimeclasses -o wide
+  check "sandbox probe jobs" "${kube[@]}" get cronjobs,jobs,pods -n sandbox-probes -o wide
+  check "Kata probe log (expect a guest kernel that differs from the host's, Seccomp 2)" "${kube[@]}" logs -n sandbox-probes -l app.kubernetes.io/name=kata-probe --tail 20 --prefix
+  check "gVisor probe log (expect the gVisor kernel and Seccomp 2)" "${kube[@]}" logs -n sandbox-probes -l app.kubernetes.io/name=gvisor-probe --tail 20 --prefix
+  check "the annotation guard refuses a Kata annotation (server-side dry run)" expect_refusal annotation_guard_probe "${kube[@]}"
+  check "KEDA and the CI runner pods" "${kube[@]}" get pods -n keda -o wide
 }
 
 summarize() {
@@ -274,9 +340,10 @@ main() {
   read_state_outputs
 
   local node
-  for node in "${control_plane_ips[@]}" "${worker_ips[@]}"; do
+  for node in "${control_plane_ips[@]}" "${worker_ips[@]}" "${metal_ips[@]}"; do
     report_node "$node"
   done
+  report_metal_nodes
   report_etcd
   report_disk_kms
   report_kube_system_via_talos

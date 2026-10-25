@@ -152,6 +152,14 @@ expect "get prints the stored property" test "$("$tool" get unfold-cluster/talos
 expect "get prints nothing for an absent secret" test -z "$("$tool" get unfold-cluster/nothing-here bundle 2>/dev/null)"
 expect "get keeps the workflow masks off stdout" bash -c '! "$1" get unfold-cluster/talos-secrets bundle 2>/dev/null | grep -q add-mask' _ "$tool"
 
+printf '2345678\n' | "$tool" put number unfold-cluster/metal/unfold-metal-1 server_number >/dev/null 2>&1
+printf 'B20261025-3456789-123456\n' | "$tool" put robot-transaction unfold-cluster/metal/unfold-metal-1 transaction_id >/dev/null 2>&1
+printf 'a8:a1:59:0b:1c:2d\n' | "$tool" put mac unfold-cluster/metal/unfold-metal-1 mac >/dev/null 2>&1
+expect "a metal record keeps its server number, order and MAC" test "$(stored unfold-cluster_metal_unfold-metal-1 server_number)/$(stored unfold-cluster_metal_unfold-metal-1 transaction_id)/$(stored unfold-cluster_metal_unfold-metal-1 mac)" = "2345678/B20261025-3456789-123456/a8:a1:59:0b:1c:2d"
+expect "a server number with letters is refused" bash -c '! printf "12ab\n" | "$1" put number unfold-cluster/metal/unfold-metal-1 server_number >/dev/null 2>&1' _ "$tool"
+expect "a transaction id with a slash is refused" bash -c '! printf "B2026/1\n" | "$1" put robot-transaction unfold-cluster/metal/unfold-metal-1 transaction_id >/dev/null 2>&1' _ "$tool"
+expect "an upper-case MAC is refused" bash -c '! printf "A8:A1:59:0B:1C:2D\n" | "$1" put mac unfold-cluster/metal/unfold-metal-1 mac >/dev/null 2>&1' _ "$tool"
+
 expect "a path outside the KV naming is refused" bash -c '! printf "198.51.100.23\n" | "$1" put ipv4 "../sys/policy" ipv4 >/dev/null 2>&1' _ "$tool"
 expect "without OIDC nothing is sent" bash -c '! printf "198.51.100.23\n" | env -u ACTIONS_ID_TOKEN_REQUEST_URL "$1" put ipv4 unfold/headscale-address ipv4 >/dev/null 2>&1' _ "$tool"
 

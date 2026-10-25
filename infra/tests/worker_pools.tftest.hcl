@@ -53,7 +53,15 @@ mock_provider "external" {
   mock_data "external" {
     defaults = {
       result = {
-        key = "hskey-auth-mocked"
+        key             = "hskey-auth-mocked"
+        state           = "ordered"
+        product         = "AX41-NVMe"
+        server_number   = "2345678"
+        server_ip       = "198.51.100.40"
+        monthly_net_eur = ""
+        setup_net_eur   = ""
+        id              = "31337"
+        mac             = "a8:a1:59:0b:1c:2d"
       }
     }
   }

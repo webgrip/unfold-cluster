@@ -1,5 +1,5 @@
 locals {
-  cluster_nodes = merge(local.control_planes, { for name, worker in local.workers : name => worker.private_ip })
+  cluster_nodes = merge(local.control_planes, { for name, worker in local.workers : name => worker.private_ip }, { for name, node in local.metal_nodes : name => node.private_ip })
 
   disk_encryption_keys = [{
     slot = 0

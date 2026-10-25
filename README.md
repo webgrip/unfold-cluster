@@ -9,9 +9,9 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | Path | What it holds | Applied by |
 | --- | --- | --- |
 | `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, the manifests Talos installs at bootstrap (each rendered from its files under `kubernetes/`), and the two Secrets OpenTofu writes into the running cluster | OpenTofu, from `.forgejo/workflows/infra.yml` |
-| `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
+| `talos/` | Version pins, the Image Factory schematics for the cloud and metal nodes, and the pinned Kata 4.3.1 installer and disk image of the metal node (`metal-image.yaml`) | OpenTofu, the snapshot build and Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster, and in `flux-system/` its own GitRepository, Kustomization and trusted signers | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: the Flux operator and instance, Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first, the roles people sign in to, the `gvisor` RuntimeClass | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: the Flux operator and instance, Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first, the roles people sign in to, the `gvisor` and `kata` RuntimeClasses and their probes | Flux in the cluster |
 | `access/` | The OIDC kubeconfig people use daily; no secret in it | people, with `mise.toml`'s kubectl, kubelogin and k9s |
 
 ## From nothing to GitOps
@@ -130,7 +130,7 @@ The Headscale server installs Ubuntu security updates at 04:00 UTC and reboots a
 | `unfold-app-1` | Cloud CX33 | 4 vCPU, 8 GB, 80 GB | `10.64.0.21` | Unfold, ploegd and their databases only (label and taint `node.webgrip.io/pool=unfold`) |
 | `unfold-ci-1` | Cloud CX43 | 8 vCPU, 16 GB, 160 GB | `10.64.0.31` | CI jobs only, under the `gvisor` RuntimeClass (label and taint `node.webgrip.io/pool=ci`) |
 | `unfold-headscale` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | public only | Headscale, the admin tailnet's coordination server and relay |
-| `unfold-metal-1` | Robot AX41 | | `10.64.1.31` on the vSwitch | agent Runs under Kata; not in `infra/` yet |
+| `unfold-metal-1` | Robot AX41 (FSN1) | 6 cores, 64 GB, 2 × 512 GB NVMe | `10.64.1.31` on the vSwitch | agent Runs under Kata 4.3.1 and CI under gVisor on KVM (label and taint `node.webgrip.io/pool=metal`); ordered and installed by the `infra` workflow ([runbook](docs/runbooks/metal-node.md)) |
 
 The cloud servers are Hetzner's cost-optimized CX line, chosen on 2026-10-24 because the 2026 price rises made the CPX line (AMD, regular performance) three to four times the price. CX servers run on shared Intel or AMD x86 hosts and Hetzner limits how many it sells, so a create can fail with the type unavailable; `location` can then move to `nbg1`. They must stay x86, because the Talos snapshot and the Headscale package are amd64: Arm CAX types are refused by the variables' validation.
 
@@ -148,7 +148,7 @@ The cloud servers are Hetzner's cost-optimized CX line, chosen on 2026-10-24 bec
 
 Hetzner list prices of 2026-10-23, checked on 2026-10-24 at [hetzner.com/cloud/cost-optimized](https://www.hetzner.com/cloud/cost-optimized/), excluding VAT, each including the server's public IPv4 address. Billing is hourly up to the monthly price, from creation until deletion, whether the server runs or not. The Cloud Network, the placement group and the alias IP of the API address cost nothing; the Talos snapshot is billed per GB stored. The first five servers on the CPX line (CPX22, CPX32, CPX02) list at €102.45 a month. The AX41 and object storage are not in this table.
 
-The AX41 is ordered once by hand in Robot. Its vSwitch id then goes into `vswitch_id`, which adds the vSwitch subnet to the Cloud Network. Its VLAN interface uses MTU 1400, the smallest link in the cluster, so Cilium's `MTU` is set to 1400; Cilium subtracts its VXLAN (50 bytes) and WireGuard (80 bytes) overhead itself, leaving pods 1270.
+The AX41 is declared in `metal_servers` and ordered by the `infra` workflow through the Robot webservice, at most once and only within its price ceiling of 65 EUR a month net; the workflow also creates the vSwitch `unfold-main`, which adds the subnet `10.64.1.0/24` to the Cloud Network ([metal node runbook](docs/runbooks/metal-node.md)). Its VLAN interface uses MTU 1400, the smallest link in the cluster, so Cilium's `MTU` is set to 1400; Cilium subtracts its VXLAN (50 bytes) and WireGuard (80 bytes) overhead itself, leaving pods 1270.
 
 Pods get addresses from `10.65.0.0/16` and Services from `10.66.0.0/16`, and Cilium runs as cluster `unfold-main` with ID 2, as the [address plan](docs/rfc/0001-security-architecture.md#address-plan) allocates them for ClusterMesh. None of these can change once the cluster exists.
 
@@ -257,4 +257,5 @@ The target design for every layer, its threat model, the residual risks and the 
 * **Headscale keeps no backup, by design.** A new server mints new keys in the same apply and every node and the homelab gateway re-join on their own; only admin devices register again ([reproducibility](docs/reproducibility.md#headscale-survives-a-rebuild)).
 * **Every Hetzner token reads every disk** until the Talos partitions are encrypted with a key server outside this Hetzner project (see [Credentials and rotation](#credentials-and-rotation)). The encryption config is built and switched off until that key server exists; [docs/disk-encryption.md](docs/disk-encryption.md) has the proposal and the node-by-node rollout.
 * **Two rules live outside this repository.** The GitHub mirror's ruleset `main: no rollback` refuses force-pushes and deletion of `main`, and OpenBao's role `ci-unfold-cluster` (homelab-cluster, `kubernetes/apps/security/openbao/bootstrap/config.sh`) decides who reads the credentials. A change to either is a change to this repository's security.
-* **OpenBao** and the AX41 are not in the code yet.
+* **OpenBao** is not in the code yet.
+* **The metal node's Kata image is ours and private.** Until Renovate pins `talos/metal-image.yaml` to a `talos-kata-extension` release, an apply orders and wires the AX41 and installs nothing; the node pulls from the private `webgrip-talos` registry with a read-only token ([ADR 0001](docs/adr/0001-kata-4-on-the-metal-node.md)).

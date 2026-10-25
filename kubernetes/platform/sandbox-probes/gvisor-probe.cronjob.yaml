@@ -1,0 +1,61 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gvisor-probe
+  namespace: sandbox-probes
+spec:
+  schedule: "15,45 * * * *"
+  timeZone: Europe/Amsterdam
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: gvisor-probe
+            app.kubernetes.io/part-of: sandbox-probes
+            ploeg.webgrip.dev/isolation-class: hardened
+        spec:
+          restartPolicy: Never
+          runtimeClassName: gvisor
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          nodeSelector:
+            runtime.webgrip.io/kvm: "true"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: probe
+              image: docker.io/alpine/kubectl:1.37.1@sha256:a5d0fbecab3f7b6c2ab7398f1daa73a3e0ed6ece18556d21698233e9e3759cc7
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  seccomp="$(sed -n 's/^Seccomp:[[:space:]]*//p' /proc/self/status)"
+                  echo "sandbox=gvisor kernel=$(uname -r) seccomp=${seccomp}"
+                  [ "$(uname -r)" = 4.4.0 ] || { echo "this pod does not run under gVisor, whose kernel reports 4.4.0"; exit 1; }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                  ephemeral-storage: 1Mi
+                limits:
+                  memory: 64Mi
+                  ephemeral-storage: 16Mi

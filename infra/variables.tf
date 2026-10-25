@@ -27,7 +27,7 @@ variable "control_plane_server_type" {
 }
 
 variable "worker_pools" {
-  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB) in Nuremberg because Falkenstein had no CX43 to place on 2026-10-25, whose CI jobs run under the gvisor RuntimeClass. Nodes a cluster-autoscaler adds are not listed here."
+  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB) in Nuremberg because Falkenstein had no CX43 to place on 2026-10-25, whose CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
   type = map(object({
     server_type = string
     location    = optional(string)
@@ -52,7 +52,7 @@ variable "worker_pools" {
       node_count  = 0
       name_prefix = "unfold-ci"
       first_host  = 31
-      labels      = { "node.webgrip.io/pool" = "ci" }
+      labels      = { "node.webgrip.io/pool" = "ci", "runtime.webgrip.io/gvisor" = "true" }
       taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
     }
   }
@@ -97,10 +97,71 @@ variable "admin_cidrs" {
   default     = []
 }
 
-variable "vswitch_id" {
-  description = "Robot vSwitch id that joins the AX41 to the Cloud Network. Null until the AX41 is ordered."
+variable "metal_servers" {
+  description = "The Robot dedicated servers the cluster runs on, by node name. The apply orders each one through the Robot webservice once, only inside an apply whose reviewed plan shows the order, and refuses another product, a location the product is not sold in, more servers than are declared here, a monthly price (net, the primary IPv4 address included) above max_monthly_eur or a setup fee above max_setup_eur. It then puts the server on the vSwitch, sets its Robot firewall and installs Talos from the rescue system. Raising install_generation is the reviewed way to wipe and reinstall a node; nothing else reinstalls one that runs Talos. gvisor_platform is kvm on bare metal, systrap the fallback. Cancelling a server stays a person's act in Robot (docs/runbooks/metal-node.md)."
+  type = map(object({
+    product            = string
+    location           = string
+    max_monthly_eur    = number
+    max_setup_eur      = optional(number, 0)
+    private_host       = number
+    install_generation = optional(number, 1)
+    gvisor_platform    = optional(string, "kvm")
+  }))
+  default = {
+    "unfold-metal-1" = {
+      product         = "AX41-NVMe"
+      location        = "FSN1"
+      max_monthly_eur = 65
+      private_host    = 31
+    }
+  }
+
+  validation {
+    condition     = alltrue([for name in keys(var.metal_servers) : can(regex("^unfold-metal-[0-9]+$", name))])
+    error_message = "A metal node is named unfold-metal-N: the order step counts the Robot servers named unfold-metal-* against the declared ones."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : contains(["FSN1", "NBG1"], server.location)])
+    error_message = "A metal server lives in FSN1 or NBG1, where the vSwitch reaches the Cloud Network's eu-central zone."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.max_monthly_eur > 0 && server.max_monthly_eur <= 100 && server.max_setup_eur >= 0 && server.max_setup_eur <= 100])
+    error_message = "Each metal server declares a price ceiling between 0 and 100 EUR a month and a setup ceiling no higher than 100 EUR; a larger purchase is a decision for a person, not a variable."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.private_host >= 11 && server.private_host <= 254 && floor(server.private_host) == server.private_host])
+    error_message = "private_host is the node's host number in the vSwitch subnet 10.64.1.0/24, 11 to 254; the gateway and Hetzner's reserved addresses sit below."
+  }
+
+  validation {
+    condition     = length(distinct([for server in values(var.metal_servers) : server.private_host])) == length(var.metal_servers)
+    error_message = "Two metal servers share a private_host."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.install_generation >= 1 && floor(server.install_generation) == server.install_generation])
+    error_message = "install_generation is a whole number, 1 or higher; raising it wipes and reinstalls that node."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : contains(["kvm", "systrap"], server.gvisor_platform)])
+    error_message = "gvisor_platform is kvm, or systrap when the node's KVM misbehaves."
+  }
+}
+
+variable "metal_vswitch_vlan" {
+  description = "The VLAN id of the Robot vSwitch unfold-main that joins the metal servers to the Cloud Network. Robot accepts 4000 to 4091."
   type        = number
-  default     = null
+  default     = 4000
+
+  validation {
+    condition     = var.metal_vswitch_vlan >= 4000 && var.metal_vswitch_vlan <= 4091
+    error_message = "Robot vSwitch VLANs are 4000 to 4091."
+  }
 }
 
 variable "state_passphrase" {
@@ -263,5 +324,30 @@ variable "headscale_address_property" {
 variable "talos_secrets_import_file" {
   description = "Path of a talosctl secrets bundle to import as talos_machine_secrets.cluster. The infra workflow sets it only when the state holds no Talos secrets and OpenBao holds an escrowed bundle, so a rebuild from an empty state keeps the cluster's certificate authorities and service-account key. Empty imports nothing."
   type        = string
+  default     = ""
+}
+
+variable "gvisor_oci_seccomp" {
+  description = "Apply each pod's seccomp profile inside gVisor's sandbox as well (runsc oci-seccomp) on every node that runs gVisor. False is the rollback when a CI build needs a syscall the RuntimeDefault profile blocks; see docs/runbooks/metal-node.md."
+  type        = bool
+  default     = true
+}
+
+variable "metal_image_file" {
+  description = "The file, relative to infra/, that pins the metal nodes' Talos installer and disk image (built with Kata 4.3.1 by webgrip/talos-kata-extension; docs/adr/0001-kata-4-on-the-metal-node.md). While its values are empty, the metal servers are ordered and wired but not installed. Tests point it at their fixtures."
+  type        = string
+  default     = "../talos/metal-image.yaml"
+}
+
+variable "metal_image_pull_username" {
+  description = "The Forgejo user whose read:package token pulls the private metal images: webgrip-ci, read from OpenBao unfold-cluster/metal-image-pull, where homelab-cluster's unfold-metal-image-provisioner keeps it."
+  type        = string
+  default     = ""
+}
+
+variable "metal_image_pull_token" {
+  description = "The read:package token that pulls the private metal images; the node's registry auth for upgrades. Minted by homelab-cluster's unfold-metal-image-provisioner, read from OpenBao unfold-cluster/metal-image-pull."
+  type        = string
+  sensitive   = true
   default     = ""
 }
