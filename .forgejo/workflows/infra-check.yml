@@ -25,6 +25,7 @@ on:
       - scripts/set-etcd-backup-lifecycle.sh
       - scripts/rebuild-drill.sh
       - scripts/robot.sh
+      - scripts/pin-metal-image.sh
       - talos/**
       - scripts/test-*.sh
       - .forgejo/workflows/rebuild-drill.yml
@@ -83,6 +84,10 @@ jobs:
       - name: Test the Robot order, vSwitch, firewall and install steps against a stubbed Robot
         working-directory: .
         run: ./scripts/test-robot.sh
+
+      - name: Test the metal image pin a talos-kata-extension release writes
+        working-directory: .
+        run: ./scripts/test-pin-metal-image.sh
 
 
   token-mask-canary:

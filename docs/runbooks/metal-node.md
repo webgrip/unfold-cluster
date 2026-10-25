@@ -80,6 +80,20 @@ ranges, the tailnet and the private network, and the cluster's ports from the pr
 **Reinstalling** wipes the node. Raise `install_generation` of that server in `infra/variables.tf`
 in a reviewed pull request; nothing else lifts the guard.
 
+## The image pin
+
+`talos/metal-image.yaml` pins the installer and disk image. Merging a version bump in
+`webgrip/talos-kata-extension` releases it without a click, and its release job opens the pull
+request here that pins the new values with `scripts/pin-metal-image.sh`. Without that pull
+request, the release's notes carry the three values, and the script writes them the same way:
+
+```sh
+./scripts/pin-metal-image.sh <installerImage> <diskImageUrl> <diskImageSha256>
+```
+
+The installer and disk image are public packages of the `webgrip` organisation, so the node and
+the rescue system pull them without credentials; the extension's source repository stays private.
+
 ## Fallbacks
 
 | Symptom | Change |
