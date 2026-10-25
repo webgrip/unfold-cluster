@@ -6,7 +6,9 @@ readonly usage="usage: test-openbao-kv.sh
 
 Runs scripts/openbao-kv.sh against a stubbed curl that plays Forgejo's OIDC
 endpoint and OpenBao's KV engine, and checks what it writes, what it keeps,
-what it refuses and that it never prints a value."
+what it refuses and that it never prints a value. The Talos secrets bundle it
+escrows is rendered by infra/modules/talos-secrets-bundle and piped from
+tofu output -raw exactly as the infra workflow does, so it needs tofu."
 
 case "${1:-}" in
   -h | --help) echo "$usage"; exit 0 ;;
@@ -94,6 +96,43 @@ bundle=$'cluster:\n  id: abc\ncerts:\n  k8sserviceaccount:\n    key: LS0t\n'
 printf '%s' "$bundle" | "$tool" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1
 expect "a secrets bundle is stored whole" test "$(stored unfold-cluster_talos-secrets bundle)" = "${bundle%$'\n'}"
 expect "a file that is not a secrets bundle is refused" bash -c '! printf "cluster:\n  id: x\n" | "$1" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1' _ "$tool"
+
+mkdir -p "${work}/bundle-module"
+cat >"${work}/bundle-module/main.tf" <<EOF
+locals {
+  pair = { cert = "canary-crt", key = "canary-key" }
+}
+
+module "talos_secrets_bundle" {
+  source = "${repo}/infra/modules/talos-secrets-bundle"
+  machine_secrets = {
+    cluster    = { id = "canary-cluster-id", secret = "canary-cluster-secret" }
+    secrets    = { bootstrap_token = "canary-bootstrap", secretbox_encryption_secret = "canary-secretbox" }
+    trustdinfo = { token = "canary-trustd" }
+    certs = {
+      etcd               = local.pair
+      k8s                = local.pair
+      k8s_aggregator     = local.pair
+      k8s_serviceaccount = { key = "canary-serviceaccount" }
+      os                 = local.pair
+    }
+  }
+}
+
+output "talos_secrets_bundle" {
+  value     = module.talos_secrets_bundle.yaml
+  sensitive = true
+}
+EOF
+tofu -chdir="${work}/bundle-module" init -input=false >/dev/null
+tofu -chdir="${work}/bundle-module" apply -auto-approve -input=false >/dev/null
+rendered="$(tofu -chdir="${work}/bundle-module" output -raw talos_secrets_bundle)"
+tofu -chdir="${work}/bundle-module" output -raw talos_secrets_bundle \
+  | "$tool" put talos-secrets unfold-cluster/rendered-talos-secrets bundle >"${work}/out" 2>&1 || true
+expect "the bundle tofu renders is accepted from tofu output -raw" grep -q '^wrote bundle to unfold-cluster/rendered-talos-secrets' "${work}/out"
+expect "the rendered bundle is stored whole" test "$(stored unfold-cluster_rendered-talos-secrets bundle)" = "$rendered"
+expect "the rendered bundle is never printed" bash -c '! grep -q canary "$1"' _ "${work}/out"
+expect "an empty sensitive output is refused" bash -c '! printf "" | "$1" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1' _ "$tool"
 
 expect "get prints the stored property" test "$("$tool" get unfold-cluster/talos-secrets bundle 2>/dev/null)" = "${bundle%$'\n'}"
 expect "get prints nothing for an absent secret" test -z "$("$tool" get unfold-cluster/nothing-here bundle 2>/dev/null)"
