@@ -1,0 +1,39 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  distribution:
+    # renovate: datasource=github-releases depName=fluxcd/flux2 extractVersion=^v(?<version>.+)$
+    version: 2.9.6
+    registry: ghcr.io/fluxcd
+    artifact: oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:v0.61.0@sha256:a94070768dc353efb3aaf7a28ae2d57566e8d20d8dc5287aacb6c10e169b7137
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+  cluster:
+    type: kubernetes
+    domain: cluster.local
+    networkPolicy: true
+    multitenant: false
+    tenantDefaultServiceAccount: default
+  kustomize:
+    patches:
+      - target:
+          kind: Deployment
+        patch: |
+          - op: add
+            path: /spec/template/spec/tolerations
+            value:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
+          - op: add
+            path: /spec/template/spec/nodeSelector
+            value:
+              node-role.kubernetes.io/control-plane: ""

@@ -14,13 +14,20 @@ spec:
   variables:
     - name: allowedPrefixes
       expression: >-
-        [
-          'ghcr.io/siderolabs/',
-          'docker.io/victoriametrics/vmagent:',
-          'docker.io/timberio/vector:',
-          'quay.io/prometheus/node-exporter:',
-          'registry.k8s.io/kube-state-metrics/kube-state-metrics:'
-        ]
+        ['ghcr.io/siderolabs/',
+        'ghcr.io/external-secrets/external-secrets:',
+        'ghcr.io/kedacore/keda:',
+        'ghcr.io/kedacore/keda-metrics-apiserver:',
+        'ghcr.io/kedacore/keda-admission-webhooks:',
+        'code.forgejo.org/forgejo/runner:',
+        'docker.io/moby/buildkit:',
+        'docker.io/library/node:',
+        'ghcr.io/project-zot/zot:',
+        'docker.io/alpine/kubectl:',
+        'docker.io/victoriametrics/vmagent:',
+        'docker.io/timberio/vector:',
+        'quay.io/prometheus/node-exporter:',
+        'registry.k8s.io/kube-state-metrics/kube-state-metrics:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)

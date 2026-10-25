@@ -2,12 +2,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - flux-system
+  - ../../platform/flux-operator
+  - ../../platform/flux-instance
   - ../../platform/cilium
   - ../../platform/hetzner-charts
   - ../../platform/hcloud-cloud-controller-manager
   - ../../platform/hcloud-csi
   - ../../platform/network-policy
   - ../../platform/admission-policies
+  - ../../platform/external-secrets
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
+  - ../../platform/human-access
+  - ../../platform/keda
+  - ../../platform/ci-runners
+  - ../../platform/zot
+  - ../../platform/gvisor
   - ../../platform/observability

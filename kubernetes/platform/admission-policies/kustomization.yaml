@@ -3,3 +3,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - pinned-approved-images.yaml
+  - pod-security-restricted.yaml
+  - host-access.yaml
+  - sandbox-annotations.yaml
+  - sandboxed-workloads.yaml
+  - immutable-image-references.yaml
+  - resource-limits.yaml
+  - service-exposure.yaml
+  - cluster-admin-bindings.yaml
+  - service-account-token-secrets.yaml
+  - pod-security-floor.yaml

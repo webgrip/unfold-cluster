@@ -45,6 +45,7 @@ redact() {
     -e 's/hskey-[A-Za-z0-9_-]+/hskey-<redacted>/g' \
     -e 's/tskey-[A-Za-z0-9_-]+/tskey-<redacted>/g' \
     -e 's/([Bb]earer)[[:space:]]+[^[:space:]"]+/\1 <redacted>/g' \
+    -e "s/(for token ')[^']*/\\1<redacted>/g" \
     -e 's/([Aa]uth[_-]?[Kk]ey|[Tt]oken|[Pp]assword|[Ss]ecret)("?[[:space:]]*[=:][[:space:]]*"?)[^[:space:]",}]+/\1\2<redacted>/g' \
     -e 's/([0-9a-f]{32})([0-9a-f]{32})/\1@@hex@@\2/g' \
     -e ':token' \
@@ -151,11 +152,12 @@ read_state_outputs() {
     tofu -chdir="$infra_dir" output -raw kubeconfig > "${state_dir}/kubeconfig" ) \
     || fail "tofu output could not read the talosconfig or kubeconfig; has the cluster been applied?"
   tofu -chdir="$infra_dir" output -json control_planes > "${state_dir}/control_planes.json"
-  tofu -chdir="$infra_dir" output -json unfold_worker > "${state_dir}/unfold_worker.json"
+  tofu -chdir="$infra_dir" output -json workers > "${state_dir}/workers.json" 2>/dev/null \
+    || tofu -chdir="$infra_dir" output -json unfold_worker > "${state_dir}/workers.json"
   jq -r 'to_entries[] | "\(.key)\tcontrol plane\t\(.value.public_ipv4)\t\(.value.private_ip)"' "${state_dir}/control_planes.json"
-  jq -r 'to_entries[] | "\(.key)\tworker\t\(.value.public_ipv4)\t\(.value.private_ip)"' "${state_dir}/unfold_worker.json"
+  jq -r 'to_entries[] | "\(.key)\tworker \(.value.pool // "unfold")\t\(.value.public_ipv4)\t\(.value.private_ip)"' "${state_dir}/workers.json"
   mapfile -t control_plane_ips < <(jq -r '.[].public_ipv4' "${state_dir}/control_planes.json")
-  mapfile -t worker_ips < <(jq -r '.[].public_ipv4' "${state_dir}/unfold_worker.json")
+  mapfile -t worker_ips < <(jq -r '.[].public_ipv4' "${state_dir}/workers.json")
   [ "${#control_plane_ips[@]}" -gt 0 ] || fail "the state holds no control planes"
 }
 

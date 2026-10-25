@@ -11,6 +11,13 @@ on:
       - kubernetes/platform/cilium/**
       - kubernetes/platform/hcloud-cloud-controller-manager/**
       - kubernetes/platform/hetzner-charts/**
+      - kubernetes/platform/flux-operator/**
+      - kubernetes/platform/flux-instance/**
+      - kubernetes/platform/etcd-backup/namespace.yaml
+      - scripts/write-cluster-secrets.sh
+      - scripts/mask-hcloud-token-prefixes.sh
+      - scripts/test-mask-hcloud-token-prefixes.sh
+      - scripts/diagnose-cluster.sh
 
 env:
   TF_IN_AUTOMATION: "1"
@@ -39,3 +46,64 @@ jobs:
       - name: Test against mocked providers
         run: tofu test
 
+
+  token-mask-canary:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Test the masks against the runner's replacement rules
+        run: ./scripts/test-mask-hcloud-token-prefixes.sh
+
+      - name: Make a fake Hetzner token for this run
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(printf 'unfold-cluster mask canary %s' "${GITHUB_RUN_ID}" | sha256sum | cut -d' ' -f1)"
+          echo "HCLOUD_TOKEN=${token}" >> "${GITHUB_ENV}"
+
+      - name: Mask it the way plan-or-apply does
+        run: ./scripts/mask-hcloud-token-prefixes.sh
+
+      - name: Print what Hetzner prints when it refuses the token
+        shell: bash
+        run: |
+          echo "Error: Limit of '3600' requests per hour for token '${HCLOUD_TOKEN:0:32}...' reached. (rate_limit_exceeded)"
+          echo "Authorization: Bearer ${HCLOUD_TOKEN}"
+
+  token-mask-proof:
+    needs: token-mask-canary
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - name: Read the canary's public log and refuse any trace of its token
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(printf 'unfold-cluster mask canary %s' "${GITHUB_RUN_ID}" | sha256sum | cut -d' ' -f1)"
+          log="${RUNNER_TEMP}/token-mask-canary.log"
+          jobs_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_NUMBER}/jobs"
+          canary_job=""
+          for wait_round in 1 2 3 4 5 6; do
+            for job in 0 1 2 3 4 5; do
+              curl -fsS -o "$log" "${jobs_url}/${job}/attempt/1/logs" || continue
+              if [[ "$(head -n 1 "$log")" == *"of job token-mask-canary,"* ]]; then
+                canary_job="$job"
+                break 2
+              fi
+            done
+            echo "no canary log yet (round ${wait_round}); waiting"
+            sleep 10
+          done
+          [ -n "$canary_job" ] || { echo "::error::found no log of job token-mask-canary under ${jobs_url}"; exit 1; }
+          echo "the canary is job ${canary_job}: ${jobs_url}/${canary_job}/attempt/1/logs"
+          if grep -qF "${token:0:16}" "$log"; then
+            echo "::error::the canary's public log shows its fake token's first 16 characters; the masks did not apply"
+            exit 1
+          fi
+          grep -qF "for token '***...' reached" "$log" || { echo "::error::the canary's 429 line is missing or not masked as '***...'"; exit 1; }
+          grep -qF "Authorization: Bearer ***" "$log" || { echo "::error::the canary's whole-token line is missing or not masked"; exit 1; }
+          echo "the public log shows the fake token only as ***"

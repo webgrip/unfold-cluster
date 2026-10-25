@@ -32,6 +32,17 @@
     },
     {
       "customType": "regex",
+      "description": "The FluxInstance names its manifests artifact as one OCI reference, `artifact: oci://<image>:<tag>@sha256:<digest>`, which the `# renovate:` manager above would read from the first colon. This reads the image, tag and digest from the reference itself.",
+      "managerFilePatterns": [
+        "/^kubernetes/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "artifact:\\s*\"?oci://(?<depName>[^:\\s\"]+):(?<currentValue>[^@\\s\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
       "description": "Step-level composite actions pinned by commit with the full Forgejo URL, `uses: https://forgejo.webgrip.dev/webgrip/<repo>/<path>@<40 hex> # vX.Y.Z`. The forgejo preset's digest manager expects the shorthand without the host, and its tag manager only the bare tag, so this form would freeze. gitea-tags resolves the tag to its commit, so the digest and the comment move together.",
       "managerFilePatterns": [
         "/^\\.forgejo/workflows/.*\\.ya?ml$/"
@@ -55,17 +66,16 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "The Flux operator, its image, the Flux instance chart and the manifests artifact are released together and must move together. Flux itself moves with them: the operator only installs a Flux version that the pinned manifests artifact contains.",
+      "description": "The Flux operator chart, its image and the manifests artifact are released together and must move together. Flux itself moves with them: the operator only installs a Flux version that the pinned manifests artifact contains.",
       "matchDepNames": [
-        "ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
-        "ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
+        "flux-operator",
         "ghcr.io/controlplaneio-fluxcd/flux-operator",
         "ghcr.io/controlplaneio-fluxcd/flux-operator-manifests",
         "fluxcd/flux2"
       ],
       "groupName": "flux operator",
       "prBodyNotes": [
-        "`flux_version` in `infra/bootstrap-manifests.tf` must be a directory under `flux/` in the pinned `flux-operator-manifests` artifact, or the FluxInstance stops reconciling. A Flux release newer than the artifact waits for the next operator release."
+        "`spec.distribution.version` in `kubernetes/platform/flux-instance/fluxinstance.yaml` must be a directory under `flux/` in the pinned `flux-operator-manifests` artifact, or the FluxInstance stops reconciling. A Flux release newer than the artifact waits for the next operator release. Flux upgrades the operator and Flux itself on merge; the Talos seed reads the same files and moves with the next `infra` apply."
       ]
     },
     {
@@ -90,6 +100,14 @@
       "prBodyNotes": [
         "Keep each sidecar on the tag the new chart's `values.yaml` ships unless its release notes say the chart's RBAC and flags still fit."
       ]
+    },
+    {
+      "description": "Zot's image is pinned by digest beside its chart, so the two move in one PR.",
+      "matchDepNames": [
+        "ghcr.io/project-zot/helm-charts/zot",
+        "ghcr.io/project-zot/zot"
+      ],
+      "groupName": "zot"
     },
     {
       "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",
@@ -137,6 +155,20 @@
       "dependencyDashboardApproval": true,
       "prBodyNotes": [
         "Update the `talosctl_sha256_linux_*` values in `scripts/diagnose-cluster.sh` from the Talos release's `sha256sum.txt`, and the `kubectl_sha256_linux_*` values from `https://dl.k8s.io/release/<version>/bin/linux/<arch>/kubectl.sha256`."
+      ]
+    },
+    {
+      "description": "kube-apiserver, kubectl and etcd for the admission-policy fixtures are installed from pinned checksums in scripts/test-admission-policies.sh, which Renovate cannot update. Kubernetes should match the cluster's version, so both wait for approval.",
+      "matchFileNames": [
+        "scripts/test-admission-policies.sh"
+      ],
+      "matchDepNames": [
+        "kubernetes/kubernetes",
+        "etcd-io/etcd"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`."
       ]
     },
     {

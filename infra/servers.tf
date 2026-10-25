@@ -59,11 +59,11 @@ resource "hcloud_server" "control_plane" {
   depends_on = [hcloud_network_subnet.cloud, terraform_data.control_plane_tailnet_key]
 }
 
-resource "hcloud_server" "unfold_worker" {
-  for_each = local.unfold_worker
+resource "hcloud_server" "worker" {
+  for_each = local.workers
 
   name               = each.key
-  server_type        = var.unfold_worker_server_type
+  server_type        = var.worker_pools[each.value.pool].server_type
   image              = local.talos_image
   location           = var.location
   firewall_ids       = [hcloud_firewall.nodes.id]
@@ -77,13 +77,13 @@ resource "hcloud_server" "unfold_worker" {
 
   network {
     network_id = hcloud_network.cluster.id
-    ip         = each.value
+    ip         = each.value.private_ip
   }
 
   labels = {
     cluster = "unfold-main"
     role    = "worker"
-    pool    = "unfold"
+    pool    = each.value.pool
   }
 
   lifecycle {
@@ -97,4 +97,9 @@ resource "hcloud_server" "unfold_worker" {
   }
 
   depends_on = [hcloud_network_subnet.cloud, terraform_data.control_plane_tailnet_key]
+}
+
+moved {
+  from = hcloud_server.unfold_worker
+  to   = hcloud_server.worker
 }

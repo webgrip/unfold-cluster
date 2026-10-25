@@ -1,0 +1,177 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: source-controller-egress
+  namespace: flux-system
+spec:
+  description: 'source-controller fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app: source-controller
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: charts.hetzner.cloud
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
+        - matchName: quay.io
+        - matchPattern: "*.quay.io"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flux-operator-egress
+  namespace: flux-system
+spec:
+  description: 'flux-operator pulls the Flux distribution manifests from ghcr.io, whose blobs are served from pkg-containers.githubusercontent.com. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: flux-operator
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kustomize-controller-egress
+  namespace: flux-system
+spec:
+  description: 'kustomize-controller reads artifacts from source-controller and applies them through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app: kustomize-controller
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            app: source-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: helm-controller-egress
+  namespace: flux-system
+spec:
+  description: 'helm-controller reads charts from source-controller and installs them through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app: helm-controller
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            app: source-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: notification-controller-egress
+  namespace: flux-system
+spec:
+  description: 'notification-controller has no alert provider yet and talks only to the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app: notification-controller
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver

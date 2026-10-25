@@ -1,0 +1,16 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  interval: 1m
+  url: https://github.com/webgrip/unfold-cluster.git
+  ref:
+    branch: main
+  verify:
+    mode: HEAD
+    secretRef:
+      name: trusted-signers

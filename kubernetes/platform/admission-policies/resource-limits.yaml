@@ -1,0 +1,77 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: resource-limits
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)
+    - name: containers
+      expression: >-
+        variables.spec.?containers.orValue([]) + variables.spec.?initContainers.orValue([])
+    - name: withoutRequests
+      expression: >-
+        variables.containers.filter(c,
+          !c.?resources.?requests.?cpu.hasValue() || !c.?resources.?requests.?memory.hasValue()).map(c, c.name)
+    - name: withoutMemoryLimit
+      expression: >-
+        variables.containers.filter(c, !c.?resources.?limits.?memory.hasValue()).map(c, c.name)
+    - name: withoutEphemeralStorageLimit
+      expression: >-
+        variables.containers.filter(c,
+          !c.?resources.?limits[?'ephemeral-storage'].hasValue()).map(c, c.name)
+    - name: unboundedEmptyDirs
+      expression: >-
+        variables.spec.?volumes.orValue([]).filter(v,
+          has(v.emptyDir) && !v.emptyDir.?sizeLimit.hasValue()).map(v, v.name)
+  validations:
+    - expression: variables.withoutRequests.size() == 0
+      messageExpression: >-
+        'every container must request cpu and memory; missing in: ' + variables.withoutRequests.join(', ')
+      reason: Forbidden
+    - expression: variables.withoutMemoryLimit.size() == 0
+      messageExpression: >-
+        'every container must set a memory limit; missing in: ' + variables.withoutMemoryLimit.join(', ')
+      reason: Forbidden
+    - expression: variables.withoutEphemeralStorageLimit.size() == 0
+      messageExpression: >-
+        'every container must set an ephemeral-storage limit; missing in: '
+        + variables.withoutEphemeralStorageLimit.join(', ')
+      reason: Forbidden
+    - expression: variables.unboundedEmptyDirs.size() == 0
+      messageExpression: >-
+        'every emptyDir must set sizeLimit; missing on: ' + variables.unboundedEmptyDirs.join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: resource-limits
+spec:
+  policyName: resource-limits
+  validationActions: ["Audit", "Warn"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
