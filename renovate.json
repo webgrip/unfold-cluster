@@ -1,10 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "local>webgrip/renovate-config#v1.15.0",
-    "local>webgrip/renovate-config:gitops#v1.15.0",
-    "local>webgrip/renovate-config:forgejo#v1.15.0",
-    "local>webgrip/renovate-config:apm#v1.15.0"
+    "local>webgrip/renovate-config#v1.15.1",
+    "local>webgrip/renovate-config:gitops#v1.15.1",
+    "local>webgrip/renovate-config:forgejo#v1.15.1",
+    "local>webgrip/renovate-config:apm#v1.15.1"
   ],
   "flux": {
     "managerFilePatterns": [
