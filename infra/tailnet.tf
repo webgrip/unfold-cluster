@@ -31,7 +31,8 @@ data "external" "control_plane_tailnet_key" {
 resource "terraform_data" "control_plane_tailnet_key" {
   for_each = local.control_planes
 
-  input = sensitive(data.external.control_plane_tailnet_key.result.key)
+  input            = sensitive(data.external.control_plane_tailnet_key.result.key)
+  triggers_replace = var.tailnet_key_generation
 
   lifecycle {
     ignore_changes = [input]
@@ -55,7 +56,8 @@ data "external" "worker_tailnet_key" {
 resource "terraform_data" "worker_tailnet_key" {
   for_each = local.unfold_worker
 
-  input = sensitive(data.external.worker_tailnet_key[each.key].result.key)
+  input            = sensitive(data.external.worker_tailnet_key[each.key].result.key)
+  triggers_replace = var.tailnet_key_generation
 
   lifecycle {
     ignore_changes       = [input]
@@ -87,7 +89,7 @@ locals {
   )
 
   tailscale_patch = {
-    for name, node in local.tailscale_join : name => yamlencode({
+    for name, node in local.tailscale_join : name => sensitive(yamlencode({
       apiVersion = "v1alpha1"
       kind       = "ExtensionServiceConfig"
       name       = "tailscale"
@@ -96,6 +98,6 @@ locals {
         "TS_AUTH_ONCE=true",
         "TS_EXTRA_ARGS=${node.extra_args}",
       ]
-    })
+    }))
   }
 }
