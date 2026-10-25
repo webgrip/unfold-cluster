@@ -6,7 +6,8 @@ readonly usage="usage: test-push-to-headscale.sh
 
 Runs scripts/push-to-headscale.sh, OpenTofu's local-exec for unfold-headscale,
 against a stubbed ssh, and checks the request each mode sends, what it sends
-on stdin, that SSH trusts only the pinned host key, that a refused host key is
+on stdin, that the tag mode sends only a valid node name and tag, that SSH
+trusts only the pinned host key, that a refused host key is
 not retried, and that the OIDC client secret appears in nothing it prints,
 not even when the server refuses it."
 
@@ -85,6 +86,15 @@ check "host refuses a version that is not one, without calling the server" \
 
 check "host refuses a sha256 that is not one" \
   bash -c '! (TAILSCALE_VERSION=1.104.2 TAILSCALE_SHA256=abc "$0" host 2>/dev/null)' "$push"
+
+check "tag sends nothing on stdin and the node and its role tag to nodes tag" \
+  bash -c 'NODE_NAME=unfold-app-1 NODE_TAG=tag:hub "$0" tag >/dev/null && [ "$(tail -n 1 "$1/ssh-args")" = "nodes tag unfold-app-1 tag:hub" ] && [ ! -s "$1/ssh-stdin" ]' "$push" "$work"
+
+check "tag refuses a node name that is not one, without calling the server" \
+  bash -c 'rm -f "$1/ssh-args"; ! (NODE_NAME="app;id" NODE_TAG=tag:hub "$0" tag 2>/dev/null) && [ ! -e "$1/ssh-args" ]' "$push" "$work"
+
+check "tag refuses a tag that is not one" \
+  bash -c '! (NODE_NAME=unfold-app-1 NODE_TAG="hub" "$0" tag 2>/dev/null)' "$push"
 
 check "a content mode without content is refused" \
   bash -c '! (CONTENT_B64="" "$0" config 2>/dev/null)' "$push"
