@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: flux-operator-df6c4658b-hbqqh
+  namespace: tenant
+  labels:
+    pod-template-hash: df6c4658b
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: flux-operator-df6c4658b
+      uid: 00000000-0000-0000-0000-000000000002
+      controller: true
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: manager
+      image: ghcr.io/controlplaneio-fluxcd/flux-operator:v0.61.0@sha256:71041d9fff7f7b05f1a8123ebe73c73b7b156f4aacfe1e8e19b5aa953a98892c
+      resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          memory: 1Gi
+          ephemeral-storage: 1Gi
+      volumeMounts:
+        - name: temp
+          mountPath: /temp
+  volumes:
+    - name: temp
+      emptyDir: {}

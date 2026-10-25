@@ -51,6 +51,34 @@ hubble:
       - icmp
       - port-distribution
       - policy:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity;labelsContext=source_namespace,destination_namespace
+  export:
+    static:
+      enabled: true
+      filePath: /var/log/hubble/egress-flows.log
+      allowList:
+        - '{"traffic_direction":["EGRESS"],"reply":[false]}'
+      fieldMask:
+        - time
+        - node_name
+        - verdict
+        - drop_reason_desc
+        - traffic_direction
+        - policy_match_type
+        - source.namespace
+        - source.pod_name
+        - source.workloads
+        - source.identity
+        - destination.namespace
+        - destination.pod_name
+        - destination.workloads
+        - destination.identity
+        - destination_names
+        - IP.destination
+        - l4
+        - egress_allowed_by
+        - egress_denied_by
+      fileMaxSizeMb: 10
+      fileMaxBackups: 2
   relay:
     enabled: true
     tolerations:
@@ -65,3 +93,9 @@ certgen:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
       effect: NoSchedule
+extraHostPathMounts:
+  - name: hubble-egress-flows
+    mountPath: /var/log/hubble
+    hostPath: /var/log/hubble
+    hostPathType: DirectoryOrCreate
+    readOnly: false

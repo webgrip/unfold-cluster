@@ -41,6 +41,7 @@ spec:
         memory: 96Mi
       limits:
         memory: 256Mi
+        ephemeral-storage: 256Mi
     webhook:
       image:
         # renovate: datasource=docker depName=ghcr.io/external-secrets/external-secrets
@@ -52,6 +53,7 @@ spec:
           memory: 48Mi
         limits:
           memory: 128Mi
+          ephemeral-storage: 256Mi
     certController:
       image:
         # renovate: datasource=docker depName=ghcr.io/external-secrets/external-secrets
@@ -63,3 +65,4 @@ spec:
           memory: 48Mi
         limits:
           memory: 128Mi
+          ephemeral-storage: 256Mi

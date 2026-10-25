@@ -7,11 +7,15 @@ Proves every admission policy in kubernetes/platform/admission-policies
 against a real kube-apiserver at the cluster's Kubernetes version. It starts a
 throwaway etcd and API server on loopback, applies the policies exactly as
 Flux would, and sends every fixture under tests/admission-policies/<policy>/
-as a server-side dry run:
+as a server-side apply dry run, so a fixture naming an object that already
+exists is checked as the UPDATE Flux would send:
 
   refused-*.yaml   must be refused (Deny) or warned about (Audit, Warn) by
                    the policy its directory is named after
   admitted-*.yaml  must be admitted with no word from that policy
+
+While one policy's fixtures run, every other binding only warns, so a
+Deny from a neighbouring policy cannot stand in for the one under test.
 
 Every policy needs at least one fixture of each kind. Nothing outside the
 throwaway API server is touched.
@@ -226,7 +230,7 @@ policy_names() {
 }
 
 dry_run() {
-  kubectl create --dry-run=server -f "$1" 2>&1
+  kubectl apply --server-side --force-conflicts --field-manager=admission-test --dry-run=server -f "$1" 2>&1
 }
 
 policy_named_in() {
@@ -240,11 +244,19 @@ record_failure() {
   echo "FAIL  $1" >&2
 }
 
+denial_kind() {
+  if grep -q "ValidatingAdmissionPolicy '$1' with binding '[^']*' denied request" <<<"$2"; then
+    echo denied
+  else
+    echo warned
+  fi
+}
+
 check_refused() {
   local policy="$1" fixture="$2" output
   output="$(dry_run "${fixture}" || true)"
   if policy_named_in "${policy}" "${output}"; then
-    echo "ok    ${policy}: refused ${fixture#"${repo_root}/"}"
+    echo "ok    ${policy}: $(denial_kind "${policy}" "${output}") ${fixture#"${repo_root}/"}"
   else
     record_failure "${policy}: ${fixture#"${repo_root}/"} was not refused; the server said: ${output}"
   fi
@@ -264,18 +276,47 @@ fixtures_of() {
   find "${fixture_dir}/$1" -maxdepth 1 -type f -name "$2-*.yaml" 2>/dev/null | sort
 }
 
+readonly original_bindings="${work_dir}/bindings.json"
+
+without_server_fields() {
+  jq '.items |= map(del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .status))'
+}
+
+record_original_bindings() {
+  kubectl get validatingadmissionpolicybindings -o json | without_server_fields >"${original_bindings}"
+}
+
+only_warn_outside() {
+  jq --arg policy "$1" --arg sentinel "${sentinel_policy}" '.items |= map(
+      if .spec.policyName == $policy or .metadata.name == $sentinel then . else .spec.validationActions = ["Warn"] end)' \
+    "${original_bindings}" | kubectl replace -f - >/dev/null
+  wait_for_policies_to_settle
+}
+
+restore_bindings() {
+  kubectl replace -f "${original_bindings}" >/dev/null
+  wait_for_policies_to_settle
+}
+
+check_policy() {
+  local policy="$1" fixture refused admitted
+  refused="$(fixtures_of "${policy}" refused)"
+  admitted="$(fixtures_of "${policy}" admitted)"
+  if [ -z "${refused}" ] || [ -z "${admitted}" ]; then
+    record_failure "${policy}: needs at least one refused-*.yaml and one admitted-*.yaml under tests/admission-policies/${policy}/"
+    return
+  fi
+  while read -r fixture; do check_refused "${policy}" "${fixture}"; done <<<"${refused}"
+  while read -r fixture; do check_admitted "${policy}" "${fixture}"; done <<<"${admitted}"
+}
+
 check_every_policy() {
-  local policy fixture refused admitted
+  local policy
   while read -r policy; do
-    refused="$(fixtures_of "${policy}" refused)"
-    admitted="$(fixtures_of "${policy}" admitted)"
-    if [ -z "${refused}" ] || [ -z "${admitted}" ]; then
-      record_failure "${policy}: needs at least one refused-*.yaml and one admitted-*.yaml under tests/admission-policies/${policy}/"
-      continue
-    fi
-    while read -r fixture; do check_refused "${policy}" "${fixture}"; done <<<"${refused}"
-    while read -r fixture; do check_admitted "${policy}" "${fixture}"; done <<<"${admitted}"
+    only_warn_outside "${policy}"
+    check_policy "${policy}"
   done < <(policy_names)
+  restore_bindings
 }
 
 neutralise_and_expect_admission() {
@@ -284,7 +325,7 @@ neutralise_and_expect_admission() {
   jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .status)
       | .spec.validations |= map(.expression = "true")' "${original}" \
     | kubectl replace -f - >/dev/null
-  wait_for_policies_to_settle
+  only_warn_outside "${policy}"
   while read -r fixture; do
     output="$(dry_run "${fixture}" || true)"
     if policy_named_in "${policy}" "${output}"; then
@@ -303,6 +344,7 @@ start_servers
 kubectl apply -f "${fixture_dir}/cluster-objects.yaml" >/dev/null
 kubectl apply -k "${policy_dir}" >/dev/null
 wait_for_policies_to_settle
+record_original_bindings
 
 check_every_policy
 if [ "${mutation_test}" = true ]; then
