@@ -92,9 +92,6 @@ locals {
         warn              = "restricted"
         "warn-version"    = "latest"
       }
-      exemptions = {
-        namespaces = ["kube-system"]
-      }
     }
   })
 
