@@ -1,0 +1,262 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: forgejo-runner-on-the-hub-worker
+  namespace: ci
+  labels:
+    app.kubernetes.io/name: forgejo-runner
+    app.kubernetes.io/part-of: unfold-ci
+  annotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: 'false'
+spec:
+  restartPolicy: Never
+  runtimeClassName: gvisor
+  serviceAccountName: forgejo-runner
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  terminationGracePeriodSeconds: 30
+  priorityClassName: ci-runner
+  tolerations:
+  - key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+    effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+      - weight: 50
+        preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - ci
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+  - name: register
+    image: code.forgejo.org/forgejo/runner:12.13.2@sha256:eb6e7bc21973382d261e6eb883dbd27b8cb56939d33a3bfd79a1352b7f9a33a0
+    command:
+    - sh
+    - -ec
+    args:
+    - "cp \"$(command -v forgejo-runner)\" /opt/ci/bin/forgejo-runner\nchmod 0755\
+      \ /opt/ci/bin/forgejo-runner\nforgejo-runner --config /etc/forgejo-runner/config.yaml\
+      \ register \\\n  --no-interactive \\\n  --ephemeral \\\n  --instance \"$FORGEJO_URL\"\
+      \ \\\n  --name \"unfold-ci-$POD_NAME\" \\\n  --token \"$(cat /run/forgejo-runner/registration/token)\"\
+      \n"
+    env:
+    - name: FORGEJO_URL
+      value: https://forgejo.webgrip.dev
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+        ephemeral-storage: 512Mi
+    volumeMounts:
+    - name: tools
+      mountPath: /opt/ci/bin
+    - name: runner-config
+      mountPath: /etc/forgejo-runner
+      readOnly: true
+    - name: registration
+      mountPath: /run/forgejo-runner/registration
+      readOnly: true
+    - name: runner-state
+      mountPath: /run/forgejo-runner/state
+  - name: buildctl
+    image: docker.io/moby/buildkit:v0.34.0-rootless@sha256:65eca3c01cd1180c8f64565c4e3c5983af5145818b0e6fa863385d099eb73855
+    command:
+    - cp
+    - /usr/bin/buildctl
+    - /opt/ci/bin/buildctl
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 64Mi
+        ephemeral-storage: 256Mi
+    volumeMounts:
+    - name: tools
+      mountPath: /opt/ci/bin
+  - name: buildkitd
+    image: docker.io/moby/buildkit:v0.34.0-rootless@sha256:65eca3c01cd1180c8f64565c4e3c5983af5145818b0e6fa863385d099eb73855
+    restartPolicy: Always
+    args:
+    - --addr
+    - unix:///run/buildkit/buildkitd.sock
+    - --oci-worker-no-process-sandbox
+    - --config
+    - /etc/buildkit/buildkitd.toml
+    securityContext:
+      allowPrivilegeEscalation: true
+    startupProbe:
+      exec:
+        command:
+        - buildctl
+        - --addr
+        - unix:///run/buildkit/buildkitd.sock
+        - debug
+        - workers
+      periodSeconds: 2
+      timeoutSeconds: 10
+      failureThreshold: 60
+    readinessProbe:
+      exec:
+        command:
+        - buildctl
+        - --addr
+        - unix:///run/buildkit/buildkitd.sock
+        - debug
+        - workers
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+        ephemeral-storage: 10Gi
+      limits:
+        memory: 4Gi
+        ephemeral-storage: 30Gi
+    volumeMounts:
+    - name: buildkit-socket
+      mountPath: /run/buildkit
+    - name: buildkit-state
+      mountPath: /home/user/.local/share/buildkit
+    - name: buildkitd-config
+      mountPath: /etc/buildkit
+      readOnly: true
+  containers:
+  - name: runner
+    image: docker.io/library/node:24.21.0-bookworm@sha256:3d27e5c11e5786e309ec3e03f93ae536eb36e6e5eb3714d5eb3300a36157add0
+    command:
+    - sh
+    - -ec
+    args:
+    - 'mkdir -p "$HOME" "$TMPDIR" /work/act
+
+      exec forgejo-runner --config /etc/forgejo-runner/config.yaml one-job --wait
+
+      '
+    env:
+    - name: HOME
+      value: /work/home
+    - name: TMPDIR
+      value: /work/tmp
+    - name: PATH
+      value: /opt/ci/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    - name: BUILDKIT_HOST
+      value: unix:///run/buildkit/buildkitd.sock
+    - name: DOCKER_CONFIG
+      value: /run/zot-push
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    workingDir: /work
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    readinessProbe:
+      exec:
+        command:
+        - sh
+        - -c
+        - test -n "$(ls -A /work/act 2>/dev/null)"
+      periodSeconds: 5
+      timeoutSeconds: 3
+    resources:
+      requests:
+        cpu: '1'
+        memory: 2Gi
+        ephemeral-storage: 5Gi
+      limits:
+        memory: 4Gi
+        ephemeral-storage: 20Gi
+    volumeMounts:
+    - name: tools
+      mountPath: /opt/ci/bin
+      readOnly: true
+    - name: runner-config
+      mountPath: /etc/forgejo-runner
+      readOnly: true
+    - name: runner-state
+      mountPath: /run/forgejo-runner/state
+    - name: buildkit-socket
+      mountPath: /run/buildkit
+    - name: work
+      mountPath: /work
+    - name: zot-push
+      mountPath: /run/zot-push
+      readOnly: true
+  volumes:
+  - name: tools
+    emptyDir:
+      sizeLimit: 256Mi
+  - name: runner-state
+    emptyDir:
+      sizeLimit: 1Mi
+  - name: work
+    emptyDir:
+      sizeLimit: 20Gi
+  - name: buildkit-socket
+    emptyDir:
+      sizeLimit: 1Mi
+  - name: buildkit-state
+    emptyDir:
+      sizeLimit: 30Gi
+  - name: runner-config
+    configMap:
+      name: forgejo-runner-config
+  - name: buildkitd-config
+    configMap:
+      name: buildkitd-config
+  - name: zot-push
+    secret:
+      secretName: zot-push-credentials
+      optional: true
+      defaultMode: 288
+      items:
+      - key: .dockerconfigjson
+        path: config.json
+  - name: registration
+    secret:
+      secretName: forgejo-runner-registration
+      defaultMode: 288

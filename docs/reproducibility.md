@@ -21,7 +21,7 @@ Every piece of state the estate depends on, how it came to exist, and what happe
 | Item | Created today by | Reproducible | Fix |
 | --- | --- | --- | --- |
 | Hetzner project | the owner, in the Console | no: Hetzner has no API to create one | seed, once per project (A1) |
-| Hetzner API tokens (`unfold-tofu`, `unfold-cluster`, `unfold-vip`) | the owner, in the Console | no: tokens are issued only in the Console | seed into OpenBao (A2); everything after reads them per run |
+| Hetzner API tokens (`unfold-tofu`, `unfold-cluster`, `unfold-vip`, `unfold-autoscaler`) | the owner, in the Console | no: tokens are issued only in the Console | seed into OpenBao (A2); everything after reads them per run |
 | Network, subnet, firewalls, placement group, SSH key, servers | OpenTofu | yes | |
 | Robot server `unfold-metal-1`, its order | `scripts/robot.sh order` in the apply | yes: ordered once, the order and server number recorded in `secret/unfold-cluster/metal/unfold-metal-1`; a rebuild finds the server by its name | cancelling stays a person's act in Robot |
 | vSwitch `unfold-main`, the server's membership, its Robot firewall | the apply | yes | |
@@ -66,6 +66,7 @@ What a person still puts into OpenBao, once, from a homelab-cluster checkout. Ev
 | `secret/hetzner/unfold-tofu` | `HCLOUD_TOKEN` | Hetzner Console |
 | `secret/hetzner/unfold-cluster` | `HCLOUD_TOKEN_CLUSTER` | Hetzner Console |
 | `secret/hetzner/unfold-vip` | `HCLOUD_TOKEN_VIP` | Hetzner Console |
+| `secret/hetzner/unfold-autoscaler` | `HCLOUD_TOKEN_AUTOSCALER` | Hetzner Console |
 | `secret/unfold-cluster/tofu-state` | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY`, `STATE_PASSPHRASE` | Garage; the passphrase is generated once |
 | `secret/unfold-cluster/etcd-backup` | the write and read key pairs, `ETCD_BACKUP_AGE_IDENTITY` | Garage; `age-keygen` once |
 | `secret/unfold-cluster/vars` | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION`, `ADMIN_CIDRS`, `ADMIN_SSH_PUBLIC_KEY`, `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK`, `REBUILD_DRILL` | the owner |

@@ -428,8 +428,8 @@ run "gvisor_runs_on_kvm_on_metal_and_systrap_in_the_cloud_with_seccomp_inside" {
   }
 
   assert {
-    condition     = strcontains(yamldecode(local.worker_sandbox_patches["ci"][1]).contents, "platform = \"systrap\"") && length(local.worker_sandbox_patches["unfold"]) == 0
-    error_message = "the cloud CI pool runs gVisor on systrap, and the hub pool gets no sandbox runtime"
+    condition     = strcontains(yamldecode(local.worker_sandbox_patches["ci"][1]).contents, "platform = \"systrap\"") && strcontains(yamldecode(local.worker_sandbox_patches["unfold"][1]).contents, "platform = \"systrap\"")
+    error_message = "the cloud CI pool and the hub worker, the CI baseline, run gVisor on systrap"
   }
 
   assert {
