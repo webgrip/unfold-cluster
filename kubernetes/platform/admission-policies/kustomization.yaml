@@ -13,3 +13,4 @@ resources:
   - cluster-admin-bindings.yaml
   - service-account-token-secrets.yaml
   - pod-security-floor.yaml
+  - trivy-scan-job-defaults.yaml

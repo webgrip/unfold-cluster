@@ -17,6 +17,7 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 | `cluster-admin-bindings` | a ClusterRoleBinding or RoleBinding to `cluster-admin` for anyone but Flux's `kustomize-controller`, `helm-controller` and `flux-operator` | every namespace; the API server's own bootstrap is exempt | Deny |
 | `service-account-token-secrets` | Secrets of type `kubernetes.io/service-account-token` | every namespace | Deny |
 | `pod-security-floor` | a namespace whose `pod-security.kubernetes.io/enforce` label is anything but `restricted` | every namespace but `kube-system` | Deny |
+| `trivy-scan-job-defaults` (MutatingAdmissionPolicy) | nothing: it sets a 2 GiB `sizeLimit` on every unbounded `emptyDir` and `shareProcessNamespace` in the Trivy Operator's scan Jobs ([vulnerability-scanning](vulnerability-scanning.md)) | Jobs labelled `app.kubernetes.io/managed-by: trivy-operator` in `trivy-system` | mutates |
 
 The policies match Pods and the pod templates in Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs, so Flux's apply sees the warning before a controller creates the Pod.
 
@@ -67,7 +68,9 @@ The violators were fixed in their manifests, the rest became the grants above, a
 
 A Deny policy also refuses an UPDATE of an object that already violates it. Flux replaces each fixed workload in the same reconcile that lands the policies, so this matters only for a HelmRelease whose upgrade fails: its old pods keep running, but a replacement pod is refused until the release goes through. On a rebuild, Talos installs the Flux operator from its chart without the `emptyDir` size the HelmRelease adds as a post-renderer; the operator's pod is compliant once its HelmRelease first reconciles.
 
-### Why there is no MutatingAdmissionPolicy yet
+### Why there is no defaulting MutatingAdmissionPolicy yet
+
+The one MutatingAdmissionPolicy, `trivy-scan-job-defaults`, sets nothing a workload chooses: it bounds the scratch volumes of Jobs the Trivy Operator generates, which no chart value reaches ([ADR 0004](../adr/0004-trivy-operator-scans-in-the-cluster.md)). Its fixtures are under `resource-limits`: the operator's Job is admitted only because of it, and the same Job without the operator's label stays refused.
 
 RFC 0001 tier 3 sets safe defaults with `MutatingAdmissionPolicy` (GA, served at `admissionregistration.k8s.io/v1` on 1.37). A mutation has no Audit mode: it changes every matching pod the moment it lands. The defaults it would set (`hostUsers: false`, seccomp, the token opt-out, the RuntimeClass) are exactly what the validating set above now reports on, so the mutating set follows once that audit is clean, with the same fixtures.
 

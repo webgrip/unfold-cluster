@@ -1,0 +1,49 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: scan-vulnerabilityreport-unlabelled
+  namespace: trivy-system
+  labels:
+    vulnerabilityReport.scanner: Trivy
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+        labels:
+          vulnerabilityReport.scanner: Trivy
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/aquasecurity/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+              ephemeral-storage: 2Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: scanresult
+              mountPath: /tmp/scan
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: scanresult
+          emptyDir: {}

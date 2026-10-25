@@ -60,3 +60,10 @@ kind: RuntimeClass
 metadata:
   name: kata
 handler: kata
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trivy-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
