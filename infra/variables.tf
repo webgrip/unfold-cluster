@@ -285,7 +285,7 @@ variable "disk_encryption_kms_endpoint" {
 variable "disk_encryption_nodes" {
   description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so adding a running cloud node here re-installs it: the apply drains it, takes a control plane out of etcd, wipes both volumes and applies the encrypted config (disk-encryption-rollout.tf). One running node per reviewed plan; scripts/guard-encryption-rollout.sh refuses more. A node created while listed is encrypted from its first boot. See docs/disk-encryption.md."
   type        = set(string)
-  default     = []
+  default     = ["unfold-metal-1"]
 
   validation {
     condition     = alltrue([for name in var.disk_encryption_nodes : contains(keys(local.cluster_nodes), name)])

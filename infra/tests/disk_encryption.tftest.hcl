@@ -82,12 +82,22 @@ override_data {
   }
 }
 
-run "no_node_is_encrypted_until_it_is_listed" {
+run "only_the_metal_node_is_encrypted_by_default" {
   command = plan
 
   assert {
-    condition     = alltrue([for name, patches in local.disk_encryption_patches : length(patches) == 0])
-    error_message = "by default no machine config carries an encrypted VolumeConfig"
+    condition     = alltrue([for name, patches in local.disk_encryption_patches : length(patches) == (name == "unfold-metal-1" ? 2 : 0)])
+    error_message = "unfold-metal-1 is encrypted from its first install; every running cloud node stays plain until it is listed, because listing it wipes it"
+  }
+
+  assert {
+    condition = alltrue([
+      for patch in local.disk_encryption_patches["unfold-metal-1"] : alltrue([
+        yamldecode(patch).encryption.allowDiscards == true,
+        yamldecode(patch).encryption.keys == [{ slot = 0, kms = { endpoint = "https://headscale.webgrip.dev:4050" } }],
+      ])
+    ])
+    error_message = "the AX41 seals with the same KMS key and passes discards to its local NVMe (ADR 0003)"
   }
 
   assert {
@@ -192,8 +202,22 @@ run "an_unlisted_worker_keeps_its_tailnet_key_slot" {
   }
 }
 
+run "the_metal_node_reaches_the_kms" {
+  command = plan
+
+  assert {
+    condition     = length(local.disk_kms_metal_client_ipv4s) == length(var.metal_servers)
+    error_message = "every metal node's public address is a source of the KMS firewall, or its STATE never opens"
+  }
+}
+
 run "only_the_nodes_and_the_admin_addresses_reach_the_kms" {
   command = plan
+
+  variables {
+    metal_servers         = {}
+    disk_encryption_nodes = []
+  }
 
   assert {
     condition = alltrue([
@@ -203,7 +227,7 @@ run "only_the_nodes_and_the_admin_addresses_reach_the_kms" {
       one(hcloud_firewall.disk_kms.rule).port == "4050",
       toset(one(hcloud_firewall.disk_kms.rule).source_ips) == toset(["198.51.100.10/32", "203.0.113.7/32"]),
     ])
-    error_message = "the KMS unseals for anyone holding a LUKS header, so only the nodes' public addresses and the runners' (for the pre-flight TLS check) may reach it"
+    error_message = "the KMS unseals for anyone holding a LUKS header, so only the cloud and metal nodes' public addresses and the runners' (for the pre-flight TLS check) may reach it"
   }
 
   assert {

@@ -44,12 +44,9 @@ A node created while it is in `disk_encryption_nodes` formats its volumes encryp
 
 ### The AX41
 
-`unfold-metal-1` is encrypted from its first install, so it never needs a wipe for encryption. Once PR #75 has merged, one commit does it:
+`unfold-metal-1` is encrypted from its first install, so it never needs a wipe for encryption. `disk_encryption_nodes` defaults to `["unfold-metal-1"]`, and `disk_kms_metal_client_ipv4s` in [infra/disk-kms.tf](../infra/disk-kms.tf) opens the KMS firewall to every metal node's public address from Robot.
 
-1. In [infra/disk-kms.tf](../infra/disk-kms.tf), `disk_kms_metal_client_ipv4s` lists the metal nodes' public addresses: `[for name in keys(var.metal_servers) : data.external.metal_server[name].result.server_ip]`.
-2. `disk_encryption_nodes` defaults to `["unfold-metal-1"]`.
-
-A precondition on the KMS firewall refuses step 2 without step 1, because the node's STATE would never open. The metal node's config already takes `local.disk_encryption_patches` (PR #75). Talos needs the public DHCP address before STATE opens; the vSwitch VLAN comes from the machine config and is not up yet, which is why the KMS is reached over the public address. That the AX41's DHCP comes up before STATE opens is proven on its first install, not before.
+A precondition on the KMS firewall refuses a listed metal node without its address, because its STATE would never open. The metal node's config takes `local.disk_encryption_patches` (`infra/metal.tf`). Talos needs the public DHCP address before STATE opens; the vSwitch VLAN comes from the machine config and is not up yet, which is why the KMS is reached over the public address. That the AX41's DHCP comes up before STATE opens is proven on its first install, not before.
 
 A TPM key slot is a later, separate step (ADR 0003): one KVM session, a SecureBoot image, a reinstall through `install_generation`. Adding that slot needs no wipe.
 
