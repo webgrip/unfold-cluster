@@ -119,6 +119,20 @@
       ]
     },
     {
+      "description": "talosctl and kubectl for the diagnose run are installed from pinned checksums in scripts/diagnose-cluster.sh, which Renovate cannot update. talosctl moves with the Talos bump, which already waits for approval; kubectl waits for approval too.",
+      "matchFileNames": [
+        "scripts/diagnose-cluster.sh"
+      ],
+      "matchDepNames": [
+        "siderolabs/talos",
+        "kubernetes/kubernetes"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update the `talosctl_sha256_linux_*` values in `scripts/diagnose-cluster.sh` from the Talos release's `sha256sum.txt`, and the `kubectl_sha256_linux_*` values from `https://dl.k8s.io/release/<version>/bin/linux/<arch>/kubectl.sha256`."
+      ]
+    },
+    {
       "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu itself comes with the infra-runner image from webgrip/infrastructure, where it is pinned and updated.",
       "matchManagers": [
         "terraform"

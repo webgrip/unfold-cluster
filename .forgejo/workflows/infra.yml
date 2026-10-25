@@ -15,12 +15,13 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Choose "apply" to create or change the Hetzner resources in the plan this run makes
+        description: Choose "apply" to create or change the Hetzner resources in the plan this run makes, or "diagnose" to print the cluster's health without planning or changing anything
         required: true
         type: choice
         options:
           - plan-only
           - apply
+          - diagnose
         default: plan-only
       plan_digest:
         description: The plan digest of the run you reviewed; apply refuses unless this run's plan has the same digest
@@ -67,7 +68,7 @@ jobs:
     # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
     # workflow_dispatch (role ci-unfold-cluster), so a branch's own workflow cannot read them.
     # Host mode: the steps run in the unfold-infra pool's toolchain image, the same infra-runner.
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && inputs.apply != 'diagnose'
     runs-on: unfold-infra
     enable-openid-connect: true
     defaults:
@@ -168,3 +169,45 @@ jobs:
             exit 1
           fi
           tofu apply -lock-timeout=5m infra.tfplan
+
+  diagnose:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && github.ref == 'refs/heads/main'
+      && inputs.apply == 'diagnose'
+    runs-on: unfold-infra
+    enable-openid-connect: true
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
+      TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Read the state and Hetzner credentials from OpenBao
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            HCLOUD_TOKEN=secret/data/hetzner/unfold-tofu#HCLOUD_TOKEN
+            AWS_ACCESS_KEY_ID=secret/data/unfold-cluster/tofu-state#STATE_S3_ACCESS_KEY
+            AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
+            TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
+
+      - name: Init
+        env:
+          STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+          STATE_REGION: ${{ vars.STATE_REGION }}
+          STATE_ENDPOINT: ${{ vars.STATE_ENDPOINT }}
+        run: |
+          set -eu
+          tofu init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="region=${STATE_REGION}" \
+            -backend-config="endpoints={s3=\"${STATE_ENDPOINT}\"}"
+
+      - name: Report the cluster's health
+        working-directory: .
+        run: ./scripts/diagnose-cluster.sh
