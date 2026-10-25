@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: external-secrets-apiserver
 spec:
-  description: Every External Secrets pod talks to the Kubernetes API, and the API server calls the admission webhook. Nothing else reaches these pods.
+  description: Every External Secrets pod talks to the Kubernetes API, and the API server calls the admission webhook on 10250. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too. Nothing else reaches these pods.
   endpointSelector: {}
   egress:
     - toEntities:
@@ -12,6 +12,8 @@ spec:
   ingress:
     - fromEntities:
         - kube-apiserver
+        - host
+        - remote-node
       toPorts:
         - ports:
             - port: "10250"
