@@ -32,7 +32,7 @@ resource "terraform_data" "control_plane_tailnet_key" {
   for_each = local.control_planes
 
   input            = sensitive(data.external.control_plane_tailnet_key.result.key)
-  triggers_replace = var.tailnet_key_generation
+  triggers_replace = [var.tailnet_key_generation, hcloud_server.headscale.id]
 
   lifecycle {
     ignore_changes = [input]
@@ -63,7 +63,7 @@ resource "terraform_data" "worker_tailnet_key" {
   for_each = local.workers
 
   input            = sensitive(data.external.worker_tailnet_key[each.key].result.key)
-  triggers_replace = var.tailnet_key_generation
+  triggers_replace = [var.tailnet_key_generation, hcloud_server.headscale.id]
 
   lifecycle {
     ignore_changes       = [input]

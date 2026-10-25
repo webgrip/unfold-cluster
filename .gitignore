@@ -9,3 +9,4 @@ kubeconfig
 
 # APM dependencies
 apm_modules/
+infra/*_override.tf

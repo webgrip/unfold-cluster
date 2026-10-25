@@ -242,3 +242,31 @@ variable "homelab_gateway_key_generation" {
   type        = number
   default     = 1
 }
+
+variable "headscale_generation" {
+  description = "The generation of unfold-headscale. Raising it replaces the server through a reviewed plan: the apply lifts its delete protection first (scripts/lift-headscale-protection.sh), the new server starts from the current cloud-init, and every node, the homelab gateway included, re-joins with a fresh key the same apply hands it. Generation 3 replaced the server of 2026-10-25, whose program and sudoers rule predate the apply's install and policy steps."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.headscale_generation >= 1 && floor(var.headscale_generation) == var.headscale_generation
+    error_message = "headscale_generation is a whole number, 1 or higher."
+  }
+}
+
+variable "headscale_address_property" {
+  description = "The property of OpenBao secret/unfold/headscale-address that the apply sets to the Headscale server's public IPv4 address. The homelab publishes headscale.webgrip.dev from ipv4 and headscale-drill.webgrip.dev from drill_ipv4, so a server in a new Hetzner project, which has a new primary IP, is found without a commit."
+  type        = string
+  default     = "ipv4"
+
+  validation {
+    condition     = contains(["ipv4", "drill_ipv4"], var.headscale_address_property)
+    error_message = "The homelab publishes only ipv4 (production) and drill_ipv4 (the rebuild drill)."
+  }
+}
+
+variable "talos_secrets_import_file" {
+  description = "Path of a talosctl secrets bundle to import as talos_machine_secrets.cluster. The infra workflow sets it only when the state holds no Talos secrets and OpenBao holds an escrowed bundle, so a rebuild from an empty state keeps the cluster's certificate authorities and service-account key. Empty imports nothing."
+  type        = string
+  default     = ""
+}

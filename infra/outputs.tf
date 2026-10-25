@@ -36,12 +36,6 @@ output "kubeconfig" {
   sensitive   = true
 }
 
-output "talos_machine_secrets" {
-  description = "The cluster's Talos secrets bundle, for the owner's offline escrow. Read with: tofu output -raw talos_machine_secrets"
-  value       = yamlencode(talos_machine_secrets.cluster.machine_secrets)
-  sensitive   = true
-}
-
 output "headscale_ipv4" {
   description = "The address the headscale_hostname A record, declared in homelab-cluster, points at. A primary IP, so it survives a rebuild of the Headscale server."
   value       = hcloud_primary_ip.headscale.ip_address
@@ -55,5 +49,22 @@ output "headscale_ssh_known_hosts" {
 output "homelab_gateway_tailnet_key" {
   description = "The homelab gateway's single-use tag:homelab-gateway pre-auth key. The infra workflow writes it to OpenBao secret/unfold/tailnet-homelab-gateway after each apply, where the homelab's External Secrets picks it up."
   value       = terraform_data.homelab_gateway_tailnet_key.output
+  sensitive   = true
+}
+
+module "talos_secrets_bundle" {
+  source          = "./modules/talos-secrets-bundle"
+  machine_secrets = talos_machine_secrets.cluster.machine_secrets
+}
+
+output "talos_secrets_bundle" {
+  description = "The cluster's Talos secrets as a talosctl secrets bundle. Every apply escrows it to OpenBao secret/unfold-cluster/talos-secrets, and an apply into an empty state imports it back (talos_secrets_import_file), so a rebuild keeps the cluster's identity."
+  value       = module.talos_secrets_bundle.yaml
+  sensitive   = true
+}
+
+output "headscale_tofu_ssh_private_key" {
+  description = "OpenTofu's SSH key for the tofu user on unfold-headscale, which may run nothing but unfold-tailnet-key. The rebuild drill uses it to list the nodes Headscale knows."
+  value       = tls_private_key.headscale_tofu.private_key_openssh
   sensitive   = true
 }

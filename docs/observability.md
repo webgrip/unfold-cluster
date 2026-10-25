@@ -23,19 +23,13 @@ The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`)
 Everything below is a pull request and the `infra` apply.
 
 1. **The program on the Headscale server.** OpenTofu reaches `unfold-headscale` only as the `tofu` user, whose SSH key may run `/usr/local/sbin/unfold-tailnet-key` and nothing else. That program (`infra/templates/unfold-tailnet-key.sh`) mints the node keys, sets the policy (`policy set`: checks it against the running Headscale, installs it, restarts Headscale, and puts the previous policy back if Headscale does not come up) and replaces itself (`install`, after a syntax check). The apply pushes it whenever the file changes (`terraform_data.tailnet_key_tool`), then the policy whenever the policy changes (`terraform_data.headscale_policy`). cloud-init installs the same program, sudoers rule and policy on a new server.
-2. **The gateway's key.** The apply asks the program for a single-use `tag:homelab-gateway` key for generation `homelab_gateway_key_generation` (`infra/variables.tf`); asking again for the same generation returns the same key. The next workflow step writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` (`scripts/hand-gateway-key-to-openbao.sh`, only when it changed), the homelab's External Secrets hands it to the gateway, and the gateway logs in once and keeps its identity in its own state Secret. A new key is a pull request that raises the generation.
+2. **The gateway's key.** The apply asks the program for a single-use `tag:homelab-gateway` key for generation `homelab_gateway_key_generation` (`infra/variables.tf`); asking again for the same generation returns the same key. The next workflow step writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` (`scripts/openbao-kv.sh put authkey`, only when it changed), the homelab's External Secrets hands it to the gateway, and the gateway logs in once and keeps its identity in its own state Secret. A new key is a pull request that raises the generation. A replaced Headscale mints a new gateway key in the same apply; the gateway's old identity is then refused, its `tailscale` container falls back to `NeedsLogin` and logs in with the key it was handed (`TS_AUTH_ONCE`), so nobody deletes its state Secret ([reproducibility](reproducibility.md#headscale-survives-a-rebuild)).
 
 `scripts/test-tailnet-key-tool.sh` (run by `infra-check`) tests the program against a stubbed Headscale; `infra/tests/homelab_gateway.tftest.hcl` pins the policy, the sudoers rule, and that the server and the apply install the same things.
 
-### Once, for the server that existed before this
+### The server that existed before this
 
-The `unfold-headscale` created on 2026-10-25 runs the first version of the program, which has no `install` mode, and its sudoers rule names only the old modes. The `tofu` key therefore cannot upgrade it, and replacing the server would lose every node registration. The owner runs, once, from a checkout of this repository with the admin SSH key:
-
-```sh
-./scripts/install-headscale-key-tool.sh
-```
-
-It installs the program and the sudoers rule from this repository (syntax-checked, `visudo`-checked) and changes nothing when run again. From then on the apply does the rest. Until it has run, the apply stops at `terraform_data.tailnet_key_tool` with a message naming this script.
+The `unfold-headscale` created on 2026-10-25 ran the first version of the program, without the `install`, `policy` and `gateway` modes, and its sudoers rule named only the old modes, so the `tofu` key could not upgrade it. Instead of a one-time command on the server, `headscale_generation` 3 replaces it through the apply: the apply lifts its delete protection, the new server starts from the current cloud-init, and every node and the gateway log in again with keys minted by the new server in the same run ([reproducibility](reproducibility.md#the-live-headscale-server)).
 
 ## Checking it works
 

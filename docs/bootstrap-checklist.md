@@ -36,9 +36,12 @@ No longer by hand:
 
 | Item | Now |
 | --- | --- |
-| The Cloudflare record for `headscale.webgrip.dev` | Declared in homelab-cluster, `kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml`, DNS only, owned by the homelab's external-dns. It points at the Headscale primary IP, which outlives the server. |
+| The Cloudflare record for `headscale.webgrip.dev` | The apply writes the Headscale primary IP to OpenBao `secret/unfold/headscale-address`; the homelab CronJob `network/unfold-headscale-address` publishes it through external-dns, DNS only. A new project's new IP needs no commit. |
 | The Headscale users and pre-auth keys | cloud-init creates the users `nodes` and the admin user; `unfold-tailnet-key` on the server makes the control planes' reusable `tag:cp` key, renews it by timer, and makes a single-use `tag:node` key for each new worker. OpenTofu reads them over SSH during the apply. |
-| The homelab gateway's tailnet key and the Headscale policy | cloud-init installs the policy; the apply pushes later policy changes, mints a single-use `tag:homelab-gateway` key and writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` ([observability](observability.md)). A rebuilt Headscale gets a new key the same way, but the gateway still holds its old identity: delete the homelab Secret `observability/unfold-gateway-tailscale-state` once so it logs in with the new key. |
+| The homelab gateway's tailnet key and the Headscale policy | cloud-init installs the policy; the apply pushes later policy changes, mints a single-use `tag:homelab-gateway` key and writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` ([observability](observability.md)). A rebuilt Headscale gets a new key the same way; the gateway's old identity is refused and it logs in with the new key on its own (`TS_AUTH_ONCE`). |
+| The Talos secrets escrow | Every apply writes the bundle to OpenBao `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it, so a rebuild keeps the cluster's CAs and service-account key (and with them the homelab OpenBao's trust and `access/unfold-oidc.kubeconfig.yaml`). |
+| The etcd bucket's 30-day expiry rule | Every apply puts it with the etcd write key (`scripts/set-etcd-backup-lifecycle.sh`). |
+| Replacing `unfold-headscale` | Raise `headscale_generation`; the apply lifts the delete protection of exactly that server because the reviewed plan deletes it, and every node re-joins with a fresh key in the same run. |
 | The Talos snapshot | The apply run builds it with `scripts/build-talos-snapshot.sh` when no snapshot carries the labels of the pinned Talos version and schematic; OpenTofu finds it by those labels. |
 
 ## A. Hetzner project and tokens
@@ -126,25 +129,7 @@ Each `garage key create` prints a **Key ID** (starts with `GK`) and a **Secret k
 
 The key pairs go into OpenBao in B4. They need no password-manager copy: `garage key info --show-secret` on the box shows them again.
 
-**Expire snapshots after 30 days.** Garage v2.1 supports S3 lifecycle rules (expiry in days, filtered by prefix), but not through its CLI: the rule is set with an S3 call signed by a key that may write to the bucket, which is the etcd write key. Still on the Garage host:
-
-```sh
-cat > /root/unfold-etcd-lifecycle.xml <<'EOF'
-<LifecycleConfiguration><Rule><ID>expire-after-30-days</ID><Status>Enabled</Status><Filter><Prefix>unfold-main/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule></LifecycleConfiguration>
-EOF
-read -r -p 'etcd write Key ID: ' key_id
-read -r -s -p 'etcd write Secret key: ' key_secret; echo
-md5="$(openssl dgst -md5 -binary /root/unfold-etcd-lifecycle.xml | base64)"
-printf 'user = "%s:%s"\n' "$key_id" "$key_secret" | curl -fsS --config - --aws-sigv4 "aws:amz:garage:s3" \
-  -X PUT -H "Content-MD5: $md5" -H "Content-Type: application/xml" \
-  --data-binary @/root/unfold-etcd-lifecycle.xml "http://127.0.0.1:3900/unfold-cluster-etcd?lifecycle"
-printf 'user = "%s:%s"\n' "$key_id" "$key_secret" | curl -fsS --config - --aws-sigv4 "aws:amz:garage:s3" \
-  "http://127.0.0.1:3900/unfold-cluster-etcd?lifecycle"; echo
-unset key_id key_secret
-rm /root/unfold-etcd-lifecycle.xml
-```
-
-`read -s` keeps the secret off the screen and out of shell history, and `--config -` keeps it out of the process list. The second `curl` must print the rule back. The prefix `unfold-main/` is where the CronJob writes. Garage's lifecycle worker runs once a day at midnight UTC, so a snapshot is gone between 30 and 31 days after it was written.
+**Expire snapshots after 30 days.** Nothing to do here: every `infra` apply puts the bucket's lifecycle rule (objects under `unfold-main/` expire after 30 days) with the etcd write key, through Garage's S3 API (`scripts/set-etcd-backup-lifecycle.sh`), so a rule changed by hand is back after the next apply.
 
 ### B4. Put every value into OpenBao
 
@@ -211,9 +196,13 @@ Everything under `secret/unfold-cluster/vars` becomes a Forgejo **variable**, re
 - [ ] **C1.** Open the newest `infra` run on `main` and read its plan. It creates the network, its subnet, two firewalls, the placement group, the SSH key, the Headscale primary IP, `hcloud_server.headscale`, `tls_private_key.headscale_tofu`, `tls_private_key.headscale_host`, `terraform_data.headscale_generation`, three `terraform_data.control_plane_tailnet_key`, two `terraform_data.worker_tailnet_key`, the `external` key reads (the workers' read during apply), three `control_plane` servers, two `hcloud_server.worker` (`unfold-app-1`, CX33, and the CI node `unfold-ci-1`, CX43; see [worker pools](runbooks/infra-workflow.md#worker-pools)), the Talos secrets, the machine-config applies, the bootstrap and the kubeconfig. Nothing is destroyed. The node servers show the image `talos-snapshot-is-built-by-the-apply-run` until the snapshot exists. Copy the run's plan digest.
 - [ ] **C2.** Actions → `infra` → **Run workflow**, branch `main`, `apply`, and the digest. The run builds the Talos snapshot first (a few minutes and one temporary CX23, deleted again), then plans. The first time, that plan names the snapshot instead of the placeholder, so its digest differs and the run stops, printing its own. Read that run's plan: the same resources, with a numeric image. Dispatch again with its digest. If the create fails with the server type unavailable, Hetzner has no stock in `fsn1` at that moment: retry later, or set `location` to `nbg1` in `infra/variables.tf` through a PR; every node must share one location.
 - [ ] **C3.** The apply waits for Headscale: `scripts/read-tailnet-key.sh` retries SSH to `tofu@<headscale_ipv4>`, trusting only the pinned host key, for up to 25 minutes, until cloud-init has finished and `https://headscale.webgrip.dev/health` passes with a Let's Encrypt certificate. A run that times out there names `read-tailnet-key` in its error; one that says the server `did not present the pinned SSH host key` stopped on purpose and must not be retried until that is understood; `ssh admin@headscale.webgrip.dev` then `sudo cloud-init status --long` and `sudo journalctl -u headscale` show why.
-- [ ] **C4. Escrow the Talos secrets.** From a shell with the state credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` set to the B3 state key and `TF_VAR_state_passphrase` to B1, read with `bao kv get secret/unfold-cluster/tofu-state`), in `infra/` after the same `tofu init` the workflow runs: `tofu output -raw talos_machine_secrets` into the password manager and the offline copy. `tofu output -raw talosconfig` and `tofu output -raw kubeconfig` give the admin files; keep them out of git (both names are in `.gitignore`).
+- [ ] **C4. The Talos secrets are escrowed.** The apply run's step `Escrow the Talos secrets in OpenBao` writes them to `secret/unfold-cluster/talos-secrets` (`bundle`); its log says `wrote bundle` or `is current`. For the offline copy, from a shell with the state credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` set to the B3 state key and `TF_VAR_state_passphrase` to B1, read with `bao kv get secret/unfold-cluster/tofu-state`), in `infra/` after the same `tofu init` the workflow runs: `tofu output -raw talos_secrets_bundle` into the password manager. `tofu output -raw talosconfig` and `tofu output -raw kubeconfig` give the admin files; keep them out of git (both names are in `.gitignore`).
 
-### From the first apply's state
+### The Headscale server of 2026-10-25
+
+That server predates the apply's `install`, `policy` and `gateway` steps, and its sudoers rule refuses them. `headscale_generation` 3 replaces it: no command on the server, one apply. Its plan shows `hcloud_server.headscale` `must be replaced`, the three control-plane and two worker `terraform_data.*_tailnet_key` replaced, the five `talos_machine_configuration_apply` updated in place (new `TS_AUTHKEY` only), `terraform_data.homelab_gateway_tailnet_key` replaced, and nothing else destroyed. During the run the tailnet is down for 10 to 25 minutes; Kubernetes, Flux and the workloads keep running, and the APIs stay reachable from `ADMIN_CIDRS`. Afterwards register your own devices again (stage D, first box) and update `~/.ssh/known_hosts` from `tofu output -raw headscale_ssh_known_hosts`.
+
+### From the first apply's state (2026-10-24, done)
 
 On 2026-10-24 the first apply had already created the network, the firewalls and `unfold-headscale`, from code that had no `tofu` user, no key tool and no timer. cloud-init runs only when a server is created, so that server is replaced through code. It holds nothing yet (no users, no keys, no nodes), and the primary IP `2.31.73.11` stays, so the DNS record stays valid. Hetzner refuses to delete a server with delete protection, and the provider does not lift it before a replacement, so this takes two pull requests and two applies, in this order:
 

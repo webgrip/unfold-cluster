@@ -7,6 +7,7 @@ readonly usage="usage: unfold-tailnet-key renew
        unfold-tailnet-key gateway GENERATION read|mint
        unfold-tailnet-key policy set < policy.hujson
        unfold-tailnet-key install < unfold-tailnet-key
+       unfold-tailnet-key nodes list
 
 renew                    make sure the control planes' reusable tag:cp pre-auth key
                          has more than RENEW_WHEN_DAYS_LEFT days left, creating the
@@ -26,7 +27,9 @@ policy set               check the policy on stdin against the running Headscale
                          differs, and put the previous policy back if Headscale
                          does not come up with it
 install                  replace this program with the one on stdin after a
-                         syntax check, when it differs"
+                         syntax check, when it differs
+nodes list               print the nodes Headscale knows as JSON, name and
+                         whether it is online, and nothing else"
 
 settings_file="${UNFOLD_TAILNET_SETTINGS:-/etc/unfold-tailnet/settings.env}"
 # shellcheck source=/dev/null
@@ -180,6 +183,10 @@ install_self() {
   echo "program installed"
 }
 
+list_nodes() {
+  headscale nodes list -o json | jq -c '[(. // [])[] | {name: (.given_name // .name), online: (.online // false)}] | sort_by(.name)'
+}
+
 print_if_present() {
   if [ -s "$1" ]; then
     cat "$1"
@@ -224,10 +231,15 @@ case "$mode" in
   install)
     [ "$#" -eq 1 ] || usage_error
     ;;
+  nodes)
+    [ "$#" -eq 2 ] || usage_error
+    action="$2"
+    [ "$action" = "list" ] || usage_error
+    ;;
   *) usage_error ;;
 esac
 case "${action:-renew}" in
-  renew | read | mint | set) ;;
+  renew | read | mint | set | list) ;;
   *) usage_error ;;
 esac
 
@@ -277,5 +289,9 @@ case "$mode/${action:-}" in
     ;;
   install/)
     install_self
+    ;;
+  nodes/list)
+    require_headscale
+    list_nodes
     ;;
 esac

@@ -1,0 +1,141 @@
+---
+name: rebuild-drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Choose "drill" to rebuild the whole estate in the empty drill project, prove it, rebuild Headscale under it, and delete everything again; "teardown-only" to empty the drill project after a drill that did not finish
+        required: true
+        type: choice
+        options:
+          - drill
+          - teardown-only
+        default: drill
+
+concurrency:
+  group: rebuild-drill
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+  DRILL_HEADSCALE_HOSTNAME: headscale-drill.webgrip.dev
+
+jobs:
+  drill:
+    if: vars.REBUILD_DRILL == 'enabled' && github.ref == 'refs/heads/main'
+    runs-on: unfold-infra
+    enable-openid-connect: true
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
+      TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
+      TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
+      TF_VAR_etcd_backup_s3_access_key: rebuild-drill-has-no-backup-key
+      TF_VAR_etcd_backup_s3_secret_key: rebuild-drill-has-no-backup-key
+      TF_VAR_headscale_address_property: drill_ipv4
+      TF_VAR_talos_snapshot_required: "true"
+      UNFOLD_TAILNET_MINT: allowed
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Read the drill project's Hetzner token from OpenBao
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            HCLOUD_TOKEN=secret/data/hetzner/unfold-drill#HCLOUD_TOKEN
+
+      - name: Mask every prefix of the drill token, which Hetzner's API errors quote
+        working-directory: .
+        run: ./scripts/mask-hcloud-token-prefixes.sh
+
+      - name: Refuse to start unless the drill project is empty, then mark it
+        id: guard
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh guard
+
+      - name: Keep this run's state on the runner, encrypted with a passphrase made for it
+        if: inputs.mode == 'drill'
+        run: |
+          set -eu
+          passphrase="$(head -c 48 /dev/urandom | base64 -w0)"
+          echo "::add-mask::${passphrase}"
+          echo "TF_VAR_state_passphrase=${passphrase}" >> "${GITHUB_ENV}"
+          printf 'terraform {\n  backend "local" {\n    path = "%s/rebuild-drill.tfstate"\n  }\n}\n' "${RUNNER_TEMP}" > drill_override.tf
+
+      - name: Init and validate
+        if: inputs.mode == 'drill'
+        run: |
+          set -eu
+          tofu init
+          tofu validate
+
+      - name: Build the Talos snapshot in the drill project
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/build-talos-snapshot.sh
+
+      - name: Apply from nothing, as the production apply does
+        if: inputs.mode == 'drill'
+        env:
+          TF_VAR_hcloud_cluster_token: ${{ env.HCLOUD_TOKEN }}
+          TF_VAR_hcloud_vip_token: ${{ env.HCLOUD_TOKEN }}
+          TF_VAR_headscale_hostname: ${{ env.DRILL_HEADSCALE_HOSTNAME }}
+        run: tofu apply -auto-approve -lock=false
+
+      - name: Install the pinned talosctl and kubectl
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: |
+          set -eu
+          ./scripts/diagnose-cluster.sh --install-tools "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Prove the rebuilt cluster, the bootstrap checklist's stage D
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh verify infra
+
+      - name: Prove every node joined the drill's Headscale
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh tailnet infra
+
+      - name: Replace Headscale under the running cluster, as a raised headscale_generation does
+        if: inputs.mode == 'drill'
+        env:
+          TF_VAR_hcloud_cluster_token: ${{ env.HCLOUD_TOKEN }}
+          TF_VAR_hcloud_vip_token: ${{ env.HCLOUD_TOKEN }}
+          TF_VAR_headscale_hostname: ${{ env.DRILL_HEADSCALE_HOSTNAME }}
+          TF_VAR_headscale_generation: "1000"
+        run: |
+          set -eu
+          tofu plan -lock=false -out=rebuild-headscale.tfplan
+          tofu show -json rebuild-headscale.tfplan | ../scripts/lift-headscale-protection.sh
+          tofu apply -lock=false rebuild-headscale.tfplan
+
+      - name: Prove every node re-joined the new Headscale on its own
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh tailnet infra
+
+      - name: Prove the cluster is unharmed after the Headscale rebuild
+        if: inputs.mode == 'drill'
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh verify infra
+
+      - name: Delete everything in the drill project
+        if: always() && (inputs.mode == 'teardown-only' || steps.guard.outcome == 'success')
+        working-directory: .
+        run: ./scripts/rebuild-drill.sh teardown
+
+      - name: Take the drill's Headscale name out of DNS
+        if: always() && (inputs.mode == 'teardown-only' || steps.guard.outcome == 'success')
+        working-directory: .
+        run: printf '\n' | ./scripts/openbao-kv.sh put ipv4 unfold/headscale-address drill_ipv4

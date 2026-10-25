@@ -3,8 +3,7 @@ locals {
   headscale_version = "0.29.5"
   headscale_sha256  = "9e8ec12a65229435863a2cdf5082853c282808e845efd3a1f0b0c02b8f84d723"
 
-  headscale_generation = 2
-  headscale_node_user  = "nodes"
+  headscale_node_user = "nodes"
 }
 
 locals {
@@ -18,7 +17,7 @@ locals {
 }
 
 resource "terraform_data" "headscale_generation" {
-  input = local.headscale_generation
+  input = var.headscale_generation
 }
 
 resource "hcloud_ssh_key" "admin" {
@@ -121,5 +120,17 @@ resource "hcloud_server" "headscale" {
   lifecycle {
     ignore_changes       = [user_data, image]
     replace_triggered_by = [terraform_data.headscale_generation]
+  }
+}
+
+resource "terraform_data" "headscale_address" {
+  triggers_replace = [hcloud_primary_ip.headscale.ip_address, var.headscale_address_property]
+
+  provisioner "local-exec" {
+    command = "printf '%s\\n' \"$HEADSCALE_IPV4\" | ${path.module}/../scripts/openbao-kv.sh put ipv4 unfold/headscale-address \"$PROPERTY\""
+    environment = {
+      HEADSCALE_IPV4 = hcloud_primary_ip.headscale.ip_address
+      PROPERTY       = var.headscale_address_property
+    }
   }
 }

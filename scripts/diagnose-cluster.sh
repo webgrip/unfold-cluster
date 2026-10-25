@@ -18,7 +18,10 @@ Needs HCLOUD_TOKEN in the environment for the rate-limit check. Installs
 talosctl and kubectl at the pinned versions below, checksum-verified, when
 they are not on PATH.
 
-  --redact-test   read stdin, print it redacted, and exit"
+  --redact-test   read stdin, print it redacted, and exit
+  --install-tools DIR
+                  install the pinned talosctl and kubectl into DIR, when they
+                  are not on PATH, and exit"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly repo_root
@@ -233,6 +236,14 @@ summarize() {
 main() {
   case "${1:-}" in
     --redact-test) redact; exit 0 ;;
+    --install-tools)
+      [ -n "${2:-}" ] || { echo "$usage" >&2; exit 2; }
+      tool_dir="$2"
+      mkdir -p "$tool_dir"
+      PATH="${PATH}:${tool_dir}"
+      ensure_tools
+      exit 0
+      ;;
     -h | --help) echo "$usage"; exit 0 ;;
     "") ;;
     *) echo "$usage" >&2; exit 2 ;;
