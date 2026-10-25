@@ -24,6 +24,8 @@ on:
       - scripts/lift-headscale-protection.sh
       - scripts/set-etcd-backup-lifecycle.sh
       - scripts/rebuild-drill.sh
+      - scripts/robot.sh
+      - talos/**
       - scripts/test-*.sh
       - .forgejo/workflows/rebuild-drill.yml
 
@@ -77,6 +79,10 @@ jobs:
       - name: Test the rebuild drill's guard and teardown
         working-directory: .
         run: ./scripts/test-rebuild-drill.sh
+
+      - name: Test the Robot order, vSwitch, firewall and install steps against a stubbed Robot
+        working-directory: .
+        run: ./scripts/test-robot.sh
 
 
   token-mask-canary:

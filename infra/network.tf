@@ -28,7 +28,7 @@ locals {
 resource "hcloud_network" "cluster" {
   name                     = "unfold-cluster"
   ip_range                 = local.network_range
-  expose_routes_to_vswitch = var.vswitch_id != null
+  expose_routes_to_vswitch = length(var.metal_servers) > 0
   delete_protection        = true
 
   labels = {
@@ -44,11 +44,11 @@ resource "hcloud_network_subnet" "cloud" {
 }
 
 resource "hcloud_network_subnet" "vswitch" {
-  count = var.vswitch_id == null ? 0 : 1
+  count = length(var.metal_servers) > 0 ? 1 : 0
 
   network_id   = hcloud_network.cluster.id
   type         = "vswitch"
   network_zone = "eu-central"
   ip_range     = local.vswitch_subnet_range
-  vswitch_id   = var.vswitch_id
+  vswitch_id   = tonumber(data.external.robot_vswitch[0].result.id)
 }
