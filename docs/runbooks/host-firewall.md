@@ -15,6 +15,8 @@ Every node runs Talos's ingress firewall: `NetworkDefaultActionConfig` with `ing
 | `cilium-wireguard-ingress` | 51871/udp | all | private network | Cilium's pod-traffic encryption |
 | `cilium-health-ingress` | 4240/tcp | all | private network | Cilium's node-to-node health probes |
 | `hubble-peer-ingress` | 4244/tcp | all | private network, pod network | Hubble Relay |
+| `node-metrics-ingress` | 9100, 9598, 9962-9963, 9965/tcp | all | pod network | vmagent in `observability` scraping node-exporter, Vector, the Cilium agent and operator, and Hubble ([observability](../observability.md)) |
+| `etcd-metrics-ingress` | 2383/tcp | control planes | pod network | vmagent scraping etcd |
 
 Talos accepts some traffic without a rule. In `block` mode it accepts:
 
@@ -33,8 +35,7 @@ The rule set was checked on 2026-10-25 against the sockets listening on `unfold-
 | Listener | Status |
 | --- | --- |
 | `*:10256` | kube-proxy's health port. kube-proxy is being removed. |
-| `*:9963`, `0.0.0.0:9964` | Cilium operator and Envoy metrics. Nothing scrapes them yet. The observability stream adds a rule from its scraper's source when it does. |
-| `10.64.0.x:2383` | etcd metrics. RFC 0001 opens it to the metrics scraper only, once there is one. |
+| `0.0.0.0:9964` | Cilium Envoy metrics. Nothing scrapes them, so the port stays closed. |
 | Tailscale's UDP port | Random per start (58946, 56962 and 39830 that day), so no rule can name it. Direct paths form through NAT traversal: both peers send first, and the replies count as established. When that fails, traffic goes through the DERP relay over outbound TCP 443. |
 | Everything else | Bound to `127.0.0.1`, `127.0.0.53` or the tailnet address as a client socket. |
 

@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - infra/**
+      - scripts/*tailnet*
+      - scripts/*headscale*
       - .forgejo/workflows/infra.yml
       - .forgejo/workflows/infra-check.yml
       - kubernetes/clusters/main/**
@@ -45,6 +47,10 @@ jobs:
 
       - name: Test against mocked providers
         run: tofu test
+
+      - name: Test the program OpenTofu runs on unfold-headscale
+        working-directory: .
+        run: ./scripts/test-tailnet-key-tool.sh
 
 
   token-mask-canary:

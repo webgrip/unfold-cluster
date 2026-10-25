@@ -153,6 +153,13 @@ jobs:
           fi
           tofu apply -lock-timeout=5m infra.tfplan
 
+      - name: Hand the homelab gateway its tailnet key through OpenBao
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
+        run: tofu output -raw homelab_gateway_tailnet_key | ../scripts/hand-gateway-key-to-openbao.sh
+
   diagnose:
     if: >-
       github.event_name == 'workflow_dispatch'

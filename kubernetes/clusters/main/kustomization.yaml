@@ -19,3 +19,4 @@ resources:
   - ../../platform/ci-runners
   - ../../platform/zot
   - ../../platform/gvisor
+  - ../../platform/observability

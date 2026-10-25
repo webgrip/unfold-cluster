@@ -4,6 +4,9 @@ set -eu
 readonly usage="usage: unfold-tailnet-key renew
        unfold-tailnet-key control-plane read|mint
        unfold-tailnet-key worker SERVER_ID read|mint
+       unfold-tailnet-key gateway GENERATION read|mint
+       unfold-tailnet-key policy set < policy.hujson
+       unfold-tailnet-key install < unfold-tailnet-key
 
 renew                    make sure the control planes' reusable tag:cp pre-auth key
                          has more than RENEW_WHEN_DAYS_LEFT days left, creating the
@@ -14,7 +17,16 @@ control-plane mint       renew, check Headscale's public health endpoint, print 
 worker SERVER_ID read    print the single-use tag:node key made for that Hetzner
                          server, or nothing when none was made
 worker SERVER_ID mint    the same, first making the key when none was made: one per
-                         server, expiring after WORKER_KEY_LIFETIME_HOURS"
+                         server, expiring after WORKER_KEY_LIFETIME_HOURS
+gateway GENERATION read  print the single-use GATEWAY_TAG key made for that
+                         generation of the homelab gateway, or nothing
+gateway GENERATION mint  the same, first making the key when none was made
+policy set               check the policy on stdin against the running Headscale,
+                         install it at POLICY_PATH and restart Headscale when it
+                         differs, and put the previous policy back if Headscale
+                         does not come up with it
+install                  replace this program with the one on stdin after a
+                         syntax check, when it differs"
 
 settings_file="${UNFOLD_TAILNET_SETTINGS:-/etc/unfold-tailnet/settings.env}"
 # shellcheck source=/dev/null
@@ -23,6 +35,11 @@ settings_file="${UNFOLD_TAILNET_SETTINGS:-/etc/unfold-tailnet/settings.env}"
 : "${NODE_USER:?}" "${ADMIN_USER:?}" "${CONTROL_PLANE_TAG:?}" "${WORKER_TAG:?}"
 : "${CONTROL_PLANE_KEY_LIFETIME_HOURS:?}" "${RENEW_WHEN_DAYS_LEFT:?}" "${WORKER_KEY_LIFETIME_HOURS:?}"
 : "${STATE_DIR:?}" "${HEALTH_URL:?}" "${HEALTH_CONNECT_TO:?}"
+: "${GATEWAY_TAG:=tag:homelab-gateway}"
+: "${GATEWAY_KEY_LIFETIME_HOURS:=168}"
+: "${POLICY_PATH:=/etc/headscale/acl.hujson}"
+: "${SELF_PATH:=/usr/local/sbin/unfold-tailnet-key}"
+: "${HEADSCALE_START_SECONDS:=60}"
 
 key_file="${STATE_DIR}/control-plane.authkey"
 key_id_file="${STATE_DIR}/control-plane.authkey.id"
@@ -103,6 +120,66 @@ create_worker_key() {
   mv "$(worker_key_file "$1").new" "$(worker_key_file "$1")"
 }
 
+gateway_key_file() {
+  echo "${STATE_DIR}/gateway/${1}.authkey"
+}
+
+create_gateway_key() {
+  mkdir -p "${STATE_DIR}/gateway"
+  key_from "$(headscale preauthkeys create \
+    --user "$(user_id "$NODE_USER")" \
+    --tags "$GATEWAY_TAG" \
+    --expiration "${GATEWAY_KEY_LIFETIME_HOURS}h" \
+    -o json)" >"$(gateway_key_file "$1").new"
+  mv "$(gateway_key_file "$1").new" "$(gateway_key_file "$1")"
+}
+
+wait_for_headscale() {
+  deadline=$(($(date +%s) + HEADSCALE_START_SECONDS))
+  until headscale users list -o json >/dev/null 2>&1; do
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    sleep 2
+  done
+}
+
+set_policy() {
+  candidate="${POLICY_PATH}.candidate"
+  cat >"$candidate"
+  [ -s "$candidate" ] || fail "the policy on stdin is empty"
+  if cmp -s "$candidate" "$POLICY_PATH"; then
+    rm -f "$candidate"
+    echo "policy unchanged"
+    return
+  fi
+  headscale policy check -f "$candidate" >/dev/null 2>&1 \
+    || { rm -f "$candidate"; fail "headscale refuses the policy on stdin"; }
+  chmod 0644 "$candidate"
+  cp -p "$POLICY_PATH" "${POLICY_PATH}.previous"
+  mv "$candidate" "$POLICY_PATH"
+  systemctl restart headscale
+  if ! wait_for_headscale; then
+    mv "${POLICY_PATH}.previous" "$POLICY_PATH"
+    systemctl restart headscale
+    fail "headscale did not start with the new policy; the previous one is back"
+  fi
+  echo "policy installed"
+}
+
+install_self() {
+  candidate="${SELF_PATH}.candidate"
+  cat >"$candidate"
+  head -n 1 "$candidate" | grep -qx '#!/bin/sh' || { rm -f "$candidate"; fail "stdin is not a /bin/sh program"; }
+  sh -n "$candidate" || { rm -f "$candidate"; fail "stdin does not parse"; }
+  if cmp -s "$candidate" "$SELF_PATH"; then
+    rm -f "$candidate"
+    echo "program unchanged"
+    return
+  fi
+  chmod 0755 "$candidate"
+  mv "$candidate" "$SELF_PATH"
+  echo "program installed"
+}
+
 print_if_present() {
   if [ -s "$1" ]; then
     cat "$1"
@@ -131,10 +208,26 @@ case "$mode" in
       '' | *[!0-9]*) usage_error ;;
     esac
     ;;
+  gateway)
+    [ "$#" -eq 3 ] || usage_error
+    generation="$2"
+    action="$3"
+    case "$generation" in
+      '' | *[!0-9]*) usage_error ;;
+    esac
+    ;;
+  policy)
+    [ "$#" -eq 2 ] || usage_error
+    action="$2"
+    [ "$action" = "set" ] || usage_error
+    ;;
+  install)
+    [ "$#" -eq 1 ] || usage_error
+    ;;
   *) usage_error ;;
 esac
 case "${action:-renew}" in
-  renew | read | mint) ;;
+  renew | read | mint | set) ;;
   *) usage_error ;;
 esac
 
@@ -167,5 +260,22 @@ case "$mode/${action:-}" in
       create_worker_key "$server_id"
     fi
     cat "$(worker_key_file "$server_id")"
+    ;;
+  gateway/read)
+    print_if_present "$(gateway_key_file "$generation")"
+    ;;
+  gateway/mint)
+    if [ ! -s "$(gateway_key_file "$generation")" ]; then
+      require_headscale
+      create_gateway_key "$generation"
+    fi
+    cat "$(gateway_key_file "$generation")"
+    ;;
+  policy/set)
+    require_headscale
+    set_policy
+    ;;
+  install/)
+    install_self
     ;;
 esac

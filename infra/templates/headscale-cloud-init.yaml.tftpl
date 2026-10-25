@@ -63,7 +63,7 @@ write_files:
   - path: /etc/sudoers.d/unfold-tailnet-key
     permissions: "0440"
     content: |
-      tofu ALL=(root) NOPASSWD: /usr/local/sbin/unfold-tailnet-key control-plane read, /usr/local/sbin/unfold-tailnet-key control-plane mint, /usr/local/sbin/unfold-tailnet-key worker *
+      ${indent(6, tailnet_key_sudoers)}
   - path: /etc/systemd/system/unfold-tailnet-key.service
     permissions: "0644"
     content: |

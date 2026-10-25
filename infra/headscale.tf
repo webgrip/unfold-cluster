@@ -7,6 +7,16 @@ locals {
   headscale_node_user  = "nodes"
 }
 
+locals {
+  tailnet_key_tool    = file("${path.module}/templates/unfold-tailnet-key.sh")
+  tailnet_key_sudoers = file("${path.module}/templates/unfold-tailnet-key.sudoers")
+
+  headscale_policy = templatefile("${path.module}/templates/headscale-acl.hujson", {
+    admin_user = var.headscale_admin_user
+    node_route = local.cloud_subnet_range
+  })
+}
+
 resource "terraform_data" "headscale_generation" {
   input = local.headscale_generation
 }
@@ -98,11 +108,9 @@ resource "hcloud_server" "headscale" {
     headscale_sha256    = local.headscale_sha256
     admin_user          = var.headscale_admin_user
     node_user           = local.headscale_node_user
-    tailnet_key_script  = file("${path.module}/templates/unfold-tailnet-key.sh")
-    acl = templatefile("${path.module}/templates/headscale-acl.hujson", {
-      admin_user = var.headscale_admin_user
-      node_route = local.cloud_subnet_range
-    })
+    tailnet_key_script  = local.tailnet_key_tool
+    tailnet_key_sudoers = local.tailnet_key_sudoers
+    acl                 = local.headscale_policy
   })
 
   labels = {

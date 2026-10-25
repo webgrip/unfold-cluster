@@ -51,3 +51,9 @@ output "headscale_ssh_known_hosts" {
   description = "The only SSH host key unfold-headscale presents, as a known_hosts line. Read with: tofu output -raw headscale_ssh_known_hosts >> ~/.ssh/known_hosts"
   value       = "${var.headscale_hostname},${hcloud_primary_ip.headscale.ip_address} ${trimspace(tls_private_key.headscale_host.public_key_openssh)}"
 }
+
+output "homelab_gateway_tailnet_key" {
+  description = "The homelab gateway's single-use tag:homelab-gateway pre-auth key. The infra workflow writes it to OpenBao secret/unfold/tailnet-homelab-gateway after each apply, where the homelab's External Secrets picks it up."
+  value       = terraform_data.homelab_gateway_tailnet_key.output
+  sensitive   = true
+}

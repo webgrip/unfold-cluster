@@ -4,13 +4,19 @@
   },
   "tagOwners": {
     "tag:cp": ["group:admin"],
-    "tag:node": ["group:admin"]
+    "tag:node": ["group:admin"],
+    "tag:homelab-gateway": ["group:admin"]
   },
   "acls": [
     {
       "action": "accept",
       "src": ["group:admin"],
       "dst": ["*:*"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:cp", "tag:node"],
+      "dst": ["tag:homelab-gateway:8200,8427"]
     }
   ],
   "autoApprovers": {

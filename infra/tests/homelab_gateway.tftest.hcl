@@ -1,0 +1,125 @@
+mock_provider "hcloud" {
+  mock_resource "hcloud_network" {
+    defaults = {
+      id = "101"
+    }
+  }
+
+  mock_resource "hcloud_firewall" {
+    defaults = {
+      id = "102"
+    }
+  }
+
+  mock_resource "hcloud_primary_ip" {
+    defaults = {
+      id = "103"
+    }
+  }
+
+  mock_resource "hcloud_ssh_key" {
+    defaults = {
+      id = "104"
+    }
+  }
+
+  mock_resource "hcloud_placement_group" {
+    defaults = {
+      id = "105"
+    }
+  }
+
+  mock_resource "hcloud_server" {
+    defaults = {
+      id = "106"
+    }
+  }
+
+  mock_data "hcloud_images" {
+    defaults = {
+      images = []
+    }
+  }
+}
+
+mock_provider "talos" {}
+
+mock_provider "helm" {}
+
+mock_provider "tls" {}
+
+mock_provider "external" {
+  mock_data "external" {
+    defaults = {
+      result = {
+        key = "hskey-auth-mocked"
+      }
+    }
+  }
+}
+
+variables {
+  state_passphrase     = "mock-passphrase-of-at-least-thirty-two-characters"
+  admin_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
+  admin_cidrs          = ["203.0.113.7/32", "2001:db8::/64"]
+}
+
+run "the_tailnet_policy_lets_the_nodes_reach_the_homelab_gateway_and_nothing_more" {
+  command = plan
+
+  assert {
+    condition = [for rule in jsondecode(local.headscale_policy).acls : rule if !contains(rule.src, "group:admin")] == [
+      { action = "accept", src = ["tag:cp", "tag:node"], dst = ["tag:homelab-gateway:8200,8427"] },
+    ]
+    error_message = "besides the admins, only the nodes may open connections, and only to the gateway's metrics and log ingest (8427) and OpenBao (8200)"
+  }
+
+  assert {
+    condition     = jsondecode(local.headscale_policy).tagOwners["tag:homelab-gateway"] == ["group:admin"]
+    error_message = "the gateway tag must have an owner, or Headscale refuses the policy"
+  }
+}
+
+run "the_server_and_the_apply_install_the_same_program_and_policy" {
+  command = plan
+
+  assert {
+    condition     = terraform_data.tailnet_key_tool.triggers_replace[0] == sha256(file("${path.module}/templates/unfold-tailnet-key.sh"))
+    error_message = "a change to unfold-tailnet-key.sh must reinstall it on the running server"
+  }
+
+  assert {
+    condition     = terraform_data.headscale_policy.triggers_replace[0] == sha256(local.headscale_policy)
+    error_message = "a change to the Headscale policy must reach the running server"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(hcloud_server.headscale.user_data, trimspace(local.tailnet_key_sudoers)),
+      strcontains(hcloud_server.headscale.user_data, "policy set"),
+      strcontains(hcloud_server.headscale.user_data, "\"tag:homelab-gateway\""),
+    ])
+    error_message = "a new server must start with the same program, sudoers rule and policy that the apply pushes"
+  }
+
+  assert {
+    condition     = trimspace(local.tailnet_key_sudoers) == "tofu ALL=(root) NOPASSWD: /usr/local/sbin/unfold-tailnet-key *"
+    error_message = "the tofu user may run unfold-tailnet-key as root and nothing else"
+  }
+}
+
+run "the_gateway_key_never_shows_in_a_plan" {
+  command = plan
+
+  override_resource {
+    target = terraform_data.homelab_gateway_tailnet_key
+    values = {
+      output = "hskey-auth-mocked-gateway"
+    }
+  }
+
+  assert {
+    condition     = issensitive(output.homelab_gateway_tailnet_key)
+    error_message = "the gateway's pre-auth key must stay out of the public plan log"
+  }
+}

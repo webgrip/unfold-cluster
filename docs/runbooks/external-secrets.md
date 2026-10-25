@@ -11,7 +11,7 @@ homelab one, and moving to the in-cluster OpenBao later only changes the store.
 | --- | --- | --- |
 | ESO controller, webhook, cert controller | `external-secrets`, on the control planes (recovery set) | Flux Kustomization `external-secrets` |
 | ClusterSecretStore `openbao-homelab` | cluster-wide, usable only from namespaces labelled `external-secrets.webgrip.io/openbao-homelab: allowed` | Flux Kustomization `external-secrets-stores` |
-| Service `openbao-homelab` in `external-secrets`, port 8200 | endpoints point at the homelab OpenBao | the homelab link (not built yet, see below) |
+| The homelab gateway, `unfold-gateway.webgrip.dev:8200` | forwards to the homelab OpenBao over the tailnet | homelab-cluster `kubernetes/apps/observability/unfold/`; see [observability](../observability.md) |
 | JWT auth mount `jwt-unfold-main`, role `unfold-main-external-secrets`, policy `unfold-main-reader` | homelab OpenBao | homelab-cluster `kubernetes/apps/security/openbao/bootstrap` |
 | Secret values | homelab OpenBao KV, under `secret/unfold-main/` | whatever mints them; see each consumer |
 
@@ -32,16 +32,19 @@ The ESO controller may mint tokens for that one ServiceAccount only (Role
 `external-secrets-openbao-homelab-token`); the chart's cluster-wide `serviceaccounts/token` grant is
 switched off.
 
-## The missing link
+## The link to the homelab
 
-The homelab OpenBao is reachable only on the homelab LAN, and the homelab is not on this cluster's
-tailnet: only admin devices and the cluster nodes are, and the tailnet policy lets only admins open
-connections. Until a link exists, the store reports `NotReady` and every ExternalSecret that uses it
-stays unsynced. Nothing else breaks: no consumer waits on the store's health.
+The homelab OpenBao is reachable only on the homelab LAN. The homelab gateway joins this cluster's
+tailnet as `tag:homelab-gateway` and forwards its port 8200 to that OpenBao; the Headscale policy lets
+only the nodes (`tag:cp`, `tag:node`) and the admins open it. The store's server is
+`http://unfold-gateway.webgrip.dev:8200`, a DNS-only record that the homelab publishes with the
+gateway's tailnet address. The CiliumNetworkPolicy `external-secrets-openbao-homelab` lets the ESO
+controller resolve that one name and open port 8200 on the address it resolves to, nothing else.
+The traffic is plain HTTP inside the tailnet's WireGuard tunnel; OpenBao's tokens never cross the
+internet. How the gateway, its key and the policy are set up, with no hand steps: [observability](../observability.md).
 
-The link has to provide exactly one thing: a Service `openbao-homelab` in `external-secrets` whose
-endpoints reach the homelab OpenBao on port 8200. The CiliumNetworkPolicy
-`external-secrets-openbao-homelab` already allows the ESO controller to that Service and nothing else.
+Until the gateway is up the store reports `NotReady` and every ExternalSecret that uses it stays
+unsynced. Nothing else breaks: no consumer waits on the store's health.
 
 ## When the cluster is rebuilt
 
