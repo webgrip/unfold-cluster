@@ -12,3 +12,5 @@ resources:
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
   - ../../platform/human-access
+  - ../../platform/keda
+  - ../../platform/ci-runners

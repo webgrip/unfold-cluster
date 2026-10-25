@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-config
+  namespace: ci
+data:
+  buildkitd.toml: |-
+    [worker.oci]
+      gc = true
+
+      [[worker.oci.gcpolicy]]
+        all = true
+        keepBytes = "20GB"
+
+    [worker.containerd]
+      enabled = false
+
+    [registry."zot.zot.svc.cluster.local:5000"]
+      http = true
+
+    [registry."docker.io"]
+      mirrors = ["zot.zot.svc.cluster.local:5000/docker.io"]
+
+    [registry."ghcr.io"]
+      mirrors = ["zot.zot.svc.cluster.local:5000/ghcr.io"]
+
+    [registry."quay.io"]
+      mirrors = ["zot.zot.svc.cluster.local:5000/quay.io"]
+
+    [registry."registry.k8s.io"]
+      mirrors = ["zot.zot.svc.cluster.local:5000/registry.k8s.io"]
