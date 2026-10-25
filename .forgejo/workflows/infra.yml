@@ -79,6 +79,7 @@ jobs:
             AWS_ACCESS_KEY_ID=secret/data/unfold-cluster/tofu-state#STATE_S3_ACCESS_KEY
             AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
             TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
+            TF_VAR_headscale_oidc_client_secret=secret/data/authentik/unfold-headscale-oidc#client_secret
             TF_VAR_hcloud_cluster_token=secret/data/hetzner/unfold-cluster#HCLOUD_TOKEN_CLUSTER
             TF_VAR_hcloud_vip_token=secret/data/hetzner/unfold-vip#HCLOUD_TOKEN_VIP
             TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
@@ -99,6 +100,11 @@ jobs:
             eval "value=\${$name:-}"
             [ -n "$value" ] || { echo "::error::$name is not set for this repository"; exit 1; }
           done
+
+      - name: Refuse to run without the Headscale OIDC client secret
+        run: |
+          set -eu
+          [ -n "${TF_VAR_headscale_oidc_client_secret:-}" ] || { echo "::error::OpenBao secret/authentik/unfold-headscale-oidc has no client_secret; the homelab generates it (docs/runbooks/headscale-browser-login.md)"; exit 1; }
 
       - name: Format
         run: tofu fmt -check -recursive

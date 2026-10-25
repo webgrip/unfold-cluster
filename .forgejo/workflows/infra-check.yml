@@ -66,6 +66,14 @@ jobs:
         working-directory: .
         run: ./scripts/test-tailnet-key-tool.sh
 
+      - name: Test what OpenTofu sends to unfold-headscale, and that the OIDC client secret stays out of the log
+        working-directory: .
+        run: ./scripts/test-push-to-headscale.sh
+
+      - name: Test the rendered Headscale configuration and policy on the pinned Headscale, with its identity provider down
+        working-directory: .
+        run: ./scripts/test-headscale-config.sh
+
       - name: Test the disk-encryption re-install against a stubbed cluster, mutants included
         working-directory: .
         run: ./scripts/test-encrypt-node.sh

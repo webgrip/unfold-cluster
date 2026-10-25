@@ -119,7 +119,7 @@ run "the_operators_keep_two_independent_ways_to_the_talos_and_kubernetes_apis" {
   assert {
     condition = alltrue([
       for source in ["100.64.0.0/10", "fd7a:115c:a1e0::/48"] :
-      strcontains(file("${path.module}/templates/headscale-cloud-init.yaml.tftpl"), source)
+      strcontains(local.headscale_config, source)
     ])
     error_message = "the tailnet prefixes the firewall allows must be the ones Headscale hands out"
   }
