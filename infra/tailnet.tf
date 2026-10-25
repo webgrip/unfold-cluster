@@ -44,11 +44,17 @@ resource "terraform_data" "control_plane_tailnet_key" {
   }
 }
 
+locals {
+  worker_tailnet_key_slot = {
+    for name, server in hcloud_server.worker : name => "${server.id}${replace(var.tailnet_key_generation, "-", "")}"
+  }
+}
+
 data "external" "worker_tailnet_key" {
   for_each = local.workers
 
   program = ["${path.module}/../scripts/read-tailnet-key.sh"]
-  query   = merge(local.tailnet_key_query, { request = "worker ${hcloud_server.worker[each.key].id}" })
+  query   = merge(local.tailnet_key_query, { request = "worker ${local.worker_tailnet_key_slot[each.key]}" })
 
   depends_on = [hcloud_server.headscale]
 }

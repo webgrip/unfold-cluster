@@ -117,6 +117,39 @@ run "the_hub_worker_keeps_its_server_and_machine_config" {
   }
 }
 
+run "a_new_key_generation_asks_for_a_new_worker_key_instead_of_the_stored_one" {
+  command = plan
+
+  variables {
+    tailnet_key_generation = "2026-11-02"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, server in hcloud_server.worker :
+      data.external.worker_tailnet_key[name].query.request == "worker ${server.id}20261102"
+    ])
+    error_message = "after a generation bump each worker asks for the key slot of that generation, which unfold-headscale has not filled yet, so it mints a fresh key instead of returning the expired one it stored"
+  }
+
+  assert {
+    condition     = terraform_data.worker_tailnet_key["unfold-ci-1"].triggers_replace == "2026-11-02"
+    error_message = "a generation bump replaces the worker key resources, so the fresh key reaches the machine config"
+  }
+}
+
+run "the_key_generation_must_be_a_date" {
+  command = plan
+
+  variables {
+    tailnet_key_generation = "next"
+  }
+
+  expect_failures = [
+    var.tailnet_key_generation,
+  ]
+}
+
 run "a_pool_whose_label_names_another_pool_is_refused" {
   command = plan
 

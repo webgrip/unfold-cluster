@@ -193,7 +193,12 @@ variable "etcd_backup_age_recipient" {
 }
 
 variable "tailnet_key_generation" {
-  description = "Changing this makes the next apply read fresh tailnet pre-auth keys from unfold-headscale instead of reusing the ones in the state. Bump it after expiring keys that leaked."
+  description = "A date, YYYY-MM-DD. Changing it gives every node a fresh tailnet pre-auth key on the next apply: the control planes the current tag:cp key, each worker a new single-use key minted for this generation, never the one stored for an earlier generation, which has expired after 24 hours. Bump it after expiring keys that leaked, or when a worker could not join because its key expired before the node first booted."
   type        = string
   default     = "2026-10-25"
+
+  validation {
+    condition     = can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.tailnet_key_generation))
+    error_message = "tailnet_key_generation is a date, YYYY-MM-DD; its eight digits name the worker key slot on unfold-headscale."
+  }
 }
