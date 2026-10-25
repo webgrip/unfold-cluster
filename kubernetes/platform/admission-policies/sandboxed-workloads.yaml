@@ -1,0 +1,85 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: sandboxed-workloads
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)
+    - name: podLabels
+      expression: >-
+        object.kind == 'Pod' ? object.metadata.?labels.orValue({}) :
+        (object.kind == 'CronJob'
+          ? object.spec.jobTemplate.spec.template.?metadata.?labels.orValue({})
+          : object.spec.template.?metadata.?labels.orValue({}))
+    - name: isolationClassLabel
+      expression: "'ploeg.webgrip.dev/isolation-class'"
+    - name: strictness
+      expression: "{'': 0, 'standard': 1, 'hardened': 2, 'isolated': 3}"
+    - name: runtimeClassByIsolationClass
+      expression: "{'standard': '', 'hardened': 'gvisor', 'isolated': 'kata'}"
+    - name: runtimeClassByNamespace
+      expression: "{'ci': 'gvisor'}"
+    - name: podIsolationClass
+      expression: variables.podLabels[?variables.isolationClassLabel].orValue('')
+    - name: namespaceIsolationClass
+      expression: >-
+        namespaceObject.metadata.?labels.orValue({})[?variables.isolationClassLabel].orValue('')
+    - name: isolationClass
+      expression: >-
+        variables.strictness[?variables.podIsolationClass].orValue(99)
+        >= variables.strictness[?variables.namespaceIsolationClass].orValue(99)
+        ? variables.podIsolationClass : variables.namespaceIsolationClass
+    - name: namespaceRuntimeClass
+      expression: variables.runtimeClassByNamespace[?namespaceObject.metadata.name].orValue('')
+    - name: sandboxed
+      expression: variables.isolationClass != '' || variables.namespaceRuntimeClass != ''
+    - name: requiredRuntimeClass
+      expression: >-
+        variables.runtimeClassByIsolationClass[?variables.isolationClass].orValue('') != ''
+        ? variables.runtimeClassByIsolationClass[variables.isolationClass]
+        : variables.namespaceRuntimeClass
+  validations:
+    - expression: >-
+        variables.isolationClass == '' || variables.isolationClass in variables.runtimeClassByIsolationClass
+      messageExpression: >-
+        'unknown isolation class ' + variables.isolationClass + '; known: '
+        + variables.runtimeClassByIsolationClass.map(k, k).join(', ')
+      reason: Forbidden
+    - expression: >-
+        variables.requiredRuntimeClass == ''
+        || variables.spec.?runtimeClassName.orValue('') == variables.requiredRuntimeClass
+      messageExpression: >-
+        'this workload must run under runtimeClassName ' + variables.requiredRuntimeClass
+        + ', not ' + variables.spec.?runtimeClassName.orValue('the node default')
+      reason: Forbidden
+    - expression: >-
+        !variables.sandboxed || variables.spec.?automountServiceAccountToken.orValue(true) == false
+      message: sandboxed workloads must set automountServiceAccountToken to false.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: sandboxed-workloads
+spec:
+  policyName: sandboxed-workloads
+  validationActions: ["Audit", "Warn"]

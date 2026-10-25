@@ -11,7 +11,8 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, the manifests Talos installs at bootstrap (each rendered from its files under `kubernetes/`), and the two Secrets OpenTofu writes into the running cluster | OpenTofu, from `.forgejo/workflows/infra.yml` |
 | `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster, and in `flux-system/` its own GitRepository, Kustomization and trusted signers | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: the Flux operator and instance, Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: the Flux operator and instance, Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first, the roles people sign in to | Flux in the cluster |
+| `access/` | The OIDC kubeconfig people use daily; no secret in it | people, with `mise.toml`'s kubectl, kubelogin and k9s |
 
 ## From nothing to GitOps
 
@@ -239,6 +240,8 @@ The owner keeps these in a password manager with an offline copy, never in git:
 
 The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu output -raw talosconfig` and `tofu output -raw kubeconfig`, from a shell that has the state credentials and the passphrase.
 
+That admin kubeconfig is break-glass: it is in `system:masters` and cannot be revoked. Daily use is OIDC through Authentik with the committed `access/unfold-oidc.kubeconfig.yaml`, as yourself and bound by RBAC; setup, roles, the audit policy and the break-glass rules are in the [Kubernetes login runbook](docs/runbooks/kubernetes-login.md).
+
 ## Security architecture
 
 The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md). The confidential class and the next tier of measures are in [RFC 0002](docs/rfc/0002-confidential-class-and-next-tier.md).
@@ -250,6 +253,6 @@ The target design for every layer, its threat model, the residual risks and the 
 * **Backups share a datacentre.** The off-site Garage and the cluster are both in Hetzner's Falkenstein region, so a regional outage or a lost Hetzner account takes both. A second copy outside Hetzner, on the homelab Garage, is the next step.
 * **A failed restore check alerts nobody yet.** It shows as a failed run in Forgejo; wiring failed scheduled runs into the homelab's alerting is still to do.
 * **Headscale has no backup.** Losing the server loses the tailnet's keys and nodes; the APIs stay reachable from `ADMIN_CIDRS`, and a new server means re-registering every device.
-* **Every Hetzner token reads every disk** until the Talos partitions are encrypted with a key server outside this Hetzner project (see [Credentials and rotation](#credentials-and-rotation)).
+* **Every Hetzner token reads every disk** until the Talos partitions are encrypted with a key server outside this Hetzner project (see [Credentials and rotation](#credentials-and-rotation)). The encryption config is built and switched off until that key server exists; [docs/disk-encryption.md](docs/disk-encryption.md) has the proposal and the node-by-node rollout.
 * **Two rules live outside this repository.** The GitHub mirror's ruleset `main: no rollback` refuses force-pushes and deletion of `main`, and OpenBao's role `ci-unfold-cluster` (homelab-cluster, `kubernetes/apps/security/openbao/bootstrap/config.sh`) decides who reads the credentials. A change to either is a change to this repository's security.
 * **OpenBao** and the AX41 are not in the code yet.

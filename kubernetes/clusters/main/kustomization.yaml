@@ -11,5 +11,9 @@ resources:
   - ../../platform/hcloud-csi
   - ../../platform/network-policy
   - ../../platform/admission-policies
+  - ../../platform/external-secrets
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
+  - ../../platform/human-access
+  - ../../platform/keda
+  - ../../platform/ci-runners

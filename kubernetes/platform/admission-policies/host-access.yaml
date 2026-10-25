@@ -1,0 +1,71 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: host-access
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)
+    - name: containers
+      expression: >-
+        variables.spec.?containers.orValue([])
+        + variables.spec.?initContainers.orValue([])
+        + variables.spec.?ephemeralContainers.orValue([])
+  validations:
+    - expression: >-
+        variables.containers.all(c, !c.?securityContext.?privileged.orValue(false))
+      message: privileged containers run only in the system namespaces.
+      reason: Forbidden
+    - expression: >-
+        !variables.spec.?hostNetwork.orValue(false)
+        && !variables.spec.?hostPID.orValue(false)
+        && !variables.spec.?hostIPC.orValue(false)
+      message: hostNetwork, hostPID and hostIPC are allowed only in the system namespaces.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?volumes.orValue([]).all(v, !has(v.hostPath))
+      message: hostPath volumes are allowed only in the system namespaces.
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c, c.?ports.orValue([]).all(p, p.?hostPort.orValue(0) == 0))
+      message: hostPort is allowed only in the system namespaces.
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c,
+          !c.?securityContext.?windowsOptions.?hostProcess.orValue(false))
+        && !variables.spec.?securityContext.?windowsOptions.?hostProcess.orValue(false)
+      message: Windows host processes are not allowed.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: host-access
+spec:
+  policyName: host-access
+  validationActions: ["Audit", "Warn"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system

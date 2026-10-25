@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: legacy-token
+  namespace: tenant
+  annotations:
+    kubernetes.io/service-account.name: default
+type: kubernetes.io/service-account-token

@@ -1,0 +1,117 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pod-security-restricted
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: spec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)
+    - name: containers
+      expression: >-
+        variables.spec.?containers.orValue([])
+        + variables.spec.?initContainers.orValue([])
+        + variables.spec.?ephemeralContainers.orValue([])
+    - name: confinedSeccompTypes
+      expression: "['RuntimeDefault', 'Localhost']"
+    - name: safeSysctls
+      expression: >-
+        ['kernel.shm_rmid_forced', 'net.ipv4.ip_local_port_range', 'net.ipv4.ip_unprivileged_port_start',
+        'net.ipv4.tcp_syncookies', 'net.ipv4.ping_group_range', 'net.ipv4.ip_local_reserved_ports',
+        'net.ipv4.tcp_keepalive_time', 'net.ipv4.tcp_fin_timeout', 'net.ipv4.tcp_keepalive_intvl',
+        'net.ipv4.tcp_keepalive_probes', 'net.ipv4.tcp_rmem', 'net.ipv4.tcp_wmem']
+    - name: containerSELinuxTypes
+      expression: "['', 'container_t', 'container_init_t', 'container_kvm_t', 'container_engine_t']"
+  validations:
+    - expression: >-
+        variables.spec.?securityContext.?runAsNonRoot.orValue(false)
+        ? variables.containers.all(c, c.?securityContext.?runAsNonRoot.orValue(true))
+        : variables.containers.all(c, c.?securityContext.?runAsNonRoot.orValue(false))
+      message: runAsNonRoot must be true for the pod or for every container.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?securityContext.?runAsUser.orValue(1) != 0
+        && variables.containers.all(c, c.?securityContext.?runAsUser.orValue(1) != 0)
+      message: runAsUser must not be 0.
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c, c.?securityContext.?allowPrivilegeEscalation.orValue(true) == false)
+      message: every container must set allowPrivilegeEscalation to false.
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c,
+          c.?securityContext.?capabilities.?drop.orValue([]).exists(d, d == 'ALL')
+          && c.?securityContext.?capabilities.?add.orValue([]).all(a, a == 'NET_BIND_SERVICE'))
+      message: every container must drop ALL capabilities and may add back only NET_BIND_SERVICE.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?securityContext.?seccompProfile.?type.orValue('') in variables.confinedSeccompTypes
+        ? variables.containers.all(c,
+            c.?securityContext.?seccompProfile.?type.orValue('RuntimeDefault') in variables.confinedSeccompTypes)
+        : variables.containers.all(c,
+            c.?securityContext.?seccompProfile.?type.orValue('') in variables.confinedSeccompTypes)
+      message: seccompProfile must be RuntimeDefault or Localhost for the pod or for every container.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?volumes.orValue([]).all(v,
+          has(v.configMap) || has(v.csi) || has(v.downwardAPI) || has(v.emptyDir) || has(v.ephemeral)
+          || has(v.persistentVolumeClaim) || has(v.projected) || has(v.secret) || has(v.image))
+      message: >-
+        volumes are limited to configMap, csi, downwardAPI, emptyDir, ephemeral, persistentVolumeClaim,
+        projected, secret and image.
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c, c.?securityContext.?procMount.orValue('Default') == 'Default')
+      message: procMount must be Default.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?securityContext.?sysctls.orValue([]).all(s, s.name in variables.safeSysctls)
+      message: only the Kubernetes safe sysctls may be set.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?securityContext.?appArmorProfile.?type.orValue('RuntimeDefault') != 'Unconfined'
+        && variables.containers.all(c, c.?securityContext.?appArmorProfile.?type.orValue('RuntimeDefault') != 'Unconfined')
+      message: appArmorProfile must not be Unconfined.
+      reason: Forbidden
+    - expression: >-
+        variables.spec.?securityContext.?seLinuxOptions.?type.orValue('') in variables.containerSELinuxTypes
+        && !variables.spec.?securityContext.?seLinuxOptions.?user.hasValue()
+        && !variables.spec.?securityContext.?seLinuxOptions.?role.hasValue()
+        && variables.containers.all(c,
+          c.?securityContext.?seLinuxOptions.?type.orValue('') in variables.containerSELinuxTypes
+          && !c.?securityContext.?seLinuxOptions.?user.hasValue()
+          && !c.?securityContext.?seLinuxOptions.?role.hasValue())
+      message: seLinuxOptions may only pick a container type and must not set a user or role.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pod-security-restricted
+spec:
+  policyName: pod-security-restricted
+  validationActions: ["Audit", "Warn"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system

@@ -1,0 +1,88 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keda-apiserver
+spec:
+  description: Every KEDA pod talks to the Kubernetes API. The API server reaches the metrics API server on 6443 and the admission webhooks on 9443; in tunnel mode those calls arrive from a control plane's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so both are admitted on those two ports.
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "9443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keda-metrics-service
+spec:
+  description: The metrics API server asks the operator for scaler metrics over gRPC on 9666.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: keda-operator
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: keda-operator-metrics-apiserver
+      toPorts:
+        - ports:
+            - port: "9666"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keda-metrics-apiserver-to-operator
+spec:
+  description: The metrics API server's side of the gRPC link to the operator.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: keda-operator-metrics-apiserver
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: keda-operator
+      toPorts:
+        - ports:
+            - port: "9666"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keda-operator-forgejo
+spec:
+  description: The operator polls the Forgejo API for waiting CI jobs. Its lookups go through Cilium's DNS proxy, which is how the policy learns Forgejo's addresses.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: keda-operator
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

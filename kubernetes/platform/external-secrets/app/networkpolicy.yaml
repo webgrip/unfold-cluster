@@ -1,0 +1,39 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: external-secrets-apiserver
+spec:
+  description: Every External Secrets pod talks to the Kubernetes API, and the API server calls the admission webhook on 10250. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too. Nothing else reaches these pods.
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: external-secrets-openbao-homelab
+spec:
+  description: The controller reads the homelab OpenBao, the only original of every secret, through the Service openbao-homelab in this namespace. That Service has no selector; the link to the homelab fills its endpoints, so this rule follows the link wherever it lands and allows nothing else.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets
+  egress:
+    - toServices:
+        - k8sService:
+            serviceName: openbao-homelab
+            namespace: external-secrets
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
