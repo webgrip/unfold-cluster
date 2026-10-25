@@ -26,7 +26,7 @@ One cause is expected, and it settles after one extra dispatch:
 
 ### A minted tailnet key does not change the digest
 
-A plan-only run only reads keys from `unfold-headscale`; an apply run may mint one before it plans (the control planes' `tag:cp` key when it is missing or has 45 days or fewer left, a worker's `tag:node` key for a new key slot, the gateway's key for a new generation). Until 2026-10-25 this changed the digest of every apply that minted: when a `terraform_data.*_tailnet_key` is created or replaced, the plan-only run planned it with no key, which `tofu show` leaves out, and the apply run with the minted key, which it shows as `+ input = (sensitive value)`. Runs 168 (`f2d6e3b4…`, plan-only) and 169/170 (`7b4800c2…`, apply) differed in that one line.
+A plan-only run only reads keys from `unfold-headscale`; an apply run may mint one before it plans (the control planes' `tag:cp` key when it is missing or has 45 days or fewer left, a worker's role key for a new key slot and tag, the gateway's key for a new generation). Until 2026-10-25 this changed the digest of every apply that minted: when a `terraform_data.*_tailnet_key` is created or replaced, the plan-only run planned it with no key, which `tofu show` leaves out, and the apply run with the minted key, which it shows as `+ input = (sensitive value)`. Runs 168 (`f2d6e3b4…`, plan-only) and 169/170 (`7b4800c2…`, apply) differed in that one line.
 
 The digest is therefore not the SHA-256 of the raw `tofu show -no-color` text but of that text with two kinds of line left out, and only inside the blocks of `terraform_data.control_plane_tailnet_key`, `worker_tailnet_key` and `homelab_gateway_tailnet_key` (`scripts/plan-digest.sh`, `--normalized` prints the text it hashes):
 
@@ -64,7 +64,7 @@ The same script replaces every `hskey-auth-…` in the printed plan with `hskey-
 | `unfold` | `unfold-app-1` | CX33 | `10.64.0.21` | `node.webgrip.io/pool=unfold`, `:NoSchedule` | Unfold, ploegd and their databases |
 | `ci` | `unfold-ci-1` | CX43 (8 vCPU, 16 GB) | `10.64.0.31` | `node.webgrip.io/pool=ci`, `:NoSchedule` | CI jobs under gVisor (RFC 0001 step 13) |
 
-The variable's validation refuses a pool whose `node.webgrip.io/pool` label is not its own name, two pools in one address block, and two pools with one name prefix. Every worker boots from the same snapshot (`talos/schematics/cloud.yaml`), joins the tailnet with its own single-use `tag:node` key, sits behind the `unfold-nodes` firewall, and carries delete protection and `prevent_destroy`. Removing a node is therefore a deliberate code change, not a smaller `node_count`.
+The variable's validation refuses a pool whose `node.webgrip.io/pool` label is not its own name, two pools in one address block, and two pools with one name prefix. Every worker boots from the same snapshot (`talos/schematics/cloud.yaml`), joins the tailnet with its own single-use key tagged with its pool's role ([node roles](#node-roles-on-the-tailnet)), sits behind the `unfold-nodes` firewall, and carries delete protection and `prevent_destroy`. Removing a node is therefore a deliberate code change, not a smaller `node_count`.
 
 Nodes a cluster-autoscaler adds later are not in this variable: the autoscaler creates them through the Hetzner API from the same snapshot and the worker machine config.
 
@@ -83,7 +83,7 @@ Flux installs the RuntimeClass `gvisor` (handler `runsc`) from `kubernetes/platf
 
 ## Worker tailnet keys
 
-`unfold-headscale` makes one single-use `tag:node` key per key slot and keeps it in `/var/lib/unfold-tailnet/workers/<slot>.authkey`; asked again for the same slot, it returns the stored key, even after it has expired (24 hours). The script on the server is written by cloud-init and changes only with a new Headscale server, so OpenTofu chooses the slot: the worker's Hetzner server id followed by the eight digits of `tailnet_key_generation` (server `123456`, generation `2026-10-25` asks for `worker 12345620261025`). The digits are a fixed width, so two servers never share a slot.
+`unfold-headscale` makes one single-use key per key slot and role tag and keeps it in `/var/lib/unfold-tailnet/workers/<slot>-<role>.authkey`; asked again for the same slot and tag, it returns the stored key, even after it has expired (24 hours). OpenTofu chooses both. The slot is the worker's Hetzner server id followed by the eight digits of `tailnet_key_generation`; the tag is the worker pool's role from `tailnet_tag_by_pool` in `infra/headscale.tf` (server `123456` of the `unfold` pool, generation `2026-10-25` asks for `worker 12345620261025 tag:hub`). The digits are a fixed width, so two servers never share a slot, and a slot asked for under another role gets a new key, never the stored key of the earlier role.
 
 So a worker gets a fresh key whenever it needs one:
 
@@ -94,6 +94,34 @@ So a worker gets a fresh key whenever it needs one:
 A running node never needs its key again: Talos joins once (`TS_AUTH_ONCE=true`) and tagged nodes do not expire, so a bump re-applies the machine configs without disturbing the tailnet.
 
 The first apply after this scheme landed made one unused key for `unfold-app-1`, in the slot of generation `2026-10-25`. It expires unused after 24 hours.
+
+## Node roles on the tailnet
+
+Every node joins with the tag of its role, and the Headscale policy (`infra/templates/headscale-acl.hujson`) lets each role open only the homelab gateway ports it needs:
+
+| Tag | Nodes | Gateway ports | Why |
+| --- | --- | --- | --- |
+| `tag:cp` | the control planes | 8200, 8427, 9150 | External Secrets (OpenBao, 8200) and KEDA (the CI job count, 9150) run only there; both charts pin every pod to `node-role.kubernetes.io/control-plane` |
+| `tag:hub` | pool `unfold` (`unfold-app-1`) | 8427 | it runs untrusted CI jobs under gVisor, so it must not reach OpenBao |
+| `tag:ci` | pool `ci` | 8427 | untrusted CI jobs |
+| `tag:runs` | a future `runs` pool | 8427 | untrusted Runs |
+| `tag:metal` | the metal node | 8427 | untrusted Runs under Kata and gVisor |
+
+Vector runs on every node's host network and ships that node's logs to 8427, so every role keeps 8427 and no role but `tag:cp` gets 8200 or 9150. Nodes the cluster-autoscaler adds carry no Tailscale extension and are not on the tailnet at all. `tag:node`, the single tag every worker had before, is no longer defined: no key is minted with it, Headscale refuses to set it, and a node still carrying it reaches nothing. A new pool needs a line in `tailnet_tag_by_pool`, or the plan fails; the tag then gets its owner and port 8427 from the template. `infra/tests/tailnet_roles.tftest.hcl` pins all of this; `scripts/test-headscale-config.sh` runs the pinned Headscale against the rendered policy.
+
+### How a running node takes its role
+
+A key only decides a node's tag when the node logs in, and a running node never logs in again (`TS_AUTH_ONCE=true`, above). A `tailnet_key_generation` bump therefore does **not** re-tag anything: it writes a fresh key into each worker's machine config, which the running node ignores. So the apply sets the tags on the server instead: `terraform_data.tailnet_node_tag`, one per node, runs `unfold-tailnet-key nodes tag <node> <tag>` after the policy is pushed. It gives every Headscale node with that name exactly that tag (`headscale nodes tag`, which replaces the node's tags and refuses one the policy does not define), leaves a node that has it alone, and leaves a node that is not on the tailnet yet to the key it will join with. It runs again when a node's role changes or Headscale is replaced, and never replaces Headscale itself.
+
+The apply that brought the roles in did this to each node:
+
+* `unfold-headscale`: the apply installs the new `unfold-tailnet-key`, then pushes the new policy, which restarts Headscale once (seconds; connected nodes keep their tunnels).
+* `unfold-cp-1` to `-3`: `nodes tag` finds `tag:cp` already set and changes nothing.
+* `unfold-app-1`: `tag:node` becomes `tag:hub` in place. Between the policy restart and this step it is briefly a node with an undefined tag, which reaches nothing, so its log and metric writes fail for those seconds. No reboot, no new key in use, no new Headscale.
+* The machine configs are not touched: the worker key requests change, but `terraform_data.worker_tailnet_key` keeps the key it holds (`ignore_changes`), so `talos_machine_configuration_apply` has nothing to do. The request for the new slot and tag does mint one `tag:hub` key for `unfold-app-1` that nothing uses; it expires after 24 hours.
+* A later new or rebuilt node joins straight away with a key minted for its role.
+
+Check after the apply, from a device on the tailnet: `ssh admin@headscale.webgrip.dev sudo headscale nodes list -o json | jq -r '.[] | "\(.given_name) \(.tags)"'` shows each node with its one role tag.
 
 ## Disk-encryption runs
 
