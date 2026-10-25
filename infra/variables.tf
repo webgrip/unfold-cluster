@@ -156,3 +156,30 @@ variable "host_firewall_enabled" {
   type        = bool
   default     = true
 }
+
+variable "disk_encryption_kms_endpoint" {
+  description = "The KMS server that seals the LUKS2 keys of the Talos STATE and EPHEMERAL volumes, as https://host:port with a certificate from a public CA (STATE is unlocked before the machine config, and its custom CAs, are read). Empty until the key server exists; see docs/disk-encryption.md."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.disk_encryption_kms_endpoint == "" || can(regex("^https://[^/]+:[0-9]+$", var.disk_encryption_kms_endpoint))
+    error_message = "Use https://host:port. A plaintext grpc:// endpoint would send the disk keys in the clear."
+  }
+}
+
+variable "disk_encryption_nodes" {
+  description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so a node may join this list only when it is created or in the same run that wipes those two volumes; see docs/disk-encryption.md."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition     = length(var.disk_encryption_nodes) == 0 || var.disk_encryption_kms_endpoint != ""
+    error_message = "Disk encryption needs disk_encryption_kms_endpoint: the cloud servers have no TPM, and a nodeID or static key would sit beside the disk it protects."
+  }
+
+  validation {
+    condition     = alltrue([for name in var.disk_encryption_nodes : contains(keys(local.cluster_nodes), name)])
+    error_message = "disk_encryption_nodes names a node this cluster does not have."
+  }
+}
