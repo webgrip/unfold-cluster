@@ -1,0 +1,37 @@
+name: Agents check
+
+on:
+  push:
+    paths:
+      - apm.yml
+      - apm.lock.yaml
+      - .agentstd.toml
+      - ".apm/**"
+      - AGENTS.md
+      - "**/AGENTS.md"
+      - CLAUDE.md
+      - ".claude/**"
+      - ".agents/**"
+      - ".codex/**"
+      - .mcp.json
+      - opencode.json
+      - .forgejo/workflows/agents-check.yml
+  pull_request:
+    paths:
+      - apm.yml
+      - apm.lock.yaml
+      - .agentstd.toml
+      - ".apm/**"
+      - AGENTS.md
+      - "**/AGENTS.md"
+      - CLAUDE.md
+      - ".claude/**"
+      - ".agents/**"
+      - ".codex/**"
+      - .mcp.json
+      - opencode.json
+      - .forgejo/workflows/agents-check.yml
+
+jobs:
+  agents-check:
+    uses: webgrip/workflows/.forgejo/workflows/agents-check.yml@4efc7318da3e18a601383c03d8f853b1c2a51417 # v2.9.3

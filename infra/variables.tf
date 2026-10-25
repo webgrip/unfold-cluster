@@ -202,3 +202,9 @@ variable "tailnet_key_generation" {
     error_message = "tailnet_key_generation is a date, YYYY-MM-DD; its eight digits name the worker key slot on unfold-headscale."
   }
 }
+
+variable "host_firewall_enabled" {
+  description = "Talos host firewall: block every inbound connection the node rules in host-firewall.tf do not name. False removes the firewall documents, and the next apply returns the nodes to Talos's accept-all default in place, without a reboot. The rollback for a rule set that turns out wrong."
+  type        = bool
+  default     = true
+}

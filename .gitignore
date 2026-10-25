@@ -5,3 +5,7 @@ infra/.terraform/
 talos/out/
 talosconfig
 kubeconfig
+
+
+# APM dependencies
+apm_modules/

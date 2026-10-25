@@ -167,8 +167,11 @@ report_node() {
   check "${node}: services" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" service
   check "${node}: ext-tailscale log, last 50 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs ext-tailscale --tail 50
   check "${node}: addresses" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get addresses
+  check "${node}: host firewall chains" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get nftableschains
   check "${node}: machined controllers log, last 150 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs controller-runtime --tail 150
   check "${node}: kubelet log, last 60 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs kubelet --tail 60
+  check "${node}: SELinux state" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get securitystate
+  check "${node}: auditd log with SELinux denials, last 100 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs auditd --tail 100
 }
 
 report_etcd() {
