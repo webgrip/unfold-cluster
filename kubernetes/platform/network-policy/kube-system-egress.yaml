@@ -1,0 +1,244 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hcloud-cloud-controller-manager-egress
+  namespace: kube-system
+spec:
+  description: 'The cloud controller reads and labels servers through the Hetzner Cloud API. Its pod uses dnsPolicy Default, so its lookups go straight to the Talos host resolver, and the DNS rule names that resolver. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hcloud-cloud-controller-manager
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toCIDR:
+        - 169.254.116.108/32
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchName: api.hetzner.cloud
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hcloud-csi-controller-egress
+  namespace: kube-system
+spec:
+  description: 'The CSI controller creates, attaches and resizes volumes through the Hetzner Cloud API and reads its location from the metadata service. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hcloud-csi
+      app.kubernetes.io/component: controller
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchName: api.hetzner.cloud
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toCIDR:
+        - 169.254.169.254/32
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hcloud-csi-node-egress
+  namespace: kube-system
+spec:
+  description: 'The CSI node plugin learns its server ID and zone from the Hetzner metadata service and mounts through the local socket. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hcloud-csi
+      app.kubernetes.io/component: node
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toCIDR:
+        - 169.254.169.254/32
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: coredns-egress
+  namespace: kube-system
+spec:
+  description: 'CoreDNS watches Services through the API server and forwards every other name to the Talos host resolver. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toCIDR:
+        - 169.254.116.108/32
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hubble-relay-egress
+  namespace: kube-system
+spec:
+  description: 'Hubble Relay resolves the hubble-peer Service and reads flows from every Cilium agent on 4244. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "4244"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hubble-generate-certs-egress
+  namespace: kube-system
+spec:
+  description: 'The Hubble certificate job writes its Secrets through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      k8s-app: hubble-generate-certs
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-proxy-removal-egress
+  namespace: kube-system
+spec:
+  description: 'The kube-proxy removal job deletes the DaemonSet and its objects through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      batch.kubernetes.io/job-name: kube-proxy-removal
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver

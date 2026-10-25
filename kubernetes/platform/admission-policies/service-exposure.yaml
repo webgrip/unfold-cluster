@@ -1,0 +1,30 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: service-exposure
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["services"]
+  validations:
+    - expression: >-
+        !(object.spec.?type.orValue('ClusterIP') in ['NodePort', 'LoadBalancer', 'ExternalName'])
+      messageExpression: >-
+        'Services of type ' + object.spec.type + ' are refused; traffic enters through the tunnel and the gateway.'
+      reason: Forbidden
+    - expression: object.spec.?externalIPs.orValue([]).size() == 0
+      message: Services must not set externalIPs.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: service-exposure
+spec:
+  policyName: service-exposure
+  validationActions: ["Audit", "Warn"]

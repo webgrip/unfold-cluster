@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-runner-config
+  namespace: ci
+data:
+  config.yaml: |-
+    log:
+      level: info
+    runner:
+      file: /run/forgejo-runner/state/.runner
+      capacity: 1
+      timeout: 1h
+      envs:
+        BUILDKIT_HOST: unix:///run/buildkit/buildkitd.sock
+        ZOT_REGISTRY: zot.zot.svc.cluster.local:5000
+      labels:
+        - unfold-ci:host
+    cache:
+      enabled: false
+    host:
+      workdir_parent: /work/act

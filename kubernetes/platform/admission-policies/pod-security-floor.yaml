@@ -1,0 +1,33 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pod-security-floor
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["namespaces"]
+  matchConditions:
+    - name: not-a-system-namespace
+      expression: object.metadata.name != 'kube-system'
+  variables:
+    - name: enforcedLevel
+      expression: >-
+        object.metadata.?labels.orValue({})[?'pod-security.kubernetes.io/enforce'].orValue('restricted')
+  validations:
+    - expression: variables.enforcedLevel == 'restricted'
+      messageExpression: >-
+        'the PodSecurity enforce level stays restricted; this namespace asks for ' + variables.enforcedLevel
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pod-security-floor
+spec:
+  policyName: pod-security-floor
+  validationActions: ["Audit", "Warn"]

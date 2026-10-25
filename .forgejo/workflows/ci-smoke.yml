@@ -1,0 +1,50 @@
+---
+name: ci-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: unfold-ci
+    timeout-minutes: 20
+    env:
+      IMAGE: zot.zot.svc.cluster.local:5000/webgrip/ci/unfold-cluster-smoke
+    steps:
+      - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Show the sandbox the job runs in
+        run: |
+          id
+          cat /proc/version
+          dmesg 2>/dev/null | head -n 5 || echo "dmesg not readable"
+
+      - name: Show the BuildKit worker
+        run: buildctl debug workers --verbose
+
+      - name: Build, push and export the layer cache
+        run: |
+          buildctl build \
+            --progress plain \
+            --frontend dockerfile.v0 \
+            --local context=tests/ci-smoke \
+            --local dockerfile=tests/ci-smoke \
+            --output "type=image,name=${IMAGE}:${GITHUB_SHA},push=true,registry.insecure=true" \
+            --export-cache "type=registry,ref=${IMAGE}:buildcache,mode=max,registry.insecure=true"
+
+      - name: Rebuild from the registry cache alone
+        run: |
+          buildctl prune --all
+          buildctl build \
+            --progress plain \
+            --frontend dockerfile.v0 \
+            --local context=tests/ci-smoke \
+            --local dockerfile=tests/ci-smoke \
+            --output type=cacheonly \
+            --import-cache "type=registry,ref=${IMAGE}:buildcache,registry.insecure=true" 2>&1 | tee rebuild.log
+          grep -q "CACHED" rebuild.log
+
+      - name: Read the pushed tag back from Zot
+        run: |
+          curl -fsS "http://${IMAGE%%/*}/v2/${IMAGE#*/}/tags/list" | tee tags.json
+          grep -q "${GITHUB_SHA}" tags.json

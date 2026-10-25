@@ -148,6 +148,20 @@
       ]
     },
     {
+      "description": "kube-apiserver, kubectl and etcd for the admission-policy fixtures are installed from pinned checksums in scripts/test-admission-policies.sh, which Renovate cannot update. Kubernetes should match the cluster's version, so both wait for approval.",
+      "matchFileNames": [
+        "scripts/test-admission-policies.sh"
+      ],
+      "matchDepNames": [
+        "kubernetes/kubernetes",
+        "etcd-io/etcd"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`."
+      ]
+    },
+    {
       "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu itself comes with the infra-runner image from webgrip/infrastructure, where it is pinned and updated.",
       "matchManagers": [
         "terraform"

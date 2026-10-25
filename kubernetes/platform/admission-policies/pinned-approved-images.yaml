@@ -14,7 +14,16 @@ spec:
   variables:
     - name: allowedPrefixes
       expression: >-
-        ['ghcr.io/siderolabs/', 'ghcr.io/project-zot/zot:', 'docker.io/alpine/kubectl:']
+        ['ghcr.io/siderolabs/',
+        'ghcr.io/external-secrets/external-secrets:',
+        'ghcr.io/kedacore/keda:',
+        'ghcr.io/kedacore/keda-metrics-apiserver:',
+        'ghcr.io/kedacore/keda-admission-webhooks:',
+        'code.forgejo.org/forgejo/runner:',
+        'docker.io/moby/buildkit:',
+        'docker.io/library/node:',
+        'ghcr.io/project-zot/zot:',
+        'docker.io/alpine/kubectl:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)
