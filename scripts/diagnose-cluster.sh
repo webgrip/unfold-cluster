@@ -5,9 +5,8 @@ readonly usage="usage: diagnose-cluster.sh [--redact-test]
 
 Prints a read-only health report of the cluster for a public job log: the
 Hetzner API rate-limit headroom, each node's Talos services, tailnet logs and
-addresses and volume encryption, the etcd members, whether the disk KMS
-answers, and the kube-system pods with the cloud controller's and Cilium's
-logs. It changes nothing in Hetzner or the cluster.
+addresses, the etcd members, and the kube-system pods with the cloud
+controller's and Cilium's logs. It changes nothing in Hetzner or the cluster.
 
 Reads the talosconfig and kubeconfig from the OpenTofu state with
 tofu output, so tofu init must have run in infra/. Both are written with
