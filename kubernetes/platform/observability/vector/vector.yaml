@@ -29,6 +29,12 @@ sources:
     read_from: end
     fingerprint:
       strategy: device_and_inode
+  hubble_egress_flows:
+    type: file
+    include:
+      - /var/log/hubble/egress-flows.log
+    fingerprint:
+      strategy: device_and_inode
   vector_metrics:
     type: internal_metrics
 transforms:
@@ -71,6 +77,39 @@ transforms:
       . = parse_json!(string!(.message))
       .job = "kube-audit"
       .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+  egress_flow_records:
+    type: remap
+    inputs:
+      - hubble_egress_flows
+    drop_on_error: true
+    source: |
+      event = parse_json!(string!(.message))
+      flow = object!(event.flow)
+      names = join(array(flow.destination_names) ?? [], ",") ?? ""
+      destination = if names != "" { names } else { string(flow.IP.destination) ?? "unknown" }
+      tcp_port = flow.l4.TCP.destination_port
+      port_number = if tcp_port != null { tcp_port } else { flow.l4.UDP.destination_port }
+      port = if port_number == null { "" } else { to_string(port_number) ?? "" }
+      source_namespace = string(flow.source.namespace) ?? ""
+      source_workload = string(flow.source.workloads[0].name) ?? string(flow.source.pod_name) ?? "host"
+      verdict = string(flow.verdict) ?? "UNKNOWN"
+      allowed_by = join(map_values(array(flow.egress_allowed_by) ?? []) -> |policy| {
+        (string(policy.kind) ?? "") + "/" + (string(policy.namespace) ?? "") + "/" + (string(policy.name) ?? "")
+      }, ",") ?? ""
+      denied_by = join(map_values(array(flow.egress_denied_by) ?? []) -> |policy| {
+        (string(policy.kind) ?? "") + "/" + (string(policy.namespace) ?? "") + "/" + (string(policy.name) ?? "")
+      }, ",") ?? ""
+      . = flow
+      .timestamp = event.time
+      .source = "hubble-egress"
+      .source_namespace = source_namespace
+      .source_workload = source_workload
+      .destination_name = destination
+      .destination_port = port
+      .allowed_by = allowed_by
+      .denied_by = denied_by
+      .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+      .message = source_namespace + "/" + source_workload + " -> " + destination + ":" + port + " " + verdict
   audit_kept:
     type: filter
     inputs:
@@ -114,6 +153,7 @@ sinks:
     inputs:
       - pod_records
       - talos_records
+      - egress_flow_records
     uri: http://unfold-gateway.webgrip.dev:8427/insert/jsonline
     method: post
     compression: gzip

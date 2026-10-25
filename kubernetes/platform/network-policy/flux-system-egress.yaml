@@ -5,7 +5,7 @@ metadata:
   name: source-controller-egress
   namespace: flux-system
 spec:
-  description: 'source-controller fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: source-controller
@@ -27,6 +27,13 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
     - toFQDNs:
         - matchName: github.com
         - matchName: charts.hetzner.cloud
@@ -81,7 +88,7 @@ metadata:
   name: kustomize-controller-egress
   namespace: flux-system
 spec:
-  description: 'kustomize-controller reads artifacts from source-controller and applies them through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'kustomize-controller reads artifacts from source-controller, applies them through the API server and sends its events to notification-controller. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: kustomize-controller
@@ -110,6 +117,13 @@ spec:
         - ports:
             - port: "9090"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -117,7 +131,7 @@ metadata:
   name: helm-controller-egress
   namespace: flux-system
 spec:
-  description: 'helm-controller reads charts from source-controller and installs them through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'helm-controller reads charts from source-controller, installs them through the API server and sends its events to notification-controller. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: helm-controller
@@ -142,6 +156,13 @@ spec:
     - toEndpoints:
         - matchLabels:
             app: source-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: notification-controller
       toPorts:
         - ports:
             - port: "9090"
