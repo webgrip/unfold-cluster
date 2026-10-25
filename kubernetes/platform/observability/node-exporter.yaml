@@ -1,0 +1,46 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: node-exporter
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: prometheus-node-exporter
+      version: 4.60.1
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: node-exporter
+    image:
+      registry: quay.io
+      repository: prometheus/node-exporter
+      # renovate: datasource=docker depName=quay.io/prometheus/node-exporter
+      tag: v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    hostNetwork: true
+    hostPID: true
+    hostRootFsMount:
+      enabled: true
+      mountPropagation: HostToContainer
+    service:
+      port: 9100
+      targetPort: 9100
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+    tolerations:
+      - operator: Exists
+    prometheus:
+      monitor:
+        enabled: false

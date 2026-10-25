@@ -37,8 +37,20 @@ encryption:
   enabled: true
   type: wireguard
   nodeEncryption: false
+prometheus:
+  enabled: true
 hubble:
   enabled: true
+  metrics:
+    enableOpenMetrics: false
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - port-distribution
+      - policy:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity;labelsContext=source_namespace,destination_namespace
   relay:
     enabled: true
     tolerations:

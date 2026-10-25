@@ -1,0 +1,139 @@
+data_dir: /var/lib/vector
+api:
+  enabled: false
+sources:
+  pods:
+    type: kubernetes_logs
+    self_node_name: ${VECTOR_SELF_NODE_NAME}
+    glob_minimum_cooldown_ms: 2000
+  talos_services:
+    type: socket
+    mode: tcp
+    address: 127.0.0.1:6050
+    decoding:
+      codec: json
+    framing:
+      method: newline_delimited
+  talos_kernel:
+    type: socket
+    mode: tcp
+    address: 127.0.0.1:6051
+    decoding:
+      codec: json
+    framing:
+      method: newline_delimited
+  kube_audit:
+    type: file
+    include:
+      - /var/log/audit/kube/*.log
+    read_from: end
+    fingerprint:
+      strategy: device_and_inode
+  vector_metrics:
+    type: internal_metrics
+transforms:
+  pod_records:
+    type: remap
+    inputs:
+      - pods
+    source: |
+      . = {
+        "timestamp": .timestamp,
+        "message": .message,
+        "stream": .stream,
+        "source": "pod",
+        "node": .kubernetes.pod_node_name,
+        "namespace": .kubernetes.pod_namespace,
+        "pod": .kubernetes.pod_name,
+        "container": .kubernetes.container_name,
+        "app": .kubernetes.pod_labels."app.kubernetes.io/name"
+      }
+  talos_records:
+    type: remap
+    inputs:
+      - talos_services
+      - talos_kernel
+    source: |
+      talos_time = del(."talos-time")
+      .timestamp = if is_string(talos_time) { talos_time } else { now() }
+      .message = del(.msg)
+      .level = del(."talos-level")
+      talos_service = del(."talos-service")
+      .talos_service = if is_string(talos_service) { talos_service } else { "kernel" }
+      .source = "talos"
+      .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+  audit_records:
+    type: remap
+    inputs:
+      - kube_audit
+    drop_on_error: true
+    source: |
+      . = parse_json!(string!(.message))
+      .job = "kube-audit"
+      .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+  audit_kept:
+    type: filter
+    inputs:
+      - audit_records
+    condition: |
+      user = string(.user.username) ?? ""
+      verb = string(.verb) ?? ""
+      resource = string(.objectRef.resource) ?? ""
+      subresource = string(.objectRef.subresource) ?? ""
+      routine_read = starts_with(user, "system:") &&
+        includes(["get", "list", "watch"], verb) &&
+        !match(resource, r'^(secrets|serviceaccounts|.*roles|.*rolebindings|certificatesigningrequests)$') &&
+        !includes(["exec", "attach", "portforward"], subresource)
+      status_write = subresource == "status" && includes(["update", "patch"], verb)
+      !routine_read && !status_write
+sinks:
+  homelab_audit:
+    type: http
+    inputs:
+      - audit_kept
+    uri: http://unfold-ingest.webgrip.dev:8427/audit/insert/jsonline
+    method: post
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    batch:
+      max_bytes: 4000000
+      timeout_secs: 2
+    request:
+      timeout_secs: 60
+      headers:
+        Content-Type: application/x-ndjson
+    buffer:
+      type: disk
+      max_size: 1073741824
+      when_full: block
+  homelab:
+    type: http
+    inputs:
+      - pod_records
+      - talos_records
+    uri: http://unfold-ingest.webgrip.dev:8427/insert/jsonline
+    method: post
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    batch:
+      max_bytes: 4000000
+      timeout_secs: 2
+    request:
+      timeout_secs: 60
+      headers:
+        Content-Type: application/x-ndjson
+    buffer:
+      type: disk
+      max_size: 2147483648
+      when_full: block
+  metrics:
+    type: prometheus_exporter
+    inputs:
+      - vector_metrics
+    address: 0.0.0.0:9598
