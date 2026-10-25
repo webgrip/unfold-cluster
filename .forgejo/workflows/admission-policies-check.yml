@@ -1,0 +1,30 @@
+---
+name: admission-policies-check
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/platform/admission-policies/**
+      - tests/admission-policies/**
+      - scripts/test-admission-policies.sh
+      - .forgejo/workflows/admission-policies-check.yml
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/platform/admission-policies/**
+      - tests/admission-policies/**
+      - scripts/test-admission-policies.sh
+      - .forgejo/workflows/admission-policies-check.yml
+  workflow_dispatch:
+
+jobs:
+  fixtures:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Refuse every refused fixture, admit every admitted one, and prove each policy is what refuses
+        run: ./scripts/test-admission-policies.sh --mutation-test
