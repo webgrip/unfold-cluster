@@ -38,7 +38,7 @@ No longer by hand:
 | --- | --- |
 | The Cloudflare record for `headscale.webgrip.dev` | Declared in homelab-cluster, `kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml`, DNS only, owned by the homelab's external-dns. It points at the Headscale primary IP, which outlives the server. |
 | The Headscale users and pre-auth keys | cloud-init creates the users `nodes` and the admin user; `unfold-tailnet-key` on the server makes the control planes' reusable `tag:cp` key, renews it by timer, and makes a single-use `tag:node` key for each new worker. OpenTofu reads them over SSH during the apply. |
-| The homelab ingest's tailnet key | A rebuilt Headscale forgets the homelab's `tag:homelab-ingest` node. Mint a new single-use key and seed it into OpenBao as [observability](observability.md) describes; until then Unfold's metrics and logs wait in the node buffers. |
+| The homelab gateway's tailnet key and the Headscale policy | cloud-init installs the policy; the apply pushes later policy changes, mints a single-use `tag:homelab-gateway` key and writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` ([observability](observability.md)). A rebuilt Headscale gets a new key the same way, but the gateway still holds its old identity: delete the homelab Secret `observability/unfold-gateway-tailscale-state` once so it logs in with the new key. |
 | The Talos snapshot | The apply run builds it with `scripts/build-talos-snapshot.sh` when no snapshot carries the labels of the pinned Talos version and schematic; OpenTofu finds it by those labels. |
 
 ## A. Hetzner project and tokens

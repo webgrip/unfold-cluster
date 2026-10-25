@@ -5,7 +5,7 @@
   "tagOwners": {
     "tag:cp": ["group:admin"],
     "tag:node": ["group:admin"],
-    "tag:homelab-ingest": ["group:admin"]
+    "tag:homelab-gateway": ["group:admin"]
   },
   "acls": [
     {
@@ -16,7 +16,7 @@
     {
       "action": "accept",
       "src": ["tag:cp", "tag:node"],
-      "dst": ["tag:homelab-ingest:8427"]
+      "dst": ["tag:homelab-gateway:8200,8427"]
     }
   ],
   "autoApprovers": {

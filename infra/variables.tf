@@ -229,3 +229,9 @@ variable "disk_encryption_nodes" {
     error_message = "disk_encryption_nodes names a node this cluster does not have."
   }
 }
+
+variable "homelab_gateway_key_generation" {
+  description = "The generation of the homelab gateway's single-use tailnet pre-auth key. Raising it makes the next apply mint a new tag:homelab-gateway key and hand it to OpenBao: after the gateway lost its Tailscale state, or when a key expired unused."
+  type        = number
+  default     = 1
+}

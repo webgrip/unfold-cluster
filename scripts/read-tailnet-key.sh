@@ -5,7 +5,7 @@ readonly usage="usage: read-tailnet-key.sh < query.json
 
 OpenTofu's external program for the tailnet pre-auth keys on unfold-headscale.
 Reads one JSON object on stdin with host, host_public_key, private_key and
-request (\"control-plane\" or \"worker SERVER_ID\"), asks unfold-tailnet-key on
+request (\"control-plane\", \"worker SERVER_ID\" or \"gateway GENERATION\"), asks unfold-tailnet-key on
 the server over SSH, and prints {\"key\": \"...\"}.
 
 SSH trusts nothing but host_public_key. A server presenting any other host key
@@ -41,7 +41,7 @@ field() {
 host="$(field host)"
 host_public_key="$(field host_public_key)"
 request="$(field request)"
-[[ "$request" =~ ^(control-plane|worker\ [0-9]+)$ ]] || fail "unknown request: $request"
+[[ "$request" =~ ^(control-plane|worker\ [0-9]+|gateway\ [0-9]+)$ ]] || fail "unknown request: $request"
 
 if [ "${UNFOLD_TAILNET_MINT:-}" = "allowed" ]; then
   action="mint"
