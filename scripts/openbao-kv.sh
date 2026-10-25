@@ -50,6 +50,11 @@ is_public_ipv4() {
   return 0
 }
 
+has_yaml_key() {
+  local indent="$1" key="$2" document="$3"
+  grep -qE "^${indent}(${key}|\"${key}\"):" <<<"$document"
+}
+
 checked_value() {
   local kind="$1" value
   case "$kind" in
@@ -64,7 +69,7 @@ checked_value() {
       ;;
     talos-secrets)
       value="$(cat)"
-      if ! grep -q '^cluster:' <<<"$value" || ! grep -q '^certs:' <<<"$value" || ! grep -qE '^ +k8sserviceaccount:' <<<"$value"; then
+      if ! has_yaml_key '' cluster "$value" || ! has_yaml_key '' certs "$value" || ! has_yaml_key ' +' k8sserviceaccount "$value"; then
         fail "stdin holds no talosctl secrets bundle"
       fi
       ;;
