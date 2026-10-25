@@ -2,6 +2,13 @@ locals {
   # renovate: datasource=github-releases depName=juanfont/headscale extractVersion=^v(?<version>.+)$
   headscale_version = "0.29.5"
   headscale_sha256  = "9e8ec12a65229435863a2cdf5082853c282808e845efd3a1f0b0c02b8f84d723"
+
+  headscale_generation = 2
+  headscale_node_user  = "nodes"
+}
+
+resource "terraform_data" "headscale_generation" {
+  input = local.headscale_generation
 }
 
 resource "hcloud_ssh_key" "admin" {
@@ -70,8 +77,8 @@ resource "hcloud_server" "headscale" {
   location           = var.location
   ssh_keys           = [hcloud_ssh_key.admin.id]
   firewall_ids       = [hcloud_firewall.headscale.id]
-  delete_protection  = false
-  rebuild_protection = false
+  delete_protection  = true
+  rebuild_protection = true
 
   public_net {
     ipv4_enabled = true
@@ -80,12 +87,18 @@ resource "hcloud_server" "headscale" {
   }
 
   user_data = templatefile("${path.module}/templates/headscale-cloud-init.yaml.tftpl", {
-    hostname          = var.headscale_hostname
-    ipv4              = hcloud_primary_ip.headscale.ip_address
-    acme_email        = var.acme_email
-    ssh_public_key    = var.admin_ssh_public_key
-    headscale_version = local.headscale_version
-    headscale_sha256  = local.headscale_sha256
+    hostname            = var.headscale_hostname
+    ipv4                = hcloud_primary_ip.headscale.ip_address
+    acme_email          = var.acme_email
+    ssh_public_key      = var.admin_ssh_public_key
+    tofu_ssh_public_key = trimspace(tls_private_key.headscale_tofu.public_key_openssh)
+    host_key_private    = trimspace(tls_private_key.headscale_host.private_key_openssh)
+    host_key_public     = trimspace(tls_private_key.headscale_host.public_key_openssh)
+    headscale_version   = local.headscale_version
+    headscale_sha256    = local.headscale_sha256
+    admin_user          = var.headscale_admin_user
+    node_user           = local.headscale_node_user
+    tailnet_key_script  = file("${path.module}/templates/unfold-tailnet-key.sh")
     acl = templatefile("${path.module}/templates/headscale-acl.hujson", {
       admin_user = var.headscale_admin_user
       node_route = local.cloud_subnet_range
@@ -98,6 +111,7 @@ resource "hcloud_server" "headscale" {
   }
 
   lifecycle {
-    ignore_changes = [user_data, image]
+    ignore_changes       = [user_data, image]
+    replace_triggered_by = [terraform_data.headscale_generation]
   }
 }

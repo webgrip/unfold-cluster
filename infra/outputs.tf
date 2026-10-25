@@ -31,7 +31,7 @@ output "talosconfig" {
 
 output "kubeconfig" {
   description = "Admin kubeconfig for the cluster. Read with: tofu output -raw kubeconfig"
-  value       = one(talos_cluster_kubeconfig.cluster[*].kubeconfig_raw)
+  value       = talos_cluster_kubeconfig.cluster.kubeconfig_raw
   sensitive   = true
 }
 
@@ -42,6 +42,11 @@ output "talos_machine_secrets" {
 }
 
 output "headscale_ipv4" {
-  description = "Create the A record for headscale_hostname with this address, unproxied, before generating the tailnet key."
+  description = "The address the headscale_hostname A record, declared in homelab-cluster, points at. A primary IP, so it survives a rebuild of the Headscale server."
   value       = hcloud_primary_ip.headscale.ip_address
+}
+
+output "headscale_ssh_known_hosts" {
+  description = "The only SSH host key unfold-headscale presents, as a known_hosts line. Read with: tofu output -raw headscale_ssh_known_hosts >> ~/.ssh/known_hosts"
+  value       = "${var.headscale_hostname},${hcloud_primary_ip.headscale.ip_address} ${trimspace(tls_private_key.headscale_host.public_key_openssh)}"
 }

@@ -59,6 +59,9 @@ jobs:
       - name: Validate
         run: tofu validate
 
+      - name: Test against mocked providers
+        run: tofu test
+
   plan-or-apply:
     # Never for pull requests. The credentials are not Forgejo secrets: OpenBao hands them only
     # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
@@ -71,7 +74,6 @@ jobs:
       run:
         working-directory: infra
     env:
-      TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
       TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
       TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
       TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
@@ -91,16 +93,6 @@ jobs:
             TF_VAR_hcloud_vip_token=secret/data/hetzner/unfold-vip#HCLOUD_TOKEN_VIP
             TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
             TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
-
-      - name: Read the tailnet keys from OpenBao, once the cluster nodes are wanted
-        if: vars.CLUSTER_NODES == 'enabled'
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
-        with:
-          role: ci-unfold-cluster
-          secrets: |
-            TF_VAR_tailscale_control_plane_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY_CONTROL_PLANE
-            TF_VAR_tailscale_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY
-
 
       - name: Refuse to run without credentials
         run: |
@@ -128,7 +120,25 @@ jobs:
       - name: Validate
         run: tofu validate
 
+      - name: Build the Talos snapshot when it does not exist yet, on apply runs only
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
+        working-directory: .
+        run: ./scripts/build-talos-snapshot.sh
+
       - name: Plan
+        env:
+          TF_VAR_talos_snapshot_required: >-
+            ${{ github.event_name == 'workflow_dispatch'
+            && github.ref == 'refs/heads/main'
+            && inputs.apply == 'apply' }}
+          UNFOLD_TAILNET_MINT: >-
+            ${{ github.event_name == 'workflow_dispatch'
+            && github.ref == 'refs/heads/main'
+            && inputs.apply == 'apply'
+            && 'allowed' || 'read-only' }}
         run: tofu plan -lock-timeout=5m -out=infra.tfplan
 
       - name: Print the plan digest to quote when applying
@@ -148,6 +158,7 @@ jobs:
           && inputs.apply == 'apply'
         env:
           PLAN_DIGEST: ${{ inputs.plan_digest }}
+          UNFOLD_TAILNET_MINT: allowed
         run: |
           set -eu
           tofu show -no-color infra.tfplan > "${RUNNER_TEMP}/infra.plan.txt"

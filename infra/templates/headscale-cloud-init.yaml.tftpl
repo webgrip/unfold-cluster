@@ -3,6 +3,7 @@ package_update: true
 packages:
   - curl
   - unattended-upgrades
+  - jq
 users:
   - default
   - name: admin
@@ -11,8 +12,19 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     ssh_authorized_keys:
       - ${ssh_public_key}
+  - name: tofu
+    shell: /bin/sh
+    lock_passwd: true
+    ssh_authorized_keys:
+      - 'restrict,command="set -f; exec sudo -n /usr/local/sbin/unfold-tailnet-key $SSH_ORIGINAL_COMMAND" ${tofu_ssh_public_key}'
 ssh_pwauth: false
 disable_root: true
+ssh_deletekeys: true
+ssh_genkeytypes: [ed25519]
+ssh_keys:
+  ed25519_private: |
+    ${indent(4, host_key_private)}
+  ed25519_public: ${host_key_public}
 write_files:
   - path: /etc/apt/apt.conf.d/20auto-upgrades
     permissions: "0644"
@@ -31,6 +43,52 @@ write_files:
       OnCalendar=
       OnCalendar=*-*-* 04:00
       RandomizedDelaySec=0
+  - path: /etc/unfold-tailnet/settings.env
+    permissions: "0644"
+    content: |
+      NODE_USER=${node_user}
+      ADMIN_USER=${admin_user}
+      CONTROL_PLANE_TAG=tag:cp
+      CONTROL_PLANE_KEY_LIFETIME_HOURS=2160
+      RENEW_WHEN_DAYS_LEFT=45
+      WORKER_TAG=tag:node
+      WORKER_KEY_LIFETIME_HOURS=24
+      STATE_DIR=/var/lib/unfold-tailnet
+      HEALTH_URL=https://${hostname}/health
+      HEALTH_CONNECT_TO=${hostname}:443:127.0.0.1:443
+  - path: /usr/local/sbin/unfold-tailnet-key
+    permissions: "0755"
+    content: |
+      ${indent(6, tailnet_key_script)}
+  - path: /etc/sudoers.d/unfold-tailnet-key
+    permissions: "0440"
+    content: |
+      tofu ALL=(root) NOPASSWD: /usr/local/sbin/unfold-tailnet-key control-plane read, /usr/local/sbin/unfold-tailnet-key control-plane mint, /usr/local/sbin/unfold-tailnet-key worker *
+  - path: /etc/systemd/system/unfold-tailnet-key.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Keep the control planes' Headscale pre-auth key valid
+      After=headscale.service
+      Requires=headscale.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/unfold-tailnet-key renew
+  - path: /etc/systemd/system/unfold-tailnet-key.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Renew the control planes' Headscale pre-auth key daily
+
+      [Timer]
+      OnBootSec=10min
+      OnCalendar=daily
+      RandomizedDelaySec=1h
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
   - path: /etc/headscale/acl.hujson
     permissions: "0644"
     content: |
@@ -100,3 +158,4 @@ runcmd:
   - [sh, -c, "mkdir -p /etc/systemd/system/headscale.service.d && printf '[Service]\\nAmbientCapabilities=CAP_NET_BIND_SERVICE\\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\\nRestart=always\\nRestartSec=15\\n' > /etc/systemd/system/headscale.service.d/override.conf"]
   - [systemctl, daemon-reload]
   - [systemctl, enable, --now, headscale]
+  - [systemctl, enable, --now, unfold-tailnet-key.timer]

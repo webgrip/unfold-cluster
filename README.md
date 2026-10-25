@@ -15,25 +15,15 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 
 ## From nothing to GitOps
 
-Two manual workflow runs, with one manual step between them. The owner's step-by-step version, with every secret, command and check in order, is [docs/bootstrap-checklist.md](docs/bootstrap-checklist.md).
+One `infra` run with `apply` takes the Hetzner project from empty, or from today's state with only Headscale, to a running cluster that Flux owns. Nobody copies a key or an id between steps. What stays manual is listed, with the reason, in the [bootstrap checklist](docs/bootstrap-checklist.md#what-is-made-by-hand-and-why).
 
-1. **First apply.** With neither tailnet key set, OpenTofu creates only the network, the firewalls and `unfold-headscale`, a small server running Headscale, the self-hosted coordination server of the admin tailnet. No cluster node exists yet.
-2. **Between the runs, by hand.**
-   1. In Cloudflare, create an A record for `headscale.webgrip.dev` pointing at the `headscale_ipv4` output, **DNS only** (grey cloud), because Headscale serves its own TLS and Tailscale's protocol does not pass Cloudflare's proxy.
-   2. Wait until `https://headscale.webgrip.dev/health` answers; Headscale fetches its certificate from Let's Encrypt on first contact.
-   3. Make the two tailnet keys, one for the control planes and a single-use one for the worker:
+In that one run:
 
-      ```sh
-      ssh admin@headscale.webgrip.dev
-      sudo headscale users create ryan
-      sudo headscale preauthkeys create --reusable --tags tag:cp --expiration 2160h
-      sudo headscale preauthkeys create --tags tag:node --expiration 24h
-      ```
-
-   4. Put the `tag:cp` key into OpenBao as `TAILSCALE_AUTHKEY_CONTROL_PLANE` and the `tag:node` key as `TAILSCALE_AUTHKEY`, both at `secret/unfold-cluster/tailnet`, and set `CLUSTER_NODES` to `enabled` at `secret/unfold-cluster/vars`, which tells the workflow to read the keys. The worker key is spent when the worker joins, so make it just before the second apply.
-   5. Build the Talos snapshot with `scripts/build-talos-snapshot.sh`, which turns `talos/schematics/cloud.yaml` and the version in `talos/talenv.yaml` into a Hetzner snapshot and prints its id, and put that id into OpenBao as `TALOS_SNAPSHOT_ID` at `secret/unfold-cluster/vars`, from where the bridge sets the repository variable.
-3. **Second apply.** OpenTofu creates the four cluster nodes, generates the cluster's Talos secrets, applies the machine configs, joins every node to the tailnet and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
-4. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
+1. **The Talos snapshot.** Before planning, the run calls `scripts/build-talos-snapshot.sh`. It turns `talos/schematics/cloud.yaml` and the version in `talos/talenv.yaml` into a Hetzner snapshot labelled with that Talos version and schematic, or does nothing when a snapshot with those labels exists. OpenTofu then finds it with the `hcloud_images` data source by the same labels; no snapshot id is stored anywhere. Plan-only runs never build it, so before the first build their plan shows the image `talos-snapshot-is-built-by-the-apply-run`; an apply run refuses to create a node without the real snapshot. Because of the plan-digest gate, the first apply run plans the real snapshot where the run you read showed the placeholder, so it stops and prints its own digest; read that run's plan and dispatch again with it. The snapshot exists by then, so the second run plans the same and applies.
+2. **Headscale.** OpenTofu creates `unfold-headscale`, a small server running Headscale, the self-hosted coordination server of the admin tailnet, on the primary IP `headscale_ipv4`. The A record for `headscale.webgrip.dev`, DNS only, is declared in homelab-cluster (`kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml`) and points at that address, which survives a rebuild of the server. cloud-init installs Headscale, creates the Headscale users `nodes` and the admin user, and installs `unfold-tailnet-key`, which makes the pre-auth keys.
+3. **The tailnet keys.** OpenTofu generates two ed25519 keys, kept only in the encrypted state: the server's SSH host key, which cloud-init installs as the only host key `unfold-headscale` presents, and a client key that cloud-init authorizes for the user `tofu`, restricted to running `unfold-tailnet-key` and nothing else. `scripts/read-tailnet-key.sh`, run by OpenTofu's `external` data source with the system OpenSSH client, trusts no host key but the pinned one (`StrictHostKeyChecking=yes`) and refuses to talk to a server presenting any other. In an apply run it asks for the control planes' reusable `tag:cp` key and, per worker server id, for a single-use `tag:node` key, making either when it does not exist and retrying for up to 25 minutes until Headscale's public `/health` passes with its Let's Encrypt certificate. In a plan-only run it only reads, once: it never makes a key, and an unreachable Headscale gives an empty answer instead of failing the plan, which changes nothing because every node keeps the key it was created with. SSH reaches the server only from `ADMIN_CIDRS`.
+4. **The cluster.** OpenTofu creates the four cluster nodes from the snapshot, generates the cluster's Talos secrets, applies the machine configs with the tailnet keys, and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
+5. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
 The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on the link alias `private0`; each control plane's machine config points that alias at the MAC address Hetzner reports for the server's private NIC, so the VIP does not depend on how a server type names its interfaces). It costs nothing and is reachable only inside the network. The control planes advertise the cloud subnet `10.64.0.0/24` to the tailnet, and the tailnet policy approves that route automatically, but only from a `tag:cp` device, so the admin kubeconfig from `tofu output -raw kubeconfig` works from any admin device.
 
@@ -72,10 +62,12 @@ Verification checks only the newest commit, so it does not stop a rollback: a fo
 `infra/templates/headscale-acl.hujson` is Headscale's access policy:
 
 * devices of the Headscale user `ryan` form `group:admin` and may reach everything on the tailnet, including the routed cloud subnet;
-* control planes join with a key tagged `tag:cp`, workers with a single-use key tagged `tag:node`; neither may start a connection to anyone, they only answer;
-* only `10.64.0.0/24`, the cloud subnet with the control planes, the API address and the Unfold node, is routed into the tailnet, and only when a `tag:cp` device advertises it. A worker's key, read from a compromised worker, can neither register more devices nor take over that route.
+* control planes join with a reusable key tagged `tag:cp`, the worker with a single-use key tagged `tag:node`; neither tag may start a connection to anyone, they only answer;
+* only `10.64.0.0/24`, the cloud subnet with the control planes, the API address and the Unfold node, is routed into the tailnet, and only when a `tag:cp` device advertises it.
 
-The control-plane key expires after 90 days; renew it with the same command and update `TAILSCALE_AUTHKEY_CONTROL_PLANE`. Each new worker gets a fresh single-use key in `TAILSCALE_AUTHKEY`. Nodes log in only when they are not already logged in (`TS_AUTH_ONCE`), so a spent or expired key does not knock a running node off the tailnet. The policy is written once when the server is created; to change it later, check it with `sudo headscale policy check -f <file>`, copy it to `/etc/headscale/acl.hujson`, run `sudo systemctl reload headscale`, and confirm with `sudo headscale nodes list-routes` that the route is approved only on control planes.
+The keys are made on `unfold-headscale` by `/usr/local/sbin/unfold-tailnet-key` and read by OpenTofu over SSH; they are in no secret store. The `tag:cp` key lives 90 days; a daily systemd timer, `unfold-tailnet-key.timer`, makes a new one when fewer than 45 days are left and expires the one it replaces. The key file, `/var/lib/unfold-tailnet/control-plane.authkey`, is readable by root only. Each control plane keeps the key it was created with in its machine config (Talos joins once, `TS_AUTH_ONCE`, and tagged nodes do not expire), so a renewal never changes a running node; a new control plane gets the current key, because adding one makes OpenTofu read the key again. A worker key is made for one worker server when that server is created, may join once and expires after 24 hours.
+
+The policy and the key settings are written once when the server is created. To change them, change the templates and bump `headscale_generation` in `infra/headscale.tf`, which replaces the server through a reviewed plan. A replaced Headscale starts with an empty database: every admin device registers again, and the nodes need new keys, which is a node replacement today.
 
 The Headscale server installs Ubuntu security updates at 04:00 UTC and reboots at 04:30 UTC when one needs it. Headscale itself is not covered: a Renovate bump of `headscale_version` is installed by hand. Both reach only a newly created server, because cloud-init runs once.
 
@@ -118,22 +110,18 @@ The owner puts every value into the homelab's OpenBao; nobody types one into For
 | Reaches the workflow as | Name | OpenBao path | Holds |
 | --- | --- | --- | --- |
 | OpenBao read per run | `HCLOUD_TOKEN` | `secret/hetzner/unfold-tofu` | Hetzner Cloud API token for OpenTofu in CI, read and write |
-| OpenBao read per run | `HCLOUD_TOKEN_CLUSTER` | `secret/hetzner/unfold-cluster` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the second apply |
-| OpenBao read per run | `HCLOUD_TOKEN_VIP` | `secret/hetzner/unfold-vip` | a third token, for the control planes to move the API address; set before the second apply |
+| OpenBao read per run | `HCLOUD_TOKEN_CLUSTER` | `secret/hetzner/unfold-cluster` | a second token, for the cloud controller and CSI driver in `kube-system`; set before the apply that creates the cluster |
+| OpenBao read per run | `HCLOUD_TOKEN_VIP` | `secret/hetzner/unfold-vip` | a third token, for the control planes to move the API address; set before the apply that creates the cluster |
 | OpenBao read per run | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | `secret/unfold-cluster/tofu-state` | credentials for the state bucket |
 | OpenBao read per run | `STATE_PASSPHRASE` | `secret/unfold-cluster/tofu-state` | at least 32 characters; encrypts the state and plans, which hold the Talos secrets |
 | variable | `STATE_BUCKET`, `STATE_ENDPOINT`, `STATE_REGION` | `secret/unfold-cluster/vars` | the state bucket on the off-site Garage: `unfold-cluster-tfstate`, `https://s3-offsite.webgrip.dev`, `garage` |
-| variable | `TALOS_SNAPSHOT_ID` | `secret/unfold-cluster/vars` | the Hetzner snapshot `scripts/build-talos-snapshot.sh` builds from `talos/schematics/cloud.yaml` |
 | variable | `ADMIN_CIDRS` | `secret/unfold-cluster/vars` | a JSON list of addresses allowed to reach the Talos and Kubernetes APIs, e.g. `["203.0.113.7/32"]`; it must include the address the Forgejo runners leave from |
 | variable | `ADMIN_SSH_PUBLIC_KEY` | `secret/unfold-cluster/vars` | the owner's SSH public key, the only way into the Headscale server |
-| OpenBao read per run | `TAILSCALE_AUTHKEY_CONTROL_PLANE` | `secret/unfold-cluster/tailnet` | the reusable `tag:cp` Headscale pre-auth key of the control planes; leave unset for the first apply |
-| OpenBao read per run | `TAILSCALE_AUTHKEY` | `secret/unfold-cluster/tailnet` | the single-use `tag:node` Headscale pre-auth key of the next worker; leave unset for the first apply |
 | OpenBao read per run | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | `secret/unfold-cluster/etcd-backup` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
 | OpenBao read per run | `ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`, `ETCD_BACKUP_AGE_IDENTITY` | `secret/unfold-cluster/etcd-backup` | the restore check's read-only Garage key and the age private key |
 | variable | `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK` | `secret/unfold-cluster/vars` | the age public key snapshots are encrypted to; `enabled` once the first snapshot exists |
-| variable | `CLUSTER_NODES` | `secret/unfold-cluster/vars` | `enabled` once both tailnet keys are in OpenBao; until then the workflow does not read them and creates no node |
 
-A value missing from OpenBao stops the run at the read, naming the path and key; without the variables other than `TALOS_SNAPSHOT_ID`, `CLUSTER_NODES` and `ETCD_BACKUP_CHECK`, the workflow stops before `init`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
+A value missing from OpenBao stops the run at the read, naming the path and key; without the variables other than `ETCD_BACKUP_CHECK`, the workflow stops before `init`. The Talos snapshot and the tailnet keys are not among them: the apply run builds the first and reads the others from `unfold-headscale`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
 The workflow runs only on `unfold-infra`, a runner registered on this repository alone and on no other, so no other repository's job can land on the runner these credentials are read on. The runner is not what keeps other branches of this repository out: Forgejo would hand repository secrets to a workflow a branch adds, which is why there are none, and OpenBao refuses any token not from `main`. It runs one job at a time, each in a fresh pod that is deleted afterwards. The runner pool is defined in the homelab, in `kubernetes/apps/forgejo/forgejo-runner/app/infra/` of homelab-cluster.
 
@@ -150,8 +138,8 @@ Treat every one of these tokens as the whole cluster. Any token can boot a node 
 | `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu` | every 6 months |
 | `HCLOUD_TOKEN_CLUSTER` | OpenBao `secret/hetzner/unfold-cluster`, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
 | `HCLOUD_TOKEN_VIP` | OpenBao `secret/hetzner/unfold-vip`, encrypted state, control plane configs | every 6 months, then apply |
-| `TAILSCALE_AUTHKEY_CONTROL_PLANE` | OpenBao `secret/unfold-cluster/tailnet`, encrypted state, control plane configs | expires after 90 days |
-| `TAILSCALE_AUTHKEY` | OpenBao `secret/unfold-cluster/tailnet`, encrypted state, worker configs | single use, made for each new worker |
+| tailnet pre-auth keys | made on `unfold-headscale`, encrypted state, node configs | `tag:cp`: renewed on the server before 45 days are left, nothing to do; `tag:node`: single use, one per worker server |
+| OpenTofu's SSH client key and the pinned host key of `unfold-headscale` | encrypted state; the host key also in the server's user_data, which Hetzner's metadata service serves to the server | with the server: bump `headscale_generation` |
 | `STATE_PASSPHRASE` | OpenBao `secret/unfold-cluster/tofu-state`, password manager with an offline copy | when someone with access leaves |
 | State bucket keys | OpenBao `secret/unfold-cluster/tofu-state` | every 6 months |
 | etcd backup keys and age key | OpenBao `secret/unfold-cluster/etcd-backup`; the age key also in the password manager with an offline copy | Garage keys every 6 months; the age key when it may have leaked |
@@ -167,7 +155,7 @@ Every six hours a CronJob in `etcd-backup` asks the Talos API for an etcd snapsh
 
 A backup counts only once it has been restored. Every morning [etcd-backup-check](.forgejo/workflows/etcd-backup-check.yml) downloads the newest snapshot, fails if it is more than seven hours old, decrypts it, restores it with `etcdutl` into a throwaway etcd on the runner and reads `kube-system` and `flux-system` back out of it ([scripts/verify-etcd-snapshot.sh](scripts/verify-etcd-snapshot.sh)). Running it by hand with `corrupt` damages the snapshot first, and the run must fail; do that once after enabling the check, so the check is known to catch damage.
 
-Set up once, before the second apply:
+Set up once, before the apply that creates the cluster:
 
 1. `age-keygen -o etcd-backup.age`; keep the file in the password manager with an offline copy. Its `# public key:` line goes into `ETCD_BACKUP_AGE_RECIPIENT`, the whole file into `ETCD_BACKUP_AGE_IDENTITY`, both through OpenBao as in the [bootstrap checklist](docs/bootstrap-checklist.md#b4-put-every-value-into-openbao).
 2. On the Garage: create the bucket `unfold-cluster-etcd` with a 30-day expiry lifecycle rule, one key with write only on it for the cluster (`ETCD_BACKUP_WRITE_*`), and one key with read only on it for the check (`ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`). The commands are in [the bootstrap checklist](docs/bootstrap-checklist.md#b3-garage-buckets-and-keys).
