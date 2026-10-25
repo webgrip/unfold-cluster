@@ -6,8 +6,11 @@ readonly usage="usage: test-tailnet-key-tool.sh
 
 Runs infra/templates/unfold-tailnet-key.sh, the program OpenTofu calls on
 unfold-headscale over SSH, against a stubbed headscale and systemctl, and
-checks the policy, install and gateway key modes: what they change, what they
-refuse, and that a policy Headscale cannot start with is rolled back."
+checks the policy, config, OIDC secret, host, identity provider, install and
+gateway key modes: what they change, what they refuse, that a policy or
+configuration Headscale cannot start with is rolled back, that the client
+secret is never printed, and that Headscale is restarted for OIDC only when
+it started without it and the identity provider answers."
 
 case "${1:-}" in
   -h | --help) echo "$usage"; exit 0 ;;
@@ -30,16 +33,55 @@ case "$1 $2" in
   "users create") echo '{}' ;;
   "preauthkeys create") echo '{"key": "hskey-auth-stub", "id": 5}' ;;
   "policy check") ! grep -q REFUSED "$4" ;;
-  "nodes list") echo '[{"id": 2, "given_name": "unfold-cp-2", "online": true, "node_key": "nodekey:secret"}, {"id": 1, "given_name": "unfold-cp-1", "online": false, "pre_auth_key": {"key": "hskey-auth-leak"}}]' ;;
+  "nodes list")
+    if [ -e "${STUB_DIR}/nodes.json" ]; then
+      cat "${STUB_DIR}/nodes.json"
+    else
+      echo '[{"id": 2, "given_name": "unfold-cp-2", "online": true, "node_key": "nodekey:secret"}, {"id": 1, "given_name": "unfold-cp-1", "online": false, "pre_auth_key": {"key": "hskey-auth-leak"}}]'
+    fi
+    ;;
   *) exit 1 ;;
 esac
 STUB
 cat >"${work}/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 echo "systemctl $*" >>"${STUB_LOG}"
-if grep -q NOSTART "${POLICY_PATH}"; then touch "${STUB_DIR}/down"; else rm -f "${STUB_DIR}/down"; fi
+if [ "$1" = "show" ]; then
+  echo "invocation-1"
+  exit 0
+fi
+if grep -q NOSTART "${POLICY_PATH}" "${CONFIG_PATH}" 2>/dev/null; then touch "${STUB_DIR}/down"; else rm -f "${STUB_DIR}/down"; fi
 STUB
-chmod +x "${work}/bin/headscale" "${work}/bin/systemctl"
+cat >"${work}/bin/journalctl" <<'STUB'
+#!/usr/bin/env bash
+echo "journalctl $*" >>"${STUB_LOG}"
+if [ -e "${STUB_DIR}/fell-back" ]; then
+  echo 'WRN failed to set up OIDC provider, falling back to CLI based authentication error="dial tcp: i/o timeout"'
+fi
+echo "INF listening and serving HTTP"
+STUB
+cat >"${work}/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+echo "curl $*" >>"${STUB_LOG}"
+output=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output="$2"; shift ;;
+    https://*) url="$1" ;;
+  esac
+  shift
+done
+case "$url" in
+  *openid-configuration)
+    [ ! -e "${STUB_DIR}/idp-down" ] || exit 7
+    echo '{"issuer": "https://idp.invalid/application/o/unfold-headscale/"}'
+    ;;
+  *.tgz) cp "${STUB_DIR}/package.tgz" "$output" ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "${work}/bin/headscale" "${work}/bin/systemctl" "${work}/bin/journalctl" "${work}/bin/curl"
 
 cat >"${work}/settings.env" <<EOF
 NODE_USER=nodes
@@ -55,10 +97,19 @@ HEALTH_CONNECT_TO=headscale.invalid:443:127.0.0.1:443
 POLICY_PATH=${work}/acl.hujson
 SELF_PATH=${work}/unfold-tailnet-key
 HEADSCALE_START_SECONDS=2
+CONFIG_PATH=${work}/config.yaml
+OIDC_SECRET_PATH=${work}/oidc_client_secret
+HOSTS_FILE=${work}/hosts
+TAILSCALE_PATH=${work}/sbin/tailscale
+TAILSCALED_PATH=${work}/sbin/tailscaled
+TAILSCALED_DEFAULTS=${work}/default-tailscaled
+SYSTEMD_DIR=${work}/systemd
+TAILSCALE_PACKAGE_URL=https://pkgs.invalid/stable
 EOF
+mkdir -p "${work}/sbin" "${work}/systemd"
 
 export PATH="${work}/bin:${PATH}" STUB_DIR="$work" STUB_LOG="${work}/calls.log" \
-  UNFOLD_TAILNET_SETTINGS="${work}/settings.env" POLICY_PATH="${work}/acl.hujson"
+  UNFOLD_TAILNET_SETTINGS="${work}/settings.env" POLICY_PATH="${work}/acl.hujson" CONFIG_PATH="${work}/config.yaml"
 
 failures=0
 check() {
@@ -134,6 +185,124 @@ check "nodes takes only list" \
 
 check "the worker mode still reads nothing for an unknown server" \
   bash -c '[ -z "$(sh "$0" worker 42 read)" ]' "$tool"
+
+cat >"${work}/config.yaml" <<'EOF'
+server_url: https://headscale.invalid
+oidc:
+  issuer: https://idp.invalid/application/o/unfold-headscale/
+EOF
+
+check "an unchanged configuration restarts nothing" \
+  bash -c 'before="$(grep -c "^systemctl restart" "$2")"; [ "$(sh "$0" config set <"$1")" = "configuration unchanged" ] && [ "$(grep -c "^systemctl restart" "$2")" = "$before" ]' "$tool" "${work}/config.yaml" "$STUB_LOG"
+
+check "a new configuration is installed, Headscale restarted, and an empty client secret file made first" \
+  bash -c 'before="$(grep -c "^systemctl restart" "$2")"; { cat "$1"; echo "  client_secret_path: $3"; } | sh "$0" config set >/dev/null && grep -q client_secret_path "$1" && [ -e "$3" ] && [ ! -s "$3" ] && [ "$(stat -c %a "$3")" = 640 ] && [ "$(grep -c "^systemctl restart" "$2")" = "$((before + 1))" ]' "$tool" "${work}/config.yaml" "$STUB_LOG" "${work}/oidc_client_secret"
+
+check "a configuration Headscale cannot start with is rolled back" \
+  bash -c '! ({ cat "$1"; echo "NOSTART: true"; } | sh "$0" config set 2>/dev/null) && ! grep -q NOSTART "$1" && grep -q client_secret_path "$1" && [ ! -e "$2/down" ]' "$tool" "${work}/config.yaml" "$work"
+
+check "an empty configuration is refused" \
+  bash -c '! (sh "$0" config set </dev/null 2>/dev/null) && grep -q client_secret_path "$1"' "$tool" "${work}/config.yaml"
+
+check "config takes only set" \
+  bash -c 'sh "$0" config get </dev/null 2>/dev/null; [ $? -eq 2 ]' "$tool"
+
+client_secret="canary-client-secret-$$"
+check "a new client secret is installed, readable by its group only, and Headscale restarted" \
+  bash -c 'before="$(grep -c "^systemctl restart" "$2")"; out="$(printf "%s" "$3" | sh "$0" oidc-secret set 2>&1)" && [ "$out" = "client secret installed" ] && [ "$(cat "$1")" = "$3" ] && [ "$(stat -c %a "$1")" = 640 ] && [ "$(grep -c "^systemctl restart" "$2")" = "$((before + 1))" ]' "$tool" "${work}/oidc_client_secret" "$STUB_LOG" "$client_secret"
+
+check "the same client secret restarts nothing" \
+  bash -c 'before="$(grep -c "^systemctl restart" "$1")"; [ "$(printf "%s" "$2" | sh "$0" oidc-secret set)" = "client secret unchanged" ] && [ "$(grep -c "^systemctl restart" "$1")" = "$before" ]' "$tool" "$STUB_LOG" "$client_secret"
+
+check "an empty client secret is refused and the installed one kept" \
+  bash -c '! (sh "$0" oidc-secret set </dev/null 2>/dev/null) && [ "$(cat "$1")" = "$2" ]' "$tool" "${work}/oidc_client_secret" "$client_secret"
+
+check "a client secret the configuration does not use yet is installed without a restart" \
+  bash -c 'cp "$1" "$1.saved"; grep -v client_secret_path "$1.saved" >"$1"; before="$(grep -c "^systemctl restart" "$2")"; printf "%s-next" "$3" | sh "$0" oidc-secret set >/dev/null && [ "$(grep -c "^systemctl restart" "$2")" = "$before" ]; status=$?; cp "$1.saved" "$1"; exit "$status"' "$tool" "${work}/config.yaml" "$STUB_LOG" "$client_secret"
+
+package_dir="${work}/package/tailscale_1.2.3_amd64"
+mkdir -p "${package_dir}/systemd"
+cat >"${package_dir}/tailscale" <<'STUB'
+#!/usr/bin/env bash
+echo "tailscale $*" >>"${STUB_LOG}"
+case "$1" in
+  version) echo "1.2.3"; echo "  tailscale commit: stub" ;;
+  status) if [ -e "${STUB_DIR}/joined" ]; then echo '{"BackendState": "Running"}'; else echo '{"BackendState": "NeedsLogin"}'; fi ;;
+  up)
+    for argument in "$@"; do
+      case "$argument" in
+        --auth-key=file:*) grep -q '^hskey-auth-' "${argument#--auth-key=file:}" || exit 1 ;;
+      esac
+    done
+    touch "${STUB_DIR}/joined"
+    ;;
+esac
+STUB
+printf '#!/bin/sh\n' >"${package_dir}/tailscaled"
+echo "[Service]" >"${package_dir}/systemd/tailscaled.service"
+echo 'PORT="41641"' >"${package_dir}/systemd/tailscaled.defaults"
+chmod +x "${package_dir}/tailscale" "${package_dir}/tailscaled"
+tar -czf "${work}/package.tgz" -C "${work}/package" tailscale_1.2.3_amd64
+package_sha="$(sha256sum "${work}/package.tgz" | cut -d' ' -f1)"
+wrong_sha="$(printf '%064d' 0)"
+
+check "a package with another sha256 is refused and nothing installed" \
+  bash -c '! (sh "$0" host apply 1.2.3 "$2" 2>/dev/null) && [ ! -e "$1/sbin/tailscale" ] && [ ! -e "$1/systemd/unfold-headscale-idp.timer" ]' "$tool" "$work" "$wrong_sha"
+
+check "host apply installs Tailscale and the identity provider timer and enables both" \
+  bash -c 'sh "$0" host apply 1.2.3 "$3" >/dev/null && [ -x "$1/sbin/tailscale" ] && [ -x "$1/sbin/tailscaled" ] && [ -e "$1/default-tailscaled" ] && grep -qx "ExecStart=$1/unfold-tailnet-key idp reconcile" "$1/systemd/unfold-headscale-idp.service" && grep -qx "OnUnitActiveSec=2min" "$1/systemd/unfold-headscale-idp.timer" && grep -q "^systemctl enable --now unfold-headscale-idp.timer" "$2" && grep -q "^systemctl restart tailscaled" "$2"' "$tool" "$work" "$STUB_LOG" "$package_sha"
+
+check "host apply of the installed version downloads nothing" \
+  bash -c 'before="$(grep -c "^curl.*\.tgz" "$1")"; [ "$(sh "$0" host apply 1.2.3 "$2" | head -n 1)" = "tailscale 1.2.3 present" ] && [ "$(grep -c "^curl.*\.tgz" "$1")" = "$before" ]' "$tool" "$STUB_LOG" "$package_sha"
+
+check "host apply refuses a version or sha256 that is not one" \
+  bash -c 'sh "$0" host apply "1.2;id" "$1" 2>/dev/null; [ $? -eq 2 ] || exit 1; sh "$0" host apply 1.2.3 nothex 2>/dev/null; [ $? -eq 2 ]' "$tool" "$package_sha"
+
+printf '127.0.0.1 localhost\n100.64.0.99 idp.invalid\n' >"${work}/hosts"
+cat >"${work}/nodes.json" <<'EOF'
+[
+  {"id": 7, "given_name": "homelab-gateway", "online": false, "last_seen": {"seconds": 100}, "tags": ["tag:homelab-gateway"], "ip_addresses": ["100.64.0.7", "fd7a:115c:a1e0::7"]},
+  {"id": 9, "given_name": "homelab-gateway-1", "online": true, "last_seen": {"seconds": 50}, "tags": ["tag:homelab-gateway"], "ip_addresses": ["fd7a:115c:a1e0::9", "100.64.0.9"]},
+  {"id": 3, "given_name": "unfold-cp-1", "online": true, "last_seen": {"seconds": 900}, "tags": ["tag:cp"], "ip_addresses": ["100.64.0.3"]}
+]
+EOF
+
+check "idp reconcile joins its own tailnet with a single-use tag:headscale key it does not keep" \
+  bash -c 'sh "$0" idp reconcile >/dev/null; [ -e "$1/joined" ] && grep -q -- "preauthkeys create --user 1 --tags tag:headscale --expiration 1h -o json" "$2" && grep -q -- "up --reset --login-server=https://headscale.invalid --auth-key=file:" "$2" && [ ! -e "$1/state/self.authkey" ]' "$tool" "$work" "$STUB_LOG"
+
+check "idp reconcile never passes a key on the command line" \
+  bash -c '! grep -q "hskey-auth" "$0"' "$STUB_LOG"
+
+check "idp reconcile points the identity provider at the online gateway's IPv4 and keeps every other line" \
+  bash -c '[ "$(grep -c "idp.invalid" "$0")" = 1 ] && grep -qx "100.64.0.9 idp.invalid" "$0" && grep -qx "127.0.0.1 localhost" "$0"' "${work}/hosts"
+
+check "a second idp reconcile mints no key and leaves the hosts file alone" \
+  bash -c 'before="$(grep -c "preauthkeys create" "$1")"; cp "$2" "$2.before"; sh "$0" idp reconcile >/dev/null && [ "$(grep -c "preauthkeys create" "$1")" = "$before" ] && cmp -s "$2" "$2.before"' "$tool" "$STUB_LOG" "${work}/hosts"
+
+check "Headscale running with OIDC is not restarted" \
+  bash -c 'before="$(grep -c "^systemctl restart headscale" "$1")"; sh "$0" idp reconcile | grep -qx "headscale runs with OIDC" && [ "$(grep -c "^systemctl restart headscale" "$1")" = "$before" ]' "$tool" "$STUB_LOG"
+
+touch "${work}/fell-back" "${work}/idp-down"
+check "Headscale without OIDC is left running while the identity provider is down" \
+  bash -c 'before="$(grep -c "^systemctl restart headscale" "$1")"; sh "$0" idp reconcile | grep -q "tailnet nodes are unaffected" && [ "$(grep -c "^systemctl restart headscale" "$1")" = "$before" ]' "$tool" "$STUB_LOG"
+
+rm -f "${work}/idp-down"
+check "Headscale without OIDC is restarted once the identity provider answers" \
+  bash -c 'before="$(grep -c "^systemctl restart headscale" "$1")"; sh "$0" idp reconcile | grep -q "^restarted headscale" && [ "$(grep -c "^systemctl restart headscale" "$1")" = "$((before + 1))" ]' "$tool" "$STUB_LOG"
+
+check "a second restart for OIDC waits for the heal interval" \
+  bash -c 'before="$(grep -c "^systemctl restart headscale" "$1")"; sh "$0" idp reconcile | grep -q "waiting$" && [ "$(grep -c "^systemctl restart headscale" "$1")" = "$before" ]' "$tool" "$STUB_LOG"
+rm -f "${work}/fell-back"
+
+echo '[]' >"${work}/nodes.json"
+check "idp reconcile fails without a gateway on the tailnet and keeps the last address" \
+  bash -c '! (sh "$0" idp reconcile >/dev/null 2>&1) && grep -qx "100.64.0.9 idp.invalid" "$1"' "$tool" "${work}/hosts"
+
+check "idp takes only reconcile" \
+  bash -c 'sh "$0" idp route 2>/dev/null; [ $? -eq 2 ]' "$tool"
+
+check "no mode printed or kept the client secret outside its file" \
+  bash -c '! grep -rqF "$0" "$1" "$2"' "$client_secret" "$STUB_LOG" "${work}/state"
 
 echo "restarts: $(restarts)"
 if [ "$failures" -gt 0 ]; then

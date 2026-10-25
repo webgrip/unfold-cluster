@@ -62,6 +62,13 @@ resource "hcloud_firewall" "headscale" {
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
+  rule {
+    direction  = "in"
+    protocol   = "udp"
+    port       = local.headscale_own_node_wireguard_port
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+
   dynamic "rule" {
     for_each = length(var.admin_cidrs) == 0 ? [] : ["22"]
 
@@ -96,20 +103,24 @@ resource "hcloud_server" "headscale" {
   }
 
   user_data = templatefile("${path.module}/templates/headscale-cloud-init.yaml.tftpl", {
-    hostname            = var.headscale_hostname
-    ipv4                = hcloud_primary_ip.headscale.ip_address
-    acme_email          = var.acme_email
-    ssh_public_key      = var.admin_ssh_public_key
-    tofu_ssh_public_key = trimspace(tls_private_key.headscale_tofu.public_key_openssh)
-    host_key_private    = trimspace(tls_private_key.headscale_host.private_key_openssh)
-    host_key_public     = trimspace(tls_private_key.headscale_host.public_key_openssh)
-    headscale_version   = local.headscale_version
-    headscale_sha256    = local.headscale_sha256
-    admin_user          = var.headscale_admin_user
-    node_user           = local.headscale_node_user
-    tailnet_key_script  = local.tailnet_key_tool
-    tailnet_key_sudoers = local.tailnet_key_sudoers
-    acl                 = local.headscale_policy
+    hostname                = var.headscale_hostname
+    ipv4                    = hcloud_primary_ip.headscale.ip_address
+    acme_email              = var.acme_email
+    ssh_public_key          = var.admin_ssh_public_key
+    tofu_ssh_public_key     = trimspace(tls_private_key.headscale_tofu.public_key_openssh)
+    host_key_private        = trimspace(tls_private_key.headscale_host.private_key_openssh)
+    host_key_public         = trimspace(tls_private_key.headscale_host.public_key_openssh)
+    headscale_version       = local.headscale_version
+    headscale_sha256        = local.headscale_sha256
+    admin_user              = var.headscale_admin_user
+    node_user               = local.headscale_node_user
+    tailnet_key_script      = local.tailnet_key_tool
+    tailnet_key_sudoers     = local.tailnet_key_sudoers
+    acl                     = local.headscale_policy
+    config                  = local.headscale_config
+    oidc_client_secret_path = local.headscale_oidc.client_secret_path
+    tailscale_version       = local.tailscale_version
+    tailscale_sha256        = local.tailscale_sha256
   })
 
   labels = {
