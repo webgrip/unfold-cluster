@@ -116,11 +116,10 @@ Talos and the kubelet reserve some of the node, which leaves about 3.7 CPU and 7
 It fits, at about 65% of memory requested, with no failover. Three things do not fit on top of it:
 
 * PR #84's CI baseline: two gVisor runners at 1.55 CPU and 3 GiB each. Their priority lets Unfold preempt them, but untrusted CI code would still share a node with `ploeg-db`, the LiteLLM master key and Unfold's store key ([D12](#d12-ci-on-the-hub-after-the-move));
-
 * an in-cluster VMSingle, VLSingle and VictoriaTraces (about 1.5 GiB), and
 * the three replicas each that RFC 0001 asks of Postgres, OpenBao and NATS.
 
-Both wait for the hub to grow, which RFC 0002 put "before anyone else depends on it" ([D4](#d4-hub-size-at-cutover)).
+The last two wait for the hub to grow, which RFC 0002 put "before anyone else depends on it" ([D4](#d4-hub-size-at-cutover)).
 
 ### The metal node (Runs and workspaces)
 
@@ -262,7 +261,7 @@ Each step is a pull request with its own proof, then a reviewed `infra` apply wh
 | 2 | The metal node: adopt or order the EX44 through PR #83's modes, Kata 4.3.1 and gVisor on KVM, `kvm_intel` ([ADR 0009](../adr/0009-the-metal-node-is-an-ex44.md)) | yes, with a plan whose price line reads €60.70 or less | ADR-0040's check: a `kata` pod reports a guest kernel different from the host's. The disk report shows LUKS2 with the KMS key slot |
 | 3 | Tailnet tags `tag:hub`, `tag:runs` and `tag:ci`, and the gateway's new ports for Vikunja's API and Authentik ([ADR 0006](../adr/0006-production-reaches-the-homelab-from-the-hub-pool-only.md)), in this repository and in homelab-cluster | yes (Headscale policy) | From a hub pod: Vikunja and Authentik answer. From the metal node and a CI pod: 8200 and the new ports are refused, and 8427 is accepted. The policy test pins each case |
 | 4 | Supply chain: `ghcr.io/webgrip/unfold`, `ghcr.io/webgrip/unfold-agent`, `ghcr.io/ploeg-hq/` and the CNPG Postgres image on `allowedPrefixes`, synced through Zot, with signatures checked at pull and at admission | no | The admission test admits each digest-pinned image, and refuses the same image by tag and an unsigned image |
-| 5 | **Shadow hub:** namespace `ploeg` and an empty `ploeg-db`; LiteLLM with its own database and provider keys ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)); the `unfold` release with `ploeg.executor.enabled: false` and only the Ploeg Test board; the secrets at `secret/unfold-main/...` | no | ploegd migrates the empty database. Unfold answers its health check. An OIDC login works over the tailnet. A LiteLLM call is metered against its key's budget. **This is also ADR-0040's public install proof:** the release installs from published artifacts with this cluster's values only |
+| 5 | **Shadow hub:** CI's hub preference and `unfold` toleration removed ([D12](#d12-ci-on-the-hub-after-the-move)); namespace `ploeg` and an empty `ploeg-db`; LiteLLM with its own database and provider keys ([ADR 0007](../adr/0007-production-runs-its-own-litellm.md)); the `unfold` release with `ploeg.executor.enabled: false` and only the Ploeg Test board; the secrets at `secret/unfold-main/...` | no | ploegd migrates the empty database. Unfold answers its health check. An OIDC login works over the tailnet. A LiteLLM call is metered against its key's budget. **This is also ADR-0040's public install proof:** the release installs from published artifacts with this cluster's values only |
 | 6 | Public access: Tunnel, Gateway, routes and Access (section 3) | yes (Tunnel in OpenTofu) | From outside: the UI host asks for Access. On the webhook host, an unsigned POST gets 401, a correctly signed test POST gets 2xx, and any other path gets 404. A port scan of every node's public address finds nothing open |
 | 7 | **Run gates, then the executor on the fixture boards only** (Ploeg Test and Ploeg Bench) | as needed | Every gate below green, and one Bench Run completes under `kata` |
 | 8 | **Cutover** (section 4): the homelab config loses the real board projects, and this cluster's config gains them, in two commits merged within the window | no | The comparison script prints no difference. A real ticket is dispatched and opens a pull request. The homelab's ploegd is at 0 replicas |
