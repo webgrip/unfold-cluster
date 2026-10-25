@@ -20,6 +20,12 @@ on:
       - scripts/mask-hcloud-token-prefixes.sh
       - scripts/test-mask-hcloud-token-prefixes.sh
       - scripts/diagnose-cluster.sh
+      - scripts/openbao-kv.sh
+      - scripts/lift-headscale-protection.sh
+      - scripts/set-etcd-backup-lifecycle.sh
+      - scripts/rebuild-drill.sh
+      - scripts/test-*.sh
+      - .forgejo/workflows/rebuild-drill.yml
 
 env:
   TF_IN_AUTOMATION: "1"
@@ -51,6 +57,26 @@ jobs:
       - name: Test the program OpenTofu runs on unfold-headscale
         working-directory: .
         run: ./scripts/test-tailnet-key-tool.sh
+
+      - name: Test that the escrowed Talos secrets restore the same cluster identity
+        working-directory: .
+        run: ./scripts/test-talos-secrets-escrow.sh
+
+      - name: Test the OpenBao reads and writes of the apply
+        working-directory: .
+        run: ./scripts/test-openbao-kv.sh
+
+      - name: Test that only a planned replacement of unfold-headscale lifts its protection
+        working-directory: .
+        run: ./scripts/test-lift-headscale-protection.sh
+
+      - name: Test the etcd backup bucket's lifecycle rule
+        working-directory: .
+        run: ./scripts/test-set-etcd-backup-lifecycle.sh
+
+      - name: Test the rebuild drill's guard and teardown
+        working-directory: .
+        run: ./scripts/test-rebuild-drill.sh
 
 
   token-mask-canary:

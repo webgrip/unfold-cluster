@@ -109,6 +109,12 @@ locals {
   }
 }
 
+import {
+  for_each = var.talos_secrets_import_file == "" ? toset([]) : toset([var.talos_secrets_import_file])
+  to       = talos_machine_secrets.cluster
+  id       = each.value
+}
+
 resource "talos_machine_secrets" "cluster" {
   talos_version = local.talos_version
 
@@ -181,6 +187,10 @@ resource "talos_machine_configuration_apply" "control_plane" {
       }
     }),
   ])
+
+  lifecycle {
+    replace_triggered_by = [hcloud_server.control_plane[each.key].id]
+  }
 }
 
 resource "talos_machine_configuration_apply" "worker" {
@@ -200,6 +210,10 @@ resource "talos_machine_configuration_apply" "worker" {
       hostname   = each.key
     }),
   ])
+
+  lifecycle {
+    replace_triggered_by = [hcloud_server.worker[each.key].id]
+  }
 }
 
 moved {
@@ -213,6 +227,10 @@ resource "talos_machine_bootstrap" "cluster" {
   endpoint             = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
 
   depends_on = [talos_machine_configuration_apply.control_plane]
+
+  lifecycle {
+    replace_triggered_by = [hcloud_network.cluster.id]
+  }
 }
 
 data "talos_client_configuration" "cluster" {

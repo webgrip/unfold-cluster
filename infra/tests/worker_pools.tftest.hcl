@@ -133,7 +133,7 @@ run "a_new_key_generation_asks_for_a_new_worker_key_instead_of_the_stored_one" {
   }
 
   assert {
-    condition     = terraform_data.worker_tailnet_key["unfold-ci-1"].triggers_replace == "2026-11-02"
+    condition     = terraform_data.worker_tailnet_key["unfold-ci-1"].triggers_replace[0] == "2026-11-02"
     error_message = "a generation bump replaces the worker key resources, so the fresh key reaches the machine config"
   }
 }

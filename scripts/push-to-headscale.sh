@@ -61,7 +61,7 @@ until send; do
     fail "${HEADSCALE_HOST} did not present the pinned SSH host key; refusing to talk to it"
   fi
   if [ "$status" -ne 255 ]; then
-    fail "unfold-tailnet-key ${request} refused (a server still on the program without this mode needs scripts/install-headscale-key-tool.sh once): $(tr '\n' ' ' <"${workdir}/stderr")"
+    fail "unfold-tailnet-key ${request} refused (a server created before this mode existed is replaced by raising headscale_generation): $(tr '\n' ' ' <"${workdir}/stderr")"
   fi
   [ "$SECONDS" -lt "$deadline" ] || fail "${HEADSCALE_HOST} unreachable: $(tr '\n' ' ' <"${workdir}/stderr")"
   sleep 15

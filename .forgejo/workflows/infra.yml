@@ -16,6 +16,9 @@ on:
       - kubernetes/platform/flux-instance/**
       - kubernetes/platform/etcd-backup/namespace.yaml
       - scripts/write-cluster-secrets.sh
+      - scripts/openbao-kv.sh
+      - scripts/lift-headscale-protection.sh
+      - scripts/set-etcd-backup-lifecycle.sh
   workflow_dispatch:
     inputs:
       apply:
@@ -104,6 +107,22 @@ jobs:
       - name: Validate
         run: tofu validate
 
+      - name: Bring the escrowed Talos secrets back when the state holds none
+        run: |
+          set -eu
+          if tofu state list talos_machine_secrets.cluster | grep -q .; then
+            echo "the state holds the cluster's Talos secrets"
+            exit 0
+          fi
+          bundle="${RUNNER_TEMP}/talos-secrets.yaml"
+          ( umask 077; ../scripts/openbao-kv.sh get unfold-cluster/talos-secrets bundle > "$bundle" )
+          if [ -s "$bundle" ]; then
+            echo "the state holds no Talos secrets; importing the bundle escrowed in OpenBao, so the cluster keeps its identity"
+            echo "TF_VAR_talos_secrets_import_file=${bundle}" >> "${GITHUB_ENV}"
+          else
+            echo "no Talos secrets in the state or in OpenBao: this apply creates a new cluster identity"
+          fi
+
       - name: Build the Talos snapshot when it does not exist yet, on apply runs only
         if: >-
           github.event_name == 'workflow_dispatch'
@@ -151,14 +170,36 @@ jobs:
             echo "::error::the plan changed since it was reviewed; read this run's plan and dispatch again with its digest (${digest})"
             exit 1
           fi
+          tofu show -json infra.tfplan | ../scripts/lift-headscale-protection.sh
           tofu apply -lock-timeout=5m infra.tfplan
+
+      - name: Escrow the Talos secrets in OpenBao
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
+        run: tofu output -raw talos_secrets_bundle | ../scripts/openbao-kv.sh put talos-secrets unfold-cluster/talos-secrets bundle
 
       - name: Hand the homelab gateway its tailnet key through OpenBao
         if: >-
           github.event_name == 'workflow_dispatch'
           && github.ref == 'refs/heads/main'
           && inputs.apply == 'apply'
-        run: tofu output -raw homelab_gateway_tailnet_key | ../scripts/hand-gateway-key-to-openbao.sh
+        run: tofu output -raw homelab_gateway_tailnet_key | ../scripts/openbao-kv.sh put authkey unfold/tailnet-homelab-gateway authkey
+
+      - name: Keep the etcd backup bucket's 30-day expiry rule
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
+        working-directory: .
+        env:
+          S3_ENDPOINT: ${{ vars.STATE_ENDPOINT }}
+          S3_REGION: ${{ vars.STATE_REGION }}
+        run: |
+          set -eu
+          AWS_ACCESS_KEY_ID="${TF_VAR_etcd_backup_s3_access_key}" AWS_SECRET_ACCESS_KEY="${TF_VAR_etcd_backup_s3_secret_key}" \
+            ./scripts/set-etcd-backup-lifecycle.sh
 
   diagnose:
     if: >-

@@ -30,6 +30,7 @@ case "$1 $2" in
   "users create") echo '{}' ;;
   "preauthkeys create") echo '{"key": "hskey-auth-stub", "id": 5}' ;;
   "policy check") ! grep -q REFUSED "$4" ;;
+  "nodes list") echo '[{"id": 2, "given_name": "unfold-cp-2", "online": true, "node_key": "nodekey:secret"}, {"id": 1, "given_name": "unfold-cp-1", "online": false, "pre_auth_key": {"key": "hskey-auth-leak"}}]' ;;
   *) exit 1 ;;
 esac
 STUB
@@ -121,6 +122,15 @@ check "read returns the minted key and nothing for an unminted generation" \
 
 check "a generation that is not a number is refused" \
   bash -c 'sh "$0" gateway "1;id" read 2>/dev/null; [ $? -eq 2 ]' "$tool"
+
+check "nodes list prints each node's name and whether it is online, sorted" \
+  bash -c '[ "$(sh "$0" nodes list)" = "[{\"name\":\"unfold-cp-1\",\"online\":false},{\"name\":\"unfold-cp-2\",\"online\":true}]" ]' "$tool"
+
+check "nodes list never prints a key" \
+  bash -c '! sh "$0" nodes list | grep -q -e hskey -e nodekey' "$tool"
+
+check "nodes takes only list" \
+  bash -c 'sh "$0" nodes delete 2>/dev/null; [ $? -eq 2 ]' "$tool"
 
 check "the worker mode still reads nothing for an unknown server" \
   bash -c '[ -z "$(sh "$0" worker 42 read)" ]' "$tool"
