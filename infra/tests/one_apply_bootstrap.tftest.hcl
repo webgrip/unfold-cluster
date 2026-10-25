@@ -209,6 +209,9 @@ run "the_tailnet_key_is_not_read_without_an_admin_address" {
 
   variables {
     admin_cidrs = []
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = 2345678, product_prefix = "EX44", cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+    }
   }
 
   expect_failures = [

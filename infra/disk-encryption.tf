@@ -1,4 +1,6 @@
 locals {
+  encrypted_nodes = setunion(var.disk_encryption_nodes, keys(var.metal_servers))
+
   cluster_nodes = merge(local.control_planes, { for name, worker in local.workers : name => worker.private_ip }, { for name, node in local.metal_nodes : name => node.private_ip })
 
   disk_encryption_keys = [{
@@ -26,7 +28,7 @@ locals {
   }
 
   disk_encryption_patches = {
-    for name in keys(local.cluster_nodes) : name => !contains(var.disk_encryption_nodes, name) ? [] : [
+    for name in keys(local.cluster_nodes) : name => !contains(local.encrypted_nodes, name) ? [] : [
       for volume in ["STATE", "EPHEMERAL"] : yamlencode({
         apiVersion = "v1alpha1"
         kind       = "VolumeConfig"

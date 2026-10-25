@@ -22,6 +22,7 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
         number         a server number, digits only
         robot-transaction  a Robot order transaction id
         mac            a MAC address, lower-case and colon-separated
+        cpu-vendor     intel or amd
 get   prints PROPERTY, or nothing when the secret or the property is absent.
 
 Neither prints a value. Environment: ACTIONS_ID_TOKEN_REQUEST_URL and
@@ -91,6 +92,10 @@ checked_value() {
     robot-transaction)
       value="$(tr -d '\r\n ')"
       [[ "$value" =~ ^[A-Za-z0-9-]{4,64}$ ]] || fail "stdin holds no Robot transaction id"
+      ;;
+    cpu-vendor)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^(intel|amd)$ ]] || fail "stdin holds no CPU vendor"
       ;;
     mac)
       value="$(tr -d '\r\n ')"
