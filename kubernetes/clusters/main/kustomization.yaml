@@ -12,6 +12,7 @@ resources:
   - ../../platform/network-policy
   - ../../platform/admission-policies
   - ../../platform/external-secrets
+  - ../../platform/cert-manager
   - ../../platform/volume-encryption
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal

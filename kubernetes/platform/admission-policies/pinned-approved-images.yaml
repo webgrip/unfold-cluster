@@ -15,6 +15,9 @@ spec:
     - name: allowedPrefixes
       expression: >-
         ['ghcr.io/siderolabs/',
+        'quay.io/jetstack/cert-manager-controller:',
+        'quay.io/jetstack/cert-manager-webhook:',
+        'quay.io/jetstack/cert-manager-cainjector:',
         'ghcr.io/external-secrets/external-secrets:',
         'ghcr.io/kedacore/keda:',
         'ghcr.io/kedacore/keda-metrics-apiserver:',
