@@ -30,13 +30,14 @@ env:
   MAX_AGE_HOURS: "7"
   S3_ENDPOINT: ${{ vars.STATE_ENDPOINT }}
   S3_REGION: ${{ vars.STATE_REGION }}
-  S3_ACCESS_KEY: ${{ secrets.ETCD_BACKUP_READ_ACCESS_KEY }}
-  S3_SECRET_KEY: ${{ secrets.ETCD_BACKUP_READ_SECRET_KEY }}
 
 jobs:
   restore-latest-snapshot:
     if: vars.ETCD_BACKUP_CHECK == 'enabled'
     runs-on: unfold-infra
+    # The read key and the age key come from OpenBao, which gives them only to this repository's
+    # main branch (role ci-unfold-cluster); they are not Forgejo secrets.
+    enable-openid-connect: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -59,11 +60,19 @@ jobs:
           install -m 0755 "etcd-${ETCD_VERSION}-linux-amd64/etcd" "etcd-${ETCD_VERSION}-linux-amd64/etcdctl" "etcd-${ETCD_VERSION}-linux-amd64/etcdutl" "${RUNNER_TEMP}/bin/"
           echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
+      - name: Read the restore credentials from OpenBao
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            S3_ACCESS_KEY=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_READ_ACCESS_KEY
+            S3_SECRET_KEY=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_READ_SECRET_KEY
+            AGE_IDENTITY=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_AGE_IDENTITY
+
       - name: Download the newest snapshot and refuse a stale one
         id: fetch
         run: |
           set -eu
-          [ -n "${S3_ACCESS_KEY}" ] && [ -n "${S3_SECRET_KEY}" ] || { echo "::error::ETCD_BACKUP_READ_ACCESS_KEY and ETCD_BACKUP_READ_SECRET_KEY must be set"; exit 1; }
           sign="aws:amz:${S3_REGION}:s3"
           newest="$(curl -fsS --aws-sigv4 "$sign" --user "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" \
             "${S3_ENDPOINT}/${BUCKET}?list-type=2&prefix=${PREFIX}/" \
@@ -78,7 +87,6 @@ jobs:
 
       - name: Restore it into a throwaway etcd and read the cluster back
         env:
-          AGE_IDENTITY: ${{ secrets.ETCD_BACKUP_AGE_IDENTITY }}
           CORRUPT_ON_PURPOSE: ${{ inputs.corrupt == 'corrupt' }}
         run: |
           set -eu

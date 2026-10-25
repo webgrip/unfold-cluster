@@ -45,8 +45,9 @@ spec:
                   value: garage
                 - name: CUSTOM_S3_ENDPOINT
                   value: https://s3-offsite.webgrip.dev
+                # talos-backup v0.1.0-beta.3 turns path style on when this is "false"
                 - name: USE_PATH_STYLE
-                  value: "true"
+                  value: "false"
                 - name: ENABLE_COMPRESSION
                   value: "false"
               envFrom:

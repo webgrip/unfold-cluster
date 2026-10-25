@@ -115,7 +115,14 @@ variable "admin_ssh_public_key" {
 }
 
 variable "tailscale_authkey" {
-  description = "Reusable Headscale pre-auth key the Talos nodes join the tailnet with. Null until Headscale runs; while null, no cluster node is created."
+  description = "Headscale pre-auth key, tagged tag:node, that the Talos workers join the tailnet with. Workers advertise no routes and may start no connection. Null until Headscale runs; while null, no cluster node is created."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "tailscale_control_plane_authkey" {
+  description = "Reusable Headscale pre-auth key, tagged tag:cp, that only the control planes join the tailnet with. Only tag:cp devices get the cloud subnet route approved automatically, so this key never goes to a worker. Null until Headscale runs; while null, no cluster node is created."
   type        = string
   default     = null
   sensitive   = true

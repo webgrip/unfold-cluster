@@ -1,5 +1,5 @@
 locals {
-  cluster_enabled = nonsensitive(try(length(var.tailscale_authkey), 0) > 0)
+  cluster_enabled = nonsensitive(try(length(var.tailscale_authkey), 0) > 0 && try(length(var.tailscale_control_plane_authkey), 0) > 0)
 
   network_range        = "10.64.0.0/16"
   cloud_subnet_range   = "10.64.0.0/24"

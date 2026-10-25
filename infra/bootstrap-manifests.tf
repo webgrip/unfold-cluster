@@ -3,10 +3,18 @@ locals {
   cilium_chart_version = "1.20.4"
   # renovate: datasource=helm depName=hcloud-cloud-controller-manager registryUrl=https://charts.hetzner.cloud
   hcloud_ccm_chart_version = "1.39.0"
+  # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-cloud-controller-manager
+  hcloud_ccm_image_tag = "v1.39.0@sha256:d6fee56987598cddb01121ebc1566e6513048cf6c66cba29d5d7a3025f3c2085"
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator
   flux_operator_chart_version = "0.61.0"
+  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/flux-operator
+  flux_operator_image_tag = "v0.61.0@sha256:71041d9fff7f7b05f1a8123ebe73c73b7b156f4aacfe1e8e19b5aa953a98892c"
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-instance
   flux_instance_chart_version = "0.61.0"
+  # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/flux-operator-manifests
+  flux_manifests_tag = "v0.61.0@sha256:a94070768dc353efb3aaf7a28ae2d57566e8d20d8dc5287aacb6c10e169b7137"
+  # renovate: datasource=github-releases depName=fluxcd/flux2 extractVersion=^v(?<version>.+)$
+  flux_version = "2.9.6"
 }
 
 data "helm_template" "cilium" {
@@ -69,6 +77,9 @@ data "helm_template" "hcloud_ccm" {
   kube_version = local.kubernetes_version
 
   values = [yamlencode({
+    image = {
+      tag = local.hcloud_ccm_image_tag
+    }
     networking = {
       enabled = false
     }
@@ -84,6 +95,9 @@ data "helm_template" "flux_operator" {
   kube_version = local.kubernetes_version
 
   values = [yamlencode({
+    image = {
+      tag = local.flux_operator_image_tag
+    }
     tolerations  = local.control_plane_tolerations
     nodeSelector = local.control_plane_node_selector
   })]
@@ -100,7 +114,8 @@ data "helm_template" "flux_instance" {
   values = [yamlencode({
     instance = {
       distribution = {
-        version = "2.x"
+        version  = local.flux_version
+        artifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:${local.flux_manifests_tag}"
       }
       kustomize = {
         patches = [{
@@ -219,9 +234,9 @@ locals {
         namespace = "etcd-backup"
       }
       stringData = {
-        AWS_ACCESS_KEY_ID        = var.etcd_backup_s3_access_key
-        AWS_SECRET_ACCESS_KEY    = var.etcd_backup_s3_secret_key
-        AGE_RECIPIENT_PUBLIC_KEY = var.etcd_backup_age_recipient
+        AWS_ACCESS_KEY_ID     = var.etcd_backup_s3_access_key
+        AWS_SECRET_ACCESS_KEY = var.etcd_backup_s3_secret_key
+        AGE_X25519_PUBLIC_KEY = var.etcd_backup_age_recipient
       }
     }),
   ])

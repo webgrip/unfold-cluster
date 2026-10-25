@@ -10,26 +10,28 @@ spec:
       - apiGroups: [""]
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["pods"]
+        resources: ["pods", "pods/ephemeralcontainers"]
   variables:
+    - name: allowedPrefixes
+      expression: >-
+        ['ghcr.io/siderolabs/']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)
         + (has(object.spec.initContainers) ? object.spec.initContainers.map(c, c.image) : [])
         + (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers.map(c, c.image) : [])
+        + (has(object.spec.volumes) ? object.spec.volumes.filter(v, has(v.image)).map(v, has(v.image.reference) ? v.image.reference : '') : [])
+    - name: unapproved
+      expression: >-
+        variables.images.filter(i, !variables.allowedPrefixes.exists(p, i.startsWith(p)))
   validations:
     - expression: variables.images.all(i, i.contains('@sha256:'))
       messageExpression: >-
         'every image must be pinned by digest; not pinned: ' + variables.images.filter(i, !i.contains('@sha256:')).join(', ')
       reason: Forbidden
-    - expression: >-
-        variables.images.all(i,
-          i.startsWith('ghcr.io/') || i.startsWith('quay.io/') || i.startsWith('registry.k8s.io/')
-          || i.startsWith('docker.io/') || i.startsWith('code.forgejo.org/') || i.startsWith('factory.talos.dev/'))
+    - expression: variables.unapproved.size() == 0
       messageExpression: >-
-        'images must come from an approved registry; refused: ' + variables.images.filter(i,
-          !(i.startsWith('ghcr.io/') || i.startsWith('quay.io/') || i.startsWith('registry.k8s.io/')
-          || i.startsWith('docker.io/') || i.startsWith('code.forgejo.org/') || i.startsWith('factory.talos.dev/'))).join(', ')
+        'images must come from an approved repository (' + variables.allowedPrefixes.join(', ') + '); refused: ' + variables.unapproved.join(', ')
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1

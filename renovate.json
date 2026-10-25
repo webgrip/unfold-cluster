@@ -17,15 +17,16 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts and Headscale in infra/, OpenTofu, age and etcd in the workflows, hcloud-upload-image in scripts/build-talos-snapshot.sh. One manager reads them all, so a version without the line is the only way to freeze silently.",
+      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts, their image digests, Flux and Headscale in infra/, chart image digests in kubernetes/, OpenTofu, age and etcd in the workflows, hcloud-upload-image in scripts/build-talos-snapshot.sh. A value written as tag@sha256:digest has both parts updated. One manager reads them all, so a version without the line is the only way to freeze silently.",
       "managerFilePatterns": [
         "/^infra/.+\\.tf$/",
+        "/^kubernetes/.+\\.ya?ml$/",
         "/^talos/.+\\.ya?ml$/",
         "/^\\.forgejo/workflows/.+\\.ya?ml$/",
         "/^scripts/.+\\.sh$/"
       ],
       "matchStrings": [
-        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[=:]\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[=:]\\s*\"?(?<currentValue>[^\"\\s@]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?\"?"
       ]
     }
   ],
@@ -39,12 +40,38 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "The Flux operator and the Flux instance chart are released together and must move together.",
+      "description": "The Flux operator, its image, the Flux instance chart and the manifests artifact are released together and must move together. Flux itself moves with them: the operator only installs a Flux version that the pinned manifests artifact contains.",
       "matchDepNames": [
         "ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
-        "ghcr.io/controlplaneio-fluxcd/charts/flux-instance"
+        "ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
+        "ghcr.io/controlplaneio-fluxcd/flux-operator",
+        "ghcr.io/controlplaneio-fluxcd/flux-operator-manifests",
+        "fluxcd/flux2"
       ],
-      "groupName": "flux operator"
+      "groupName": "flux operator",
+      "prBodyNotes": [
+        "`flux_version` in `infra/bootstrap-manifests.tf` must be a directory under `flux/` in the pinned `flux-operator-manifests` artifact, or the FluxInstance stops reconciling. A Flux release newer than the artifact waits for the next operator release."
+      ]
+    },
+    {
+      "description": "The cloud controller's image is pinned by digest beside its chart, so the two move in one PR.",
+      "matchDepNames": [
+        "hcloud-cloud-controller-manager",
+        "docker.io/hetznercloud/hcloud-cloud-controller-manager"
+      ],
+      "groupName": "hcloud cloud controller manager"
+    },
+    {
+      "description": "The CSI driver and its sidecars are pinned by digest beside the chart, so they move in one PR.",
+      "matchDepNames": [
+        "hcloud-csi",
+        "docker.io/hetznercloud/hcloud-csi-driver",
+        "/^registry\\.k8s\\.io/sig-storage//"
+      ],
+      "groupName": "hcloud csi",
+      "prBodyNotes": [
+        "Keep each sidecar on the tag the new chart's `values.yaml` ships unless its release notes say the chart's RBAC and flags still fit."
+      ]
     },
     {
       "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",

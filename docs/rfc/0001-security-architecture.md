@@ -29,7 +29,7 @@ No cluster is perfectly secure. [Residual risks](#residual-risks) lists what thi
 | An internet attacker | Reach any service or node | No public ingress ports: Cloudflare Tunnel only. Hetzner and Talos firewalls closed. API and Talos API reachable on the tailnet only |
 | A compromised supply chain | Run a poisoned image or chart | Digest pins, signature checks at pull (Talos) and at admission (Kyverno), registry allowlist in CEL, in-cluster mirror that only serves signed or re-signed images |
 | A stolen credential | Use a kubeconfig, a Hetzner token or a forge token | Short-lived OIDC sign-in, break-glass credentials kept offline with an alert on use, one token per job with delete protection (#14), signed commits only (#10) |
-| A compromised homelab | Push to production | Production pulls from the GitHub mirror and deploys only signed commits. The apply job runs only on its own runner (#15), and later in production itself |
+| A compromised homelab | Push to production | Production pulls from the GitHub mirror and deploys only commits signed by the owner's key; Forgejo's instance key is not trusted. The apply job runs only on its own runner (#15), and later in production itself. Not closed yet: that runner and Forgejo's secrets hold the state passphrase and the Hetzner tokens, so the homelab can still reach production until the apply moves out of it |
 | The host provider | Read disks or snapshots | LUKS2 on every Talos partition and every volume, keys never stored on the same disk |
 | An insider with cluster admin | Delete evidence | Audit logs leave the cluster within seconds; the off-cluster copy is outside the cluster admin's reach |
 
@@ -393,6 +393,7 @@ The cluster is not production until it has passed these checks. Until then it is
 | Risk | Why it remains | What would reduce it |
 | --- | --- | --- |
 | Hetzner can read memory on its own hosts | Cloud servers offer no TPM, SecureBoot or confidential computing | Confidential VMs with SEV-SNP when an EU provider offers them at this price |
+| Any Hetzner token reads every disk | Tokens cover the whole project, and rescue mode or a disk image is not stopped by delete or rebuild protection. A KMS server in the same project falls the same way | Run the KMS server outside the cluster's Hetzner project, so no cluster token can image it |
 | The KMS server has no client authentication | Sidero's reference server authorises by node UUID alone | Network isolation now; our own KMS server backed by OpenBao Transit later |
 | Control-plane host traffic is not WireGuard-encrypted | Cilium excludes control planes from node encryption by default | Private network plus TLS on every control-plane protocol |
 | Backups depend on two object-storage providers | Both are rented; neither is ours | Restore drills from each copy; a third copy only if a provider fails a drill |

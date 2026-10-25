@@ -22,6 +22,11 @@ on:
           - plan-only
           - apply
         default: plan-only
+      plan_digest:
+        description: The plan digest of the run you reviewed; apply refuses unless this run's plan has the same digest
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: infra-state
@@ -32,28 +37,81 @@ env:
   TOFU_VERSION: 1.13.1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
-  HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.STATE_S3_ACCESS_KEY }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_KEY }}
-  TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
-  TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
-  TF_VAR_hcloud_cluster_token: ${{ secrets.HCLOUD_TOKEN_CLUSTER }}
-  TF_VAR_hcloud_vip_token: ${{ secrets.HCLOUD_TOKEN_VIP }}
-  TF_VAR_state_passphrase: ${{ secrets.STATE_PASSPHRASE }}
-  TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
-  TF_VAR_tailscale_authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-  TF_VAR_etcd_backup_s3_access_key: ${{ secrets.ETCD_BACKUP_WRITE_ACCESS_KEY }}
-  TF_VAR_etcd_backup_s3_secret_key: ${{ secrets.ETCD_BACKUP_WRITE_SECRET_KEY }}
-  TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
 
 jobs:
-  plan-or-apply:
-    runs-on: unfold-infra
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: docker
     defaults:
       run:
         working-directory: infra
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install OpenTofu with a verified checksum
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -eu
+          base="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}"
+          archive="tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/tofu_${TOFU_VERSION}_SHA256SUMS"
+          grep " ${archive}\$" "tofu_${TOFU_VERSION}_SHA256SUMS" | sha256sum -c -
+          tar -xzf "${archive}" tofu
+          mkdir -p "${RUNNER_TEMP}/bin"
+          install -m 0755 tofu "${RUNNER_TEMP}/bin/tofu"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/tofu" version
+
+      - name: Format
+        run: tofu fmt -check -recursive
+
+      - name: Init without the state backend
+        run: tofu init -backend=false
+
+      - name: Validate
+        run: tofu validate
+
+  plan-or-apply:
+    # Never for pull requests. The credentials are not Forgejo secrets: OpenBao hands them only
+    # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
+    # workflow_dispatch (role ci-unfold-cluster), so a branch's own workflow cannot read them.
+    if: github.event_name != 'pull_request'
+    runs-on: unfold-infra
+    enable-openid-connect: true
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_VAR_talos_snapshot_id: ${{ vars.TALOS_SNAPSHOT_ID }}
+      TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
+      TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
+      TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Read the state, Hetzner and backup credentials from OpenBao
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            HCLOUD_TOKEN=secret/data/hetzner/unfold-tofu#HCLOUD_TOKEN
+            AWS_ACCESS_KEY_ID=secret/data/unfold-cluster/tofu-state#STATE_S3_ACCESS_KEY
+            AWS_SECRET_ACCESS_KEY=secret/data/unfold-cluster/tofu-state#STATE_S3_SECRET_KEY
+            TF_VAR_state_passphrase=secret/data/unfold-cluster/tofu-state#STATE_PASSPHRASE
+            TF_VAR_hcloud_cluster_token=secret/data/hetzner/unfold-cluster#HCLOUD_TOKEN_CLUSTER
+            TF_VAR_hcloud_vip_token=secret/data/hetzner/unfold-vip#HCLOUD_TOKEN_VIP
+            TF_VAR_etcd_backup_s3_access_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_ACCESS_KEY
+            TF_VAR_etcd_backup_s3_secret_key=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_WRITE_SECRET_KEY
+
+      - name: Read the tailnet keys from OpenBao, once the cluster nodes are wanted
+        if: vars.CLUSTER_NODES == 'enabled'
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            TF_VAR_tailscale_control_plane_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY_CONTROL_PLANE
+            TF_VAR_tailscale_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY
 
       - name: Install OpenTofu with a verified checksum
         working-directory: ${{ runner.temp }}
@@ -82,11 +140,16 @@ jobs:
         run: tofu fmt -check -recursive
 
       - name: Init
-        run: >-
-          tofu init
-          -backend-config="bucket=${{ vars.STATE_BUCKET }}"
-          -backend-config="region=${{ vars.STATE_REGION }}"
-          -backend-config="endpoints={s3=\"${{ vars.STATE_ENDPOINT }}\"}"
+        env:
+          STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+          STATE_REGION: ${{ vars.STATE_REGION }}
+          STATE_ENDPOINT: ${{ vars.STATE_ENDPOINT }}
+        run: |
+          set -eu
+          tofu init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="region=${STATE_REGION}" \
+            -backend-config="endpoints={s3=\"${STATE_ENDPOINT}\"}"
 
       - name: Validate
         run: tofu validate
@@ -94,9 +157,29 @@ jobs:
       - name: Plan
         run: tofu plan -lock-timeout=5m -out=infra.tfplan
 
-      - name: Apply, only when asked for by hand on main
+      - name: Print the plan digest to quote when applying
+        run: |
+          set -eu
+          tofu show -no-color infra.tfplan > "${RUNNER_TEMP}/infra.plan.txt"
+          digest="$(sha256sum "${RUNNER_TEMP}/infra.plan.txt" | cut -d' ' -f1)"
+          echo "::notice::plan digest ${digest}"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            echo "plan digest \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Apply, only when asked for by hand on main with the reviewed digest
         if: >-
           github.event_name == 'workflow_dispatch'
           && github.ref == 'refs/heads/main'
           && inputs.apply == 'apply'
-        run: tofu apply -lock-timeout=5m infra.tfplan
+        env:
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+        run: |
+          set -eu
+          tofu show -no-color infra.tfplan > "${RUNNER_TEMP}/infra.plan.txt"
+          digest="$(sha256sum "${RUNNER_TEMP}/infra.plan.txt" | cut -d' ' -f1)"
+          if [ -z "${PLAN_DIGEST}" ] || [ "${PLAN_DIGEST}" != "${digest}" ]; then
+            echo "::error::the plan changed since it was reviewed; read this run's plan and dispatch again with its digest (${digest})"
+            exit 1
+          fi
+          tofu apply -lock-timeout=5m infra.tfplan

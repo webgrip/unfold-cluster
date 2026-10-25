@@ -4,9 +4,23 @@ kind: CiliumNetworkPolicy
 metadata:
   name: etcd-backup
 spec:
-  description: The backup job reaches the Talos API on the nodes to take a snapshot and the off-site bucket over HTTPS to store it, nothing else.
+  description: The backup job reaches the Talos API on the nodes to take a snapshot and the off-site bucket over HTTPS to store it, nothing else. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns the bucket's addresses; the Talos API is the talos Service in default, which Cilium sends to the nodes on 50000.
   endpointSelector: {}
   egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: s3-offsite.webgrip.dev
+              - matchName: talos.default.svc.cluster.local
     - toEntities:
         - host
         - remote-node
@@ -14,8 +28,8 @@ spec:
         - ports:
             - port: "50000"
               protocol: TCP
-    - toEntities:
-        - world
+    - toFQDNs:
+        - matchName: s3-offsite.webgrip.dev
       toPorts:
         - ports:
             - port: "443"
