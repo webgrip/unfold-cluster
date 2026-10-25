@@ -159,7 +159,7 @@ run "an_apply_run_boots_nodes_from_the_labelled_snapshot_with_the_key_read_from_
   }
 
   assert {
-    condition     = data.external.worker_tailnet_key["unfold-app-1"].query.request == "worker ${hcloud_server.worker["unfold-app-1"].id}20261025"
+    condition     = data.external.worker_tailnet_key["unfold-app-1"].query.request == "worker ${hcloud_server.worker["unfold-app-1"].id}20261025 tag:hub"
     error_message = "a worker key is asked for by the worker's own server id and the key generation, so each server gets one per generation"
   }
 

@@ -392,9 +392,9 @@ data "external" "metal_tailnet_key" {
   for_each = local.metal_installable
 
   program = ["${path.module}/../scripts/read-tailnet-key.sh"]
-  query   = merge(local.tailnet_key_query, { request = "worker ${local.metal_tailnet_key_slot[each.key]}" })
+  query   = merge(local.tailnet_key_query, { request = "worker ${local.metal_tailnet_key_slot[each.key]} ${local.tailnet_tag_by_pool["metal"]}" })
 
-  depends_on = [hcloud_server.headscale, terraform_data.metal_install]
+  depends_on = [hcloud_server.headscale, terraform_data.metal_install, terraform_data.tailnet_key_tool]
 }
 
 resource "terraform_data" "metal_tailnet_key" {
