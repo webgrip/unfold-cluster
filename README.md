@@ -11,7 +11,8 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, and the manifests Talos installs at bootstrap: Cilium and Hetzner's cloud controller (rendered from their `kubernetes/platform/` files), the Flux operator and the Flux instance | OpenTofu, from `.forgejo/workflows/infra.yml` |
 | `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the roles people sign in to | Flux in the cluster |
+| `access/` | The OIDC kubeconfig people use daily; no secret in it | people, with `mise.toml`'s kubectl, kubelogin and k9s |
 
 ## From nothing to GitOps
 
@@ -204,6 +205,8 @@ The owner keeps these in a password manager with an offline copy, never in git:
 4. later, the OpenBao static-seal key, delivered through a Talos inline manifest when OpenBao is added.
 
 The admin `talosconfig` and `kubeconfig` are read the same way, with `tofu output -raw talosconfig` and `tofu output -raw kubeconfig`, from a shell that has the state credentials and the passphrase.
+
+That admin kubeconfig is break-glass: it is in `system:masters` and cannot be revoked. Daily use is OIDC through Authentik with the committed `access/unfold-oidc.kubeconfig.yaml`, as yourself and bound by RBAC; setup, roles, the audit policy and the break-glass rules are in the [Kubernetes login runbook](docs/runbooks/kubernetes-login.md).
 
 ## Security architecture
 
