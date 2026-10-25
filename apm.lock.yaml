@@ -1,0 +1,492 @@
+lockfile_version: '1'
+apm_version: 0.35.0
+dependencies:
+- repo_url: webgrip/agent-standards
+  name: webgrip-baseline
+  host: forgejo.webgrip.dev
+  resolved_commit: 3c583cd532c1fe967a780bab8c317dadaf596c60
+  resolved_ref: v0.3.1
+  version: 0.0.0
+  virtual_path: packages/baseline
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/baseline.md
+  - .claude/rules/forgejo-ci.md
+  deployed_file_hashes:
+    .claude/rules/baseline.md: sha256:c6644318fe8544b9ad009e3e8a6626310666906270ca42ae3f1b621657e67801
+    .claude/rules/forgejo-ci.md: sha256:18ac65e57d86f5d0c46da55d53582fbfb94ba74d87605e7394a39858fdac3011
+  content_hash: sha256:2930efa4f18a116b92d688e7cc6111f2337e217a111287a96af8e93b1a3ac21b
+- repo_url: webgrip/agent-standards
+  name: webgrip-secrets
+  host: forgejo.webgrip.dev
+  resolved_commit: 3c583cd532c1fe967a780bab8c317dadaf596c60
+  resolved_ref: v0.3.1
+  version: 0.0.0
+  virtual_path: packages/secrets
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:0c49093694d63e8db69467ade460a2a95197069051b60b4c1aa8fc74c552f157
+- repo_url: webgrip/ai-skills
+  name: guard-secrets
+  host: forgejo.webgrip.dev
+  resolved_commit: dc132550c304fd4ff8e8fcfc9d508c563848425d
+  resolved_ref: guard-secrets-v1.0.5
+  version: 1.0.5
+  virtual_path: skills/guard-secrets
+  is_virtual: true
+  depth: 2
+  resolved_by: webgrip/agent-standards
+  package_type: hybrid
+  deployed_files:
+  - .agents/skills/guard-secrets
+  - .agents/skills/guard-secrets/.claude-plugin/plugin.json
+  - .agents/skills/guard-secrets/CHANGELOG.md
+  - .agents/skills/guard-secrets/README.md
+  - .agents/skills/guard-secrets/SKILL.md
+  - .agents/skills/guard-secrets/apm.yml
+  - .agents/skills/guard-secrets/evals/evals.json
+  - .agents/skills/guard-secrets/hooks/hooks.json
+  - .agents/skills/guard-secrets/scripts/guard_secrets.py
+  - .agents/skills/guard-secrets/test.sh
+  - .claude/hooks/guard-secrets/scripts/guard_secrets.py
+  - .claude/skills/guard-secrets
+  - .claude/skills/guard-secrets/.claude-plugin/plugin.json
+  - .claude/skills/guard-secrets/CHANGELOG.md
+  - .claude/skills/guard-secrets/README.md
+  - .claude/skills/guard-secrets/SKILL.md
+  - .claude/skills/guard-secrets/apm.yml
+  - .claude/skills/guard-secrets/evals/evals.json
+  - .claude/skills/guard-secrets/hooks/hooks.json
+  - .claude/skills/guard-secrets/scripts/guard_secrets.py
+  - .claude/skills/guard-secrets/test.sh
+  - .codex/hooks/guard-secrets/scripts/guard_secrets.py
+  deployed_file_hashes:
+    .agents/skills/guard-secrets/.claude-plugin/plugin.json: sha256:30f2e5624e5a8f035b15580988b106c13252d04f548cbec2ae4de55665ad0675
+    .agents/skills/guard-secrets/CHANGELOG.md: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
+    .agents/skills/guard-secrets/README.md: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
+    .agents/skills/guard-secrets/SKILL.md: sha256:bc76648fe95c05ae34a945c15a50e91c28d329720ea4c28bcb08d6e16080c84a
+    .agents/skills/guard-secrets/apm.yml: sha256:f5b914679d494be6289f4ecdccde036d95b37460bb1cf80a0d6fb50d165d0d05
+    .agents/skills/guard-secrets/evals/evals.json: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
+    .agents/skills/guard-secrets/hooks/hooks.json: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
+    .agents/skills/guard-secrets/scripts/guard_secrets.py: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+    .agents/skills/guard-secrets/test.sh: sha256:a9f8ce58bbb82a59442950e161367fd03b360fd54d37c2bdf5d9c4376aa876d4
+    .claude/hooks/guard-secrets/scripts/guard_secrets.py: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+    .claude/skills/guard-secrets/.claude-plugin/plugin.json: sha256:30f2e5624e5a8f035b15580988b106c13252d04f548cbec2ae4de55665ad0675
+    .claude/skills/guard-secrets/CHANGELOG.md: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
+    .claude/skills/guard-secrets/README.md: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
+    .claude/skills/guard-secrets/SKILL.md: sha256:bc76648fe95c05ae34a945c15a50e91c28d329720ea4c28bcb08d6e16080c84a
+    .claude/skills/guard-secrets/apm.yml: sha256:f5b914679d494be6289f4ecdccde036d95b37460bb1cf80a0d6fb50d165d0d05
+    .claude/skills/guard-secrets/evals/evals.json: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
+    .claude/skills/guard-secrets/hooks/hooks.json: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
+    .claude/skills/guard-secrets/scripts/guard_secrets.py: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+    .claude/skills/guard-secrets/test.sh: sha256:a9f8ce58bbb82a59442950e161367fd03b360fd54d37c2bdf5d9c4376aa876d4
+    .codex/hooks/guard-secrets/scripts/guard_secrets.py: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+  content_hash: sha256:0107065e958a5bafde6c8b356cca13dedb77028a7c4238c691291f2a7881f2f8
+  declared_license: MIT
+- repo_url: webgrip/ai-skills
+  name: secrets-levels
+  host: forgejo.webgrip.dev
+  resolved_commit: 0fa0cee98540f43abc2c9dd4c7852f3cfb345527
+  resolved_ref: secrets-levels-v0.1.0
+  version: 0.1.0
+  virtual_path: skills/secrets-levels
+  is_virtual: true
+  depth: 2
+  resolved_by: webgrip/agent-standards
+  package_type: hybrid
+  deployed_files:
+  - .agents/skills/secrets-levels
+  - .agents/skills/secrets-levels/.claude-plugin/plugin.json
+  - .agents/skills/secrets-levels/CHANGELOG.md
+  - .agents/skills/secrets-levels/README.md
+  - .agents/skills/secrets-levels/SKILL.md
+  - .agents/skills/secrets-levels/apm.yml
+  - .agents/skills/secrets-levels/evals/evals.json
+  - .agents/skills/secrets-levels/reference.md
+  - .claude/skills/secrets-levels
+  - .claude/skills/secrets-levels/.claude-plugin/plugin.json
+  - .claude/skills/secrets-levels/CHANGELOG.md
+  - .claude/skills/secrets-levels/README.md
+  - .claude/skills/secrets-levels/SKILL.md
+  - .claude/skills/secrets-levels/apm.yml
+  - .claude/skills/secrets-levels/evals/evals.json
+  - .claude/skills/secrets-levels/reference.md
+  deployed_file_hashes:
+    .agents/skills/secrets-levels/.claude-plugin/plugin.json: sha256:7bef435c0056d5a9f29a794301680f6abb99e23a1fa90167356f5a44cf664b0e
+    .agents/skills/secrets-levels/CHANGELOG.md: sha256:cc25e28212c841ca93c6f45088fe0f51d4a293e9cc86693e49b973a2cbaaaeed
+    .agents/skills/secrets-levels/README.md: sha256:ab3d89e2699bd240260500b300030135cd85e3e722a0ccf9383d04078ab5ba01
+    .agents/skills/secrets-levels/SKILL.md: sha256:df64af606692f94e544adacd5e8d7136c184d0ff74eaee5c766354b73be43dc2
+    .agents/skills/secrets-levels/apm.yml: sha256:6b3ea0554ee42009ef0201ef6aef41cf5bb6f3016b6bb9fe1e5f25303aeea264
+    .agents/skills/secrets-levels/evals/evals.json: sha256:90c5c0c3fc48068d0da20a2416f3620e0d7ba584ea45c4ebfa6c7ad75b1ac40a
+    .agents/skills/secrets-levels/reference.md: sha256:9acda08a09b8a3e00497f0e16d97bbbd4939f4976dbfed69710f1fd125c91e41
+    .claude/skills/secrets-levels/.claude-plugin/plugin.json: sha256:7bef435c0056d5a9f29a794301680f6abb99e23a1fa90167356f5a44cf664b0e
+    .claude/skills/secrets-levels/CHANGELOG.md: sha256:cc25e28212c841ca93c6f45088fe0f51d4a293e9cc86693e49b973a2cbaaaeed
+    .claude/skills/secrets-levels/README.md: sha256:ab3d89e2699bd240260500b300030135cd85e3e722a0ccf9383d04078ab5ba01
+    .claude/skills/secrets-levels/SKILL.md: sha256:df64af606692f94e544adacd5e8d7136c184d0ff74eaee5c766354b73be43dc2
+    .claude/skills/secrets-levels/apm.yml: sha256:6b3ea0554ee42009ef0201ef6aef41cf5bb6f3016b6bb9fe1e5f25303aeea264
+    .claude/skills/secrets-levels/evals/evals.json: sha256:90c5c0c3fc48068d0da20a2416f3620e0d7ba584ea45c4ebfa6c7ad75b1ac40a
+    .claude/skills/secrets-levels/reference.md: sha256:9acda08a09b8a3e00497f0e16d97bbbd4939f4976dbfed69710f1fd125c91e41
+  content_hash: sha256:ca9ef24901a49103d9daae7ba3e9572c988351d724bd7f2a77f832d912e34806
+  declared_license: MIT
+deployments:
+- kind: project-relative
+  target: claude
+  value: .claude/hooks/guard-secrets/scripts/guard_secrets.py
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+- kind: project-relative
+  target: claude
+  value: .claude/rules/baseline.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
+  active_owner: forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
+  content_hash: sha256:c6644318fe8544b9ad009e3e8a6626310666906270ca42ae3f1b621657e67801
+- kind: project-relative
+  target: claude
+  value: .claude/rules/forgejo-ci.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
+  active_owner: forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
+  content_hash: sha256:18ac65e57d86f5d0c46da55d53582fbfb94ba74d87605e7394a39858fdac3011
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/.claude-plugin/plugin.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:30f2e5624e5a8f035b15580988b106c13252d04f548cbec2ae4de55665ad0675
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/CHANGELOG.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/README.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:bc76648fe95c05ae34a945c15a50e91c28d329720ea4c28bcb08d6e16080c84a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/apm.yml
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f5b914679d494be6289f4ecdccde036d95b37460bb1cf80a0d6fb50d165d0d05
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/evals/evals.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/hooks/hooks.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/scripts/guard_secrets.py
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+- kind: project-relative
+  target: claude
+  value: .claude/skills/guard-secrets/test.sh
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:a9f8ce58bbb82a59442950e161367fd03b360fd54d37c2bdf5d9c4376aa876d4
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/.claude-plugin/plugin.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:7bef435c0056d5a9f29a794301680f6abb99e23a1fa90167356f5a44cf664b0e
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/CHANGELOG.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:cc25e28212c841ca93c6f45088fe0f51d4a293e9cc86693e49b973a2cbaaaeed
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/README.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:ab3d89e2699bd240260500b300030135cd85e3e722a0ccf9383d04078ab5ba01
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:df64af606692f94e544adacd5e8d7136c184d0ff74eaee5c766354b73be43dc2
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/apm.yml
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:6b3ea0554ee42009ef0201ef6aef41cf5bb6f3016b6bb9fe1e5f25303aeea264
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/evals/evals.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:90c5c0c3fc48068d0da20a2416f3620e0d7ba584ea45c4ebfa6c7ad75b1ac40a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/secrets-levels/reference.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:9acda08a09b8a3e00497f0e16d97bbbd4939f4976dbfed69710f1fd125c91e41
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: null
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/.claude-plugin/plugin.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:30f2e5624e5a8f035b15580988b106c13252d04f548cbec2ae4de55665ad0675
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/CHANGELOG.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/README.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:bc76648fe95c05ae34a945c15a50e91c28d329720ea4c28bcb08d6e16080c84a
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/apm.yml
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f5b914679d494be6289f4ecdccde036d95b37460bb1cf80a0d6fb50d165d0d05
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/evals/evals.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/hooks/hooks.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/scripts/guard_secrets.py
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+- kind: project-relative
+  target: codex
+  value: .agents/skills/guard-secrets/test.sh
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:a9f8ce58bbb82a59442950e161367fd03b360fd54d37c2bdf5d9c4376aa876d4
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: null
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/.claude-plugin/plugin.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:7bef435c0056d5a9f29a794301680f6abb99e23a1fa90167356f5a44cf664b0e
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/CHANGELOG.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:cc25e28212c841ca93c6f45088fe0f51d4a293e9cc86693e49b973a2cbaaaeed
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/README.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:ab3d89e2699bd240260500b300030135cd85e3e722a0ccf9383d04078ab5ba01
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:df64af606692f94e544adacd5e8d7136c184d0ff74eaee5c766354b73be43dc2
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/apm.yml
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:6b3ea0554ee42009ef0201ef6aef41cf5bb6f3016b6bb9fe1e5f25303aeea264
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/evals/evals.json
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:90c5c0c3fc48068d0da20a2416f3620e0d7ba584ea45c4ebfa6c7ad75b1ac40a
+- kind: project-relative
+  target: codex
+  value: .agents/skills/secrets-levels/reference.md
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/secrets-levels
+  content_hash: sha256:9acda08a09b8a3e00497f0e16d97bbbd4939f4976dbfed69710f1fd125c91e41
+- kind: project-relative
+  target: codex
+  value: .codex/hooks/guard-secrets/scripts/guard_secrets.py
+  runtime: null
+  scope: project
+  owners:
+  - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
+  content_hash: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
