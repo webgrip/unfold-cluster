@@ -206,3 +206,12 @@ run "the_tailnet_key_is_not_read_without_an_admin_address" {
     data.external.control_plane_tailnet_key,
   ]
 }
+
+run "the_pod_security_defaults_leave_the_talos_exemptions_alone" {
+  command = plan
+
+  assert {
+    condition     = !strcontains(local.pod_security_patch, "exemptions")
+    error_message = "Talos already exempts kube-system; a patch that names it again lists it twice, and the API server refuses the PodSecurity config"
+  }
+}
