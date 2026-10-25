@@ -10,3 +10,4 @@ resources:
   - ../../platform/admission-policies
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
+  - ../../platform/human-access

@@ -59,6 +59,8 @@ locals {
     local.pod_security_patch,
     local.etcd_backup_access_patch,
     local.kube_proxy_disabled_patch,
+    local.kube_authentication_patch,
+    local.kube_audit_policy_patch,
   ]
 
   kube_proxy_disabled_patch = yamlencode({
