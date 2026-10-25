@@ -19,6 +19,7 @@ resources:
   - ../../platform/kube-proxy-removal
   - ../../platform/human-access
   - ../../platform/keda
+  - ../../platform/cluster-autoscaler
   - ../../platform/ci-runners
   - ../../platform/zot
   - ../../platform/gvisor

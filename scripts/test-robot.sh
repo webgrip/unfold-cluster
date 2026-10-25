@@ -62,6 +62,9 @@ echo "${method} ${path} ${fields[*]}" >>"${STUB_DIR}/calls"
 case "${method} ${path}" in
   "GET /server")
     if [ "$(jq length "${state}/servers.json")" = 0 ]; then reply 404 '{"error":{"code":"SERVER_NOT_FOUND"}}'; else reply 200 "$(jq -c '[.[] | {server: .}]' "${state}/servers.json")"; fi ;;
+  "GET /server/"*)
+    server="$(jq -c --argjson n "${path#/server/}" '.[] | select(.server_number == $n)' "${state}/servers.json")"
+    if [ -n "$server" ]; then reply 200 "{\"server\":${server}}"; else reply 404 '{"error":{"code":"SERVER_NOT_FOUND"}}'; fi ;;
   "POST /server/"*)
     number="${path#/server/}"
     jq --argjson n "$number" --arg name "$(field server_name)" 'map(if .server_number == $n then .server_name = $name else . end)' "${state}/servers.json" >"${state}/s.tmp" && mv "${state}/s.tmp" "${state}/servers.json"
@@ -84,6 +87,26 @@ case "${method} ${path}" in
       id="B20261025-$(wc -l <"${STUB_DIR}/orders")"
       jq --arg id "$id" --arg p "$(field product_id)" '. + [{id: $id, status: "ready", server_number: 2345678, product: {id: $p}}]' "${state}/transactions.json" >"${state}/t.tmp" && mv "${state}/t.tmp" "${state}/transactions.json"
       jq '. + [{server_number: 2345678, server_name: "", server_ip: "198.51.100.40", server_ipv6_net: "2a01:4f8::", product: "AX41-NVMe", status: "ready", cancelled: false}]' "${state}/servers.json" >"${state}/s.tmp" && mv "${state}/s.tmp" "${state}/servers.json"
+      reply 201 "{\"transaction\":{\"id\":\"${id}\",\"status\":\"in process\",\"server_number\":null}}"
+    fi ;;
+  "GET /order/server_market/product")
+    if [ "$(jq length "${state}/market.json")" = 0 ]; then reply 404 '{"error":{"code":"NOT_FOUND"}}'; else reply 200 "$(jq -c '[.[] | {product: .}]' "${state}/market.json")"; fi ;;
+  "GET /order/server_market/product/"*)
+    product="$(jq -c --argjson id "${path##*/}" '.[] | select(.id == $id)' "${state}/market.json")"
+    if [ -n "$product" ]; then reply 200 "{\"product\":${product}}"; else reply 404 '{"error":{"code":"NOT_FOUND"}}'; fi ;;
+  "GET /order/server_market/transaction")
+    if [ "$(jq length "${state}/market-transactions.json")" = 0 ]; then reply 404 '{"error":{"code":"NOT_FOUND"}}'; else reply 200 "$(jq -c '[.[] | {transaction: .}]' "${state}/market-transactions.json")"; fi ;;
+  "GET /order/server_market/transaction/"*)
+    reply 200 "{\"transaction\":$(jq -c --arg id "${path##*/}" '.[] | select(.id == $id)' "${state}/market-transactions.json")}" ;;
+  "POST /order/server_market/transaction")
+    if [ "$(field test)" = "true" ]; then
+      echo "test-market-order $(field product_id)" >>"${STUB_DIR}/orders"
+      reply 201 '{"transaction":{"id":"TEST","status":"in process","server_number":null}}'
+    else
+      echo "real-market-order $(field product_id)" >>"${STUB_DIR}/orders"
+      id="B20261026-$(wc -l <"${STUB_DIR}/orders")"
+      jq --arg id "$id" --argjson p "$(field product_id)" '. + [{id: $id, status: "ready", server_number: 2345690, product: {id: $p}}]' "${state}/market-transactions.json" >"${state}/t.tmp" && mv "${state}/t.tmp" "${state}/market-transactions.json"
+      jq '. + [{server_number: 2345690, server_name: "", server_ip: "198.51.100.50", server_ipv6_net: "", product: "Server Auction", dc: "FSN1-DC14", status: "ready", cancelled: false}]' "${state}/servers.json" >"${state}/s.tmp" && mv "${state}/s.tmp" "${state}/servers.json"
       reply 201 "{\"transaction\":{\"id\":\"${id}\",\"status\":\"in process\",\"server_number\":null}}"
     fi ;;
   "GET /key/"*)
@@ -180,6 +203,28 @@ jq -nc --arg layer "sha256:$(sha256sum "${work}/disk.raw.zst" | cut -d' ' -f1)" 
 printf 'sha256:%s' "$(sha256sum "${work}/disk.manifest.json" | cut -d' ' -f1)" >"${work}/disk.manifest.digest"
 failures=0
 
+market_offer() {
+  jq -nc --argjson id "$1" --arg cpu "$2" --argjson memory "$3" --arg dc "$4" --arg price "$5" --arg setup "${6:-0.0000}" --arg disks "${7:-2x SSD M.2 NVMe 512 GB}" '{
+    id: $id, name: "Server Auction", description: [$cpu, ($memory | tostring) + " GB RAM", $disks], cpu: $cpu, cpu_benchmark: 13000,
+    memory_size: $memory, hdd_size: 512, hdd_text: (if ($disks | test("NVMe")) then "NVMe" else "ENT.HDD" end), hdd_count: 2, datacenter: $dc, network_speed: "1 Gbit/s",
+    price: $price, price_setup: $setup, fixed_price: false,
+    orderable_addons: [{id: "primary_ipv4", name: "Primary IPv4", min: 0, max: 1, prices: [{location: ($dc | split("-")[0]), price: {net: "1.7000", gross: "2.0230"}, price_setup: {net: "0.0000", gross: "0.0000"}}]}]
+  }'
+}
+
+market_offers() {
+  {
+    market_offer 3097578 "Intel Core i7-8700" 64 FSN1-DC14 80.0000
+    market_offer 3097654 "Intel Core i7-8700" 64 HEL1-DC2 80.0000
+    market_offer 3100001 "Intel Core i5-12500" 64 FSN1-DC1 99.0000
+    market_offer 3100002 "Intel Xeon E3-1275V6" 64 FSN1-DC8 40.0000
+    market_offer 3100003 "AMD Ryzen 7 3700X" 32 FSN1-DC8 45.0000
+    market_offer 3100004 "AMD Ryzen 7 3700X" 64 NBG1-DC3 70.0000 0.0000 "2x HDD SATA 2,0 TB Enterprise"
+    market_offer 3100005 "AMD Ryzen 7 3700X" 64 FSN1-DC8 60.0000 39.0000
+    market_offer 3100006 "Intel Core i9-9900K" 128 SIN1-DC1 50.0000
+  } | jq -s .
+}
+
 reset_state() {
   rm -rf "${work}/state" "${work}"/kv_* "${work}/calls" "${work}/orders" "${work}/resets" "${work}/firewall-form"
   mkdir -p "${work}/state"
@@ -187,6 +232,8 @@ reset_state() {
   echo '[]' >"${work}/state/transactions.json"
   echo '[]' >"${work}/state/vswitches.json"
   echo '[]' >"${work}/state/vswitch-servers.json"
+  echo '[]' >"${work}/state/market-transactions.json"
+  market_offers >"${work}/state/market.json"
   echo none >"${work}/talos-state"
   touch "${work}/calls" "${work}/orders" "${work}/resets"
   jq -n '[{
@@ -198,7 +245,7 @@ reset_state() {
 }
 
 add_server() {
-  jq --argjson n "$1" --arg name "$2" '. + [{server_number: $n, server_name: $name, server_ip: "198.51.100.41", server_ipv6_net: "", product: "AX41-NVMe", status: "ready", cancelled: false}]' \
+  jq --argjson n "$1" --arg name "$2" --arg product "${3:-AX41-NVMe}" --arg dc "${4:-FSN1-DC14}" '. + [{server_number: $n, server_name: $name, server_ip: "198.51.100.41", server_ipv6_net: "", product: $product, dc: $dc, status: "ready", cancelled: false}]' \
     "${work}/state/servers.json" >"${work}/state/s.tmp" && mv "${work}/state/s.tmp" "${work}/state/servers.json"
 }
 
@@ -218,7 +265,7 @@ quote() {
 }
 
 order() {
-  NAME=unfold-metal-1 PRODUCT="${PRODUCT:-AX41-NVMe}" LOCATION=FSN1 MAX_MONTHLY_EUR="${MAX_MONTHLY_EUR:-65}" MAX_SETUP_EUR=0 \
+  NAME=unfold-metal-1 PRODUCT="${PRODUCT:-AX41-NVMe}" LOCATION=FSN1 CPU_VENDOR=amd MAX_MONTHLY_EUR="${MAX_MONTHLY_EUR:-65}" MAX_SETUP_EUR=0 \
     SERVER_LIMIT="${SERVER_LIMIT:-1}" METAL_NAME_PREFIX=unfold-metal- RECORD_PATH=unfold-cluster/metal/unfold-metal-1 \
     "$tool" order >"${work}/out" 2>&1
 }
@@ -348,6 +395,79 @@ cp "${work}/disk.raw.zst" "${work}/disk.keep"
 head -c 4096 /dev/urandom >"${work}/disk.raw.zst"
 expect "a blob that does not match the manifest's layer is refused before the reset" bash -c '! "$1" && [ ! -s "$2/resets" ]' _ install "$work"
 cp "${work}/disk.keep" "${work}/disk.raw.zst"
+
+adopt() {
+  NAME=unfold-metal-1 SERVER_NUMBER="${1:-2345680}" PRODUCT=AX41 LOCATION=FSN1 CPU_VENDOR=intel RECORD_PATH=unfold-cluster/metal/unfold-metal-1 \
+    "$tool" adopt >"${work}/out" 2>&1
+}
+export -f adopt
+
+reset_state
+add_server 2345680 "" AX41-NVMe FSN1-DC14
+expect "a hand-ordered AX41 in FSN1 is adopted" adopt
+expect "the adopted server is named and recorded" test "$(jq -r '.[0].server_name' "${work}/state/servers.json")/$(recorded server_number)" = "unfold-metal-1/2345680"
+expect "adopting never calls the order API" bash -c '! grep -q " /order/" "$1/calls" && [ ! -s "$1/orders" ]' _ "$work"
+expect "the plan reads the adopted server by its number" test "$(jq -nc '{name: "unfold-metal-1", server_number: "2345680", product: "AX41", location: "FSN1", cpu_vendor: "intel"}' | "$tool" server 2>/dev/null | jq -r .server_ip)" = "198.51.100.41"
+
+reset_state
+add_server 2345681 "" AX42-1 FSN1-DC14
+expect "another product is refused" bash -c '! "$1" 2345681 && grep -q "not AX41" "$2/out" && ! grep -q "^POST /server/" "$2/calls"' _ adopt "$work"
+expect "the plan refuses another product too" bash -c '! jq -nc "{name: \"unfold-metal-1\", server_number: \"2345681\", product: \"AX41\", location: \"FSN1\"}" | "$1" server >/dev/null 2>&1' _ "$tool"
+
+reset_state
+add_server 2345682 "" AX41-NVMe NBG1-DC3
+expect "another location is refused" bash -c '! "$1" 2345682 && grep -q "not FSN1" "$2/out"' _ adopt "$work"
+
+reset_state
+expect "a server number not on this account is refused" bash -c '! "$1" 9999999 && grep -q "no server 9999999 on this account" "$2/out"' _ adopt "$work"
+
+reset_state
+jq '. + [{server_number: 2345683, server_name: "", server_ip: "198.51.100.42", product: "AX41-NVMe", dc: "FSN1-DC1", status: "ready", cancelled: true}]' "${work}/state/servers.json" >"${work}/s" && mv "${work}/s" "${work}/state/servers.json"
+expect "a cancelled server is refused" bash -c '! "$1" 2345683' _ adopt "$work"
+expect "no refused adoption reached the order API" bash -c '! grep -q " /order/" "$1/calls"' _ "$work"
+
+criteria_json="$(jq -nc '{cpu_cores: {"Intel Core i7-8700": 6, "Intel Core i5-12500": 6, "Intel Core i9-9900K": 8, "AMD Ryzen 7 3700X": 8}, min_cores: 6, min_memory_gb: 64, disk_type: "NVMe", datacenters: ["FSN1", "NBG1", "HEL1"], max_monthly_eur: 85, max_setup_eur: 0}')"
+export criteria_json
+pick() {
+  jq -nc --arg c "$criteria_json" '{name: "unfold-metal-1", record_path: "unfold-cluster/metal/unfold-metal-1", criteria: $c}' | "$tool" auction-pick 2>"${work}/err"
+}
+auction() {
+  NAME=unfold-metal-1 PRODUCT="$1" CRITERIA="$criteria_json" ORDER_CATALOGUE=server_market SERVER_LIMIT="${SERVER_LIMIT:-1}" \
+    METAL_NAME_PREFIX=unfold-metal- RECORD_PATH=unfold-cluster/metal/unfold-metal-1 "$tool" order >"${work}/out" 2>&1
+}
+export -f pick auction
+
+reset_state
+expect "the plan picks the cheapest allowed offer and shows what it is" test "$(pick | jq -r '[.state, .product_id, .cpu, .cpu_vendor, .memory_gb, .datacenter, .monthly_net_eur, .setup_net_eur] | join("|")')" = "to-order|3097578|Intel Core i7-8700|intel|64|FSN1-DC14|81.7|0"
+expect "a pick reads the market and orders nothing" bash -c '[ ! -s "$1/orders" ] && ! grep -q "^POST /order" "$1/calls"' _ "$work"
+jq '[.[] | select(.id != 3097578 and .id != 3097654)]' "${work}/state/market.json" >"${work}/m" && mv "${work}/m" "${work}/state/market.json"
+expect "with the i7 offers gone the AMD offer with 64 GB, NVMe and no setup fee is not taken when its disks are HDD" test "$(pick | jq -r .state)" = "unavailable"
+expect "an empty match is reported, not failed" grep -q "no server on the market matches" "${work}/err"
+
+reset_state
+expect "the picked offer is ordered: test order first, then that exact id" bash -c '"$1" 3097578 && [ "$(cat "$2/orders" | tr "\n" ",")" = "test-market-order 3097578,real-market-order 3097578," ]' _ auction "$work"
+expect "the order records the vendor of the bought CPU" test "$(recorded cpu_vendor)/$(recorded server_number)" = "intel/2345690"
+expect "the bought server is named" test "$(jq -r '.[] | select(.server_number == 2345690) | .server_name' "${work}/state/servers.json")" = "unfold-metal-1"
+expect "a second apply orders nothing" bash -c '"$1" 3097654 && [ "$(grep -c "^real-market-order" "$2/orders")" = 1 ]' _ auction "$work"
+expect "after the order the plan reports the server, not a new pick" test "$(pick | jq -r '[.state, .server_number] | join(" ")')" = "ordered 2345690"
+
+reset_state
+jq '[.[] | select(.id != 3097578)]' "${work}/state/market.json" >"${work}/m" && mv "${work}/m" "${work}/state/market.json"
+expect "an offer sold since the plan is not ordered" bash -c '! "$1" 3097578 && grep -q "is gone" "$2/out" && [ ! -s "$2/orders" ]' _ auction "$work"
+expect "an offer above the ceiling is refused" bash -c '! "$1" 3100001 && grep -q "no longer meets the criteria" "$2/out" && [ ! -s "$2/orders" ]' _ auction "$work"
+expect "a CPU outside the allowlist is refused even when cheaper" bash -c '! "$1" 3100002 && [ ! -s "$2/orders" ]' _ auction "$work"
+expect "too little memory is refused" bash -c '! "$1" 3100003 && [ ! -s "$2/orders" ]' _ auction "$work"
+expect "a setup fee is refused" bash -c '! "$1" 3100005 && [ ! -s "$2/orders" ]' _ auction "$work"
+expect "a datacenter outside eu-central is refused" bash -c '! "$1" 3100006 && [ ! -s "$2/orders" ]' _ auction "$work"
+
+reset_state
+add_server 1111111 unfold-metal-2
+expect "an auction order past the declared count is refused" bash -c '! "$1" 3097578 && [ ! -s "$2/orders" ]' _ auction "$work"
+
+reset_state
+jq '. + [{id: "B9", status: "in process", server_number: null, product: {id: 3097578}}]' "${work}/state/market-transactions.json" >"${work}/t" && mv "${work}/t" "${work}/state/market-transactions.json"
+ORDER_WAIT_SECONDS=0 auction 3097578 || true
+expect "an unrecorded market order in process is adopted, not doubled" test "$(grep -c "market-order" "${work}/orders")/$(recorded transaction_id)" = "0/B9"
 
 reset_state
 expect "without credentials nothing is called" bash -c '! printf "{}" | env -u ROBOT_PASSWORD "$1" quote >/dev/null 2>&1 && [ ! -s "$2/calls" ]' _ "$tool" "$work"

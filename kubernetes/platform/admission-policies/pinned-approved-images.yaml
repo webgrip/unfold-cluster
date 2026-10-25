@@ -34,7 +34,8 @@ spec:
         'docker.io/victoriametrics/vmagent:',
         'docker.io/timberio/vector:',
         'quay.io/prometheus/node-exporter:',
-        'registry.k8s.io/kube-state-metrics/kube-state-metrics:']
+        'registry.k8s.io/kube-state-metrics/kube-state-metrics:',
+        'registry.k8s.io/autoscaling/cluster-autoscaler:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)

@@ -1,17 +1,21 @@
-# CI runners: Forgejo jobs on the CI pool
+# CI runners: Forgejo jobs on the hub worker, with overflow on an autoscaled node
 
-A job with `runs-on: unfold-ci` in any repository of the `webgrip` organisation runs on this cluster's
-CI node (`unfold-ci-1`, CX43, 8 vCPU, 16 GB), inside gVisor, and builds container images with a
-rootless BuildKit that lives and dies with the job. RFC 0001 calls CI jobs untrusted: they run
-Renovate updates, agent pull requests and anyone's branch. Everything below follows from that.
+A job with `runs-on: unfold-ci` in any repository of the `webgrip` organisation runs on this cluster
+inside gVisor and builds container images with a rootless BuildKit that lives and dies with the job.
+Up to two jobs at a time run on the hub worker `unfold-app-1` (CX33), which always exists, so a job
+never waits for a cold node. A third concurrent job is Pending until the cluster-autoscaler adds a
+CPX42 to the `ci` pool, and that node goes away about ten minutes after its last job
+([ADR 0004](../adr/0004-ci-baseline-on-the-hub-and-autoscaled-overflow.md),
+[ci-autoscaler](ci-autoscaler.md)). RFC 0001 calls CI jobs untrusted: they run Renovate updates,
+agent pull requests and anyone's branch. Everything below follows from that.
 
 ## The pieces
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| KEDA | namespace `keda`, Flux Kustomization `keda` | Every 15 s reads `GET http://unfold-gateway.webgrip.dev:9150/waiting-jobs/unfold-ci` (a `metrics-api` trigger, value `waiting`) and starts one Job per waiting CI job. Nothing runs when nothing waits. |
-| ScaledJob `forgejo-runner` | namespace `ci`, Flux Kustomization `ci-runners` | At most 3 job pods at once, RuntimeClass `gvisor`, which places them on a node labelled `runtime.webgrip.io/gvisor=true` and tolerates the `ci` and `metal` taints: the metal node, where gVisor runs on KVM and is preferred, and a cloud CI node when one exists, on systrap ([ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md)). |
-| Job pod | CI node | `register` (init): registers an ephemeral runner. `buildctl` (init): copies the BuildKit client. `buildkitd` (sidecar): rootless BuildKit. `runner`: `forgejo-runner one-job`, steps run here. |
+| KEDA | namespace `keda`, Flux Kustomization `keda`, on the control planes | Every 15 s reads `GET http://unfold-gateway.webgrip.dev:9150/waiting-jobs/unfold-ci` (a `metrics-api` trigger, value `waiting`) and starts one Job per waiting CI job. Nothing runs when nothing waits. |
+| ScaledJob `forgejo-runner` | namespace `ci`, Flux Kustomization `ci-runners` | At most 6 job pods at once, RuntimeClass `gvisor`, which places them on a node labelled `runtime.webgrip.io/gvisor=true`. The pods also tolerate the `unfold` pool taint and prefer the hub worker (weight 100) over a `ci` node (weight 50). Their requests (1.55 CPU and 3 GiB with gVisor's overhead) let two fit beside the hub's own pods and not a third. PriorityClass `ci-runner` (-5, never preempts) lets any Unfold pod at the default priority preempt a runner on the hub, and `cluster-autoscaler.kubernetes.io/safe-to-evict: "false"` keeps the autoscaler from moving a running job. |
+| Job pod | `unfold-app-1`, or an autoscaled `ci-<hex>` node | `register` (init): registers an ephemeral runner. `buildctl` (init): copies the BuildKit client. `buildkitd` (sidecar): rootless BuildKit. `runner`: `forgejo-runner one-job`, steps run here. |
 | Runner registration token | OpenBao `secret/unfold-main/ci/forgejo-runner`, key `registration-token` | Minted by the homelab's `unfold-ci-runner-provisioner` CronJob. Delivered as Secret `ci/forgejo-runner-registration`, mounted into the `register` init container only. |
 | Job count | homelab `forgejo/forgejo-runner-queue`, behind the homelab gateway's tailnet port 9150 | Answers `{"label":"unfold-ci","waiting":N}`: the `webgrip` jobs in status `waiting` whose `runs-on` is `unfold-ci`. It reads Forgejo with the homelab KEDA scaler's existing token, which never leaves the homelab. Any other label is a 404, any other method a 501, and an unreadable queue a 502, never a zero. |
 
@@ -136,21 +140,9 @@ there. Any other request under those prefixes meets Anubis.
 
 ## Proving it end to end
 
-After the Zot (#52), CI node (#50), External Secrets (#58) and CI runner pull requests are merged, and the homelab
-link to OpenBao is up:
-
-1. `kubectl --kubeconfig ~/.kube/unfold.yaml -n ci get externalsecret` shows
-   `forgejo-runner-registration` `SecretSynced`.
-2. `kubectl --kubeconfig ~/.kube/unfold.yaml get scaledjob -n ci forgejo-runner` shows `READY True`
-   and `ACTIVE False`.
-3. In Forgejo, open `webgrip/unfold-cluster`, Actions, `ci-smoke`, Run workflow on `main`.
-4. Within about 30 s, `kubectl --kubeconfig ~/.kube/unfold.yaml -n ci get pods -o wide` shows one
-   pod on `unfold-ci-1`; its `register` log says the runner registered, and the pod turns `Ready`
-   once the job starts.
-5. The run is green. Its log shows gVisor in `dmesg` or `/proc/version`, the BuildKit worker and its
-   snapshotter, `CACHED` steps in the rebuild, and the commit's tag in Zot.
-6. Afterwards the pod is `Completed`, the runner list of `webgrip` (Settings, Actions, Runners) no
-   longer shows `unfold-ci-<pod>`, and `ACTIVE` is back to `False`.
+The baseline and the overflow each have their own proof, in [ci-autoscaler](ci-autoscaler.md#proving-it-after-the-apply):
+one `ci-smoke` run lands on `unfold-app-1` with no new server, and three at once make the third
+land on a new `ci-<hex>` node under gVisor, which is gone again about ten minutes later.
 
 ## When it does not start
 
@@ -161,4 +153,5 @@ link to OpenBao is up:
 | Push answers 401 | `kubectl -n ci get secret zot-push-credentials`; if missing, the Zot Job's log says `skipped ci` until the RoleBinding exists and `ci` is in its `CONSUMER_NAMESPACES`. |
 | `register` fails | Its log. A refused token means the org's registration token was reset; the next provisioner run publishes the new one within 30 minutes, ESO within the hour. |
 | `buildkitd` never ready | Its log; see the gVisor notes above. |
+| Third job Pending, no new node | [ci-autoscaler](ci-autoscaler.md#when-no-node-comes): the autoscaler's log names why the `ci` group did not grow. |
 | Pods pile up waiting | Each waits at most 90 minutes (`activeDeadlineSeconds`), and KEDA starts a new one only for a job no pod is serving yet (`accurate`, with pods counted as pending until a job's workspace exists). |

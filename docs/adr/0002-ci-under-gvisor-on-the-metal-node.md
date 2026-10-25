@@ -39,3 +39,8 @@ can take CI as well as agent Runs. The admission policy `sandboxed-workloads` al
 * Rootless BuildKit under gVisor with `oci-seccomp` is proven only by `ci-smoke`. If a build needs a
   syscall the RuntimeDefault profile blocks, `gvisor_oci_seccomp = false` is the rollback.
 * RFC 0001's option B, a CI cell of its own, stays the next step.
+
+## History
+
+* 2026-10-25: ADR 0004 moves the baseline of CI to the hub worker and its overflow to an autoscaled
+  CPX42, and moves KEDA to the control planes. The runner ScaledJob no longer prefers KVM nodes.

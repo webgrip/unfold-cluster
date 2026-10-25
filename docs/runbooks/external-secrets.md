@@ -36,7 +36,9 @@ switched off.
 
 The homelab OpenBao is reachable only on the homelab LAN. The homelab gateway joins this cluster's
 tailnet as `tag:homelab-gateway` and forwards its port 8200 to that OpenBao; the Headscale policy lets
-only the nodes (`tag:cp`, `tag:node`) and the admins open it. The store's server is
+only the control planes (`tag:cp`), where the chart pins every External Secrets pod, and the admins
+open it; the workers, which run untrusted CI jobs and Runs, cannot
+([node roles](infra-workflow.md#node-roles-on-the-tailnet)). The store's server is
 `http://unfold-gateway.webgrip.dev:8200`, a DNS-only record that the homelab publishes with the
 gateway's tailnet address. The CiliumNetworkPolicy `external-secrets-openbao-homelab` lets the ESO
 controller resolve that one name and open port 8200 on the address it resolves to, nothing else.

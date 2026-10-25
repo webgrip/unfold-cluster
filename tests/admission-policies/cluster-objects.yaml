@@ -60,3 +60,15 @@ kind: RuntimeClass
 metadata:
   name: kata
 handler: kata
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cluster-autoscaler
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ci-runner
+value: -5
+preemptionPolicy: Never
