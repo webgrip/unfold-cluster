@@ -1,10 +1,4 @@
 locals {
-  # renovate: datasource=docker depName=quay.io/cilium/charts/cilium
-  cilium_chart_version = "1.20.4"
-  # renovate: datasource=helm depName=hcloud-cloud-controller-manager registryUrl=https://charts.hetzner.cloud
-  hcloud_ccm_chart_version = "1.39.0"
-  # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-cloud-controller-manager
-  hcloud_ccm_image_tag = "v1.39.0@sha256:d6fee56987598cddb01121ebc1566e6513048cf6c66cba29d5d7a3025f3c2085"
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator
   flux_operator_chart_version = "0.61.0"
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/flux-operator
@@ -15,93 +9,47 @@ locals {
   flux_manifests_tag = "v0.61.0@sha256:a94070768dc353efb3aaf7a28ae2d57566e8d20d8dc5287aacb6c10e169b7137"
   # renovate: datasource=github-releases depName=fluxcd/flux2 extractVersion=^v(?<version>.+)$
   flux_version = "2.9.6"
+
+  flux_platform_dir = "${path.module}/../kubernetes/platform"
+
+  cilium_release    = yamldecode(file("${local.flux_platform_dir}/cilium/helmrelease.yaml"))
+  cilium_chart_ref  = yamldecode(file("${local.flux_platform_dir}/cilium/ocirepository.yaml")).spec
+  cilium_chart_url  = regex("^(?P<repository>.+)/(?P<chart>[^/]+)$", local.cilium_chart_ref.url)
+  cilium_values     = file("${local.flux_platform_dir}/cilium/values.yaml")
+  cilium_values_map = yamldecode(local.cilium_values)
+
+  hcloud_ccm_release   = yamldecode(file("${local.flux_platform_dir}/hcloud-cloud-controller-manager/helmrelease.yaml"))
+  hcloud_ccm_chart     = local.hcloud_ccm_release.spec.chart.spec
+  hcloud_ccm_values    = file("${local.flux_platform_dir}/hcloud-cloud-controller-manager/values.yaml")
+  hetzner_chart_repo   = yamldecode(file("${local.flux_platform_dir}/hetzner-charts/helmrepository.yaml")).spec.url
+  flux_owned_namespace = "kube-system"
 }
 
 data "helm_template" "cilium" {
-  name         = "cilium"
-  namespace    = "kube-system"
-  repository   = "oci://quay.io/cilium/charts"
-  chart        = "cilium"
-  version      = local.cilium_chart_version
+  name         = local.cilium_release.spec.releaseName
+  namespace    = local.flux_owned_namespace
+  repository   = local.cilium_chart_url.repository
+  chart        = local.cilium_chart_url.chart
+  version      = local.cilium_chart_ref.ref.tag
   kube_version = local.kubernetes_version
+  values       = [local.cilium_values]
 
-  values = [yamlencode({
-    cluster = {
-      name = local.cluster_name
-      id   = local.cilium_cluster_id
+  lifecycle {
+    precondition {
+      condition     = local.cilium_values_map.cluster.name == local.cluster_name && local.cilium_values_map.cluster.id == local.cilium_cluster_id
+      error_message = "kubernetes/platform/cilium/values.yaml must name cluster ${local.cluster_name} with ID ${local.cilium_cluster_id}, the identity the address plan allocates for ClusterMesh"
     }
-    ipam = {
-      mode = "kubernetes"
-    }
-    kubeProxyReplacement = true
-    k8sServiceHost       = "localhost"
-    k8sServicePort       = 7445
-    routingMode          = "tunnel"
-    tunnelProtocol       = "vxlan"
-    MTU                  = 1400
-    cgroup = {
-      autoMount = {
-        enabled = false
-      }
-      hostRoot = "/sys/fs/cgroup"
-    }
-    securityContext = {
-      capabilities = {
-        ciliumAgent      = ["CHOWN", "KILL", "NET_ADMIN", "NET_RAW", "IPC_LOCK", "SYS_ADMIN", "SYS_RESOURCE", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
-        cleanCiliumState = ["NET_ADMIN", "SYS_ADMIN", "SYS_RESOURCE"]
-      }
-    }
-    operator = {
-      replicas = 1
-    }
-    encryption = {
-      enabled        = true
-      type           = "wireguard"
-      nodeEncryption = false
-    }
-    hubble = {
-      enabled = true
-      relay = {
-        enabled = true
-      }
-      tls = {
-        auto = {
-          method = "cronJob"
-        }
-      }
-    }
-  })]
+  }
 }
 
 data "helm_template" "hcloud_ccm" {
-  name         = "hcloud-cloud-controller-manager"
-  namespace    = "kube-system"
-  repository   = "https://charts.hetzner.cloud"
-  chart        = "hcloud-cloud-controller-manager"
-  version      = local.hcloud_ccm_chart_version
+  name         = local.hcloud_ccm_release.spec.releaseName
+  namespace    = local.flux_owned_namespace
+  repository   = local.hetzner_chart_repo
+  chart        = local.hcloud_ccm_chart.chart
+  version      = local.hcloud_ccm_chart.version
   kube_version = local.kubernetes_version
-
-  values = [yamlencode({
-    image = {
-      tag = local.hcloud_ccm_image_tag
-    }
-    networking = {
-      enabled = false
-    }
-    env = {
-      HCLOUD_NETWORK = {
-        valueFrom = {
-          secretKeyRef = {
-            name = "hcloud"
-            key  = "network"
-          }
-        }
-      }
-      HCLOUD_NETWORK_ROUTES_ENABLED = {
-        value = "false"
-      }
-    }
-  })]
+  values       = [local.hcloud_ccm_values]
 }
 
 data "helm_template" "flux_operator" {

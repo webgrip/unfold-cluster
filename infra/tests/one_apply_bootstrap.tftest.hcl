@@ -238,3 +238,102 @@ run "the_tailnet_keys_never_show_in_a_plan" {
     error_message = "the Tailscale patch carries a pre-auth key; unmarked, it prints in the public plan log"
   }
 }
+
+run "the_talos_seed_installs_cilium_exactly_as_flux_reconciles_it" {
+  command = plan
+
+  assert {
+    condition     = contains(yamldecode(file("${path.module}/../kubernetes/clusters/main/kustomization.yaml")).resources, "../../platform/cilium")
+    error_message = "Flux must reconcile kubernetes/platform/cilium, or nothing changes Cilium after the first boot"
+  }
+
+  assert {
+    condition     = try(yamldecode(file("${path.module}/../kubernetes/platform/cilium/helmrelease.yaml")).spec.values, null) == null
+    error_message = "the cilium HelmRelease carries inline values the Talos seed never sees; put them in kubernetes/platform/cilium/values.yaml"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(file("${path.module}/../kubernetes/platform/cilium/helmrelease.yaml")).spec.valuesFrom == [{ kind = "ConfigMap", name = "cilium-values", valuesKey = "values.yaml" }],
+      one([for generator in yamldecode(file("${path.module}/../kubernetes/platform/cilium/kustomization.yaml")).configMapGenerator : generator if generator.name == "cilium-values"]).files == ["values.yaml"],
+    ])
+    error_message = "Flux must read the cilium values only from the ConfigMap generated from kubernetes/platform/cilium/values.yaml"
+  }
+
+  assert {
+    condition = alltrue([
+      length(data.helm_template.cilium.values) == 1,
+      yamldecode(data.helm_template.cilium.values[0]) == yamldecode(file("${path.module}/../kubernetes/platform/cilium/values.yaml")),
+      try(length(data.helm_template.cilium.set), 0) == 0,
+    ])
+    error_message = "the Talos seed must render Cilium with kubernetes/platform/cilium/values.yaml and nothing else, the values Flux uses"
+  }
+
+  assert {
+    condition = alltrue([
+      data.helm_template.cilium.name == yamldecode(file("${path.module}/../kubernetes/platform/cilium/helmrelease.yaml")).spec.releaseName,
+      data.helm_template.cilium.namespace == yamldecode(file("${path.module}/../kubernetes/platform/cilium/kustomization.yaml")).namespace,
+      try(yamldecode(file("${path.module}/../kubernetes/platform/cilium/helmrelease.yaml")).spec.targetNamespace, null) == null,
+    ])
+    error_message = "the Talos seed and Flux must install Cilium as the same Helm release in the same namespace, or Flux installs a second Cilium beside the seed's"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(file("${path.module}/../kubernetes/platform/cilium/helmrelease.yaml")).spec.chartRef == { kind = "OCIRepository", name = yamldecode(file("${path.module}/../kubernetes/platform/cilium/ocirepository.yaml")).metadata.name },
+      "${data.helm_template.cilium.repository}/${data.helm_template.cilium.chart}" == yamldecode(file("${path.module}/../kubernetes/platform/cilium/ocirepository.yaml")).spec.url,
+      data.helm_template.cilium.version == yamldecode(file("${path.module}/../kubernetes/platform/cilium/ocirepository.yaml")).spec.ref.tag,
+    ])
+    error_message = "the Talos seed must render the Cilium chart and version the cilium OCIRepository points Flux at"
+  }
+}
+
+run "the_talos_seed_installs_the_cloud_controller_exactly_as_flux_reconciles_it" {
+  command = plan
+
+  assert {
+    condition     = contains(yamldecode(file("${path.module}/../kubernetes/clusters/main/kustomization.yaml")).resources, "../../platform/hcloud-cloud-controller-manager")
+    error_message = "Flux must reconcile kubernetes/platform/hcloud-cloud-controller-manager, or nothing changes the cloud controller after the first boot"
+  }
+
+  assert {
+    condition     = try(yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.values, null) == null
+    error_message = "the cloud controller HelmRelease carries inline values the Talos seed never sees; put them in kubernetes/platform/hcloud-cloud-controller-manager/values.yaml"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.valuesFrom == [{ kind = "ConfigMap", name = "hcloud-cloud-controller-manager-values", valuesKey = "values.yaml" }],
+      one([for generator in yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/kustomization.yaml")).configMapGenerator : generator if generator.name == "hcloud-cloud-controller-manager-values"]).files == ["values.yaml"],
+    ])
+    error_message = "Flux must read the cloud controller values only from the ConfigMap generated from kubernetes/platform/hcloud-cloud-controller-manager/values.yaml"
+  }
+
+  assert {
+    condition = alltrue([
+      length(data.helm_template.hcloud_ccm.values) == 1,
+      yamldecode(data.helm_template.hcloud_ccm.values[0]) == yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/values.yaml")),
+      try(length(data.helm_template.hcloud_ccm.set), 0) == 0,
+    ])
+    error_message = "the Talos seed must render the cloud controller with kubernetes/platform/hcloud-cloud-controller-manager/values.yaml and nothing else, the values Flux uses"
+  }
+
+  assert {
+    condition = alltrue([
+      data.helm_template.hcloud_ccm.name == yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.releaseName,
+      data.helm_template.hcloud_ccm.namespace == yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/kustomization.yaml")).namespace,
+      try(yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.targetNamespace, null) == null,
+    ])
+    error_message = "the Talos seed and Flux must install the cloud controller as the same Helm release in the same namespace, or Flux installs a second one beside the seed's"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.chart.spec.sourceRef == { kind = "HelmRepository", name = yamldecode(file("${path.module}/../kubernetes/platform/hetzner-charts/helmrepository.yaml")).metadata.name },
+      data.helm_template.hcloud_ccm.repository == yamldecode(file("${path.module}/../kubernetes/platform/hetzner-charts/helmrepository.yaml")).spec.url,
+      data.helm_template.hcloud_ccm.chart == yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.chart.spec.chart,
+      data.helm_template.hcloud_ccm.version == yamldecode(file("${path.module}/../kubernetes/platform/hcloud-cloud-controller-manager/helmrelease.yaml")).spec.chart.spec.version,
+    ])
+    error_message = "the Talos seed must render the cloud controller chart and version its HelmRelease points Flux at"
+  }
+}

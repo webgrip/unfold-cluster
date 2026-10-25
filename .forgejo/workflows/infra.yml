@@ -8,6 +8,10 @@ on:
     paths:
       - infra/**
       - .forgejo/workflows/infra.yml
+      - kubernetes/clusters/main/**
+      - kubernetes/platform/cilium/**
+      - kubernetes/platform/hcloud-cloud-controller-manager/**
+      - kubernetes/platform/hetzner-charts/**
   workflow_dispatch:
     inputs:
       apply:
