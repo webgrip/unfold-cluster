@@ -15,3 +15,4 @@ resources:
   - ../../platform/keda
   - ../../platform/ci-runners
   - ../../platform/zot
+  - ../../platform/gvisor

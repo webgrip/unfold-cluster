@@ -26,14 +26,61 @@ variable "control_plane_server_type" {
   }
 }
 
-variable "unfold_worker_server_type" {
-  description = "The worker dedicated to Unfold by label and taint (VIK-2157). Cost-optimized CX33 (4 vCPU, 8 GB), x86 like the Talos snapshot."
-  type        = string
-  default     = "cx33"
+variable "worker_pools" {
+  description = "The fixed worker pools OpenTofu creates, by pool name. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB), whose CI jobs run under the gvisor RuntimeClass. Nodes a cluster-autoscaler adds are not listed here."
+  type = map(object({
+    server_type = string
+    node_count  = number
+    name_prefix = string
+    first_host  = number
+    labels      = map(string)
+    taints      = map(string)
+  }))
+  default = {
+    unfold = {
+      server_type = "cx33"
+      node_count  = 1
+      name_prefix = "unfold-app"
+      first_host  = 21
+      labels      = { "node.webgrip.io/pool" = "unfold" }
+      taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
+    }
+    ci = {
+      server_type = "cx43"
+      node_count  = 1
+      name_prefix = "unfold-ci"
+      first_host  = 31
+      labels      = { "node.webgrip.io/pool" = "ci" }
+      taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
+    }
+  }
 
   validation {
-    condition     = !startswith(lower(var.unfold_worker_server_type), "cax")
+    condition     = alltrue([for pool in values(var.worker_pools) : !startswith(lower(pool.server_type), "cax")])
     error_message = "CAX servers are Arm; the Talos snapshot and the Headscale package are x86 (amd64)."
+  }
+
+  validation {
+    condition     = alltrue([for name, pool in var.worker_pools : lookup(pool.labels, "node.webgrip.io/pool", "") == name])
+    error_message = "Every node carries the label node.webgrip.io/pool with its own pool's name, which is how workloads and the cluster-autoscaler find a pool."
+  }
+
+  validation {
+    condition = alltrue([
+      for pool in values(var.worker_pools) :
+      pool.node_count >= 0 && pool.node_count <= 10 && pool.first_host >= 20 && pool.first_host % 10 == 1 && pool.first_host + 9 <= 254
+    ])
+    error_message = "Each pool owns one block of ten addresses in the cloud subnet starting at x1 (21 to 30, 31 to 40, ...), above the control planes and the API address, and holds at most ten nodes."
+  }
+
+  validation {
+    condition     = length(distinct([for pool in values(var.worker_pools) : pool.first_host])) == length(var.worker_pools)
+    error_message = "Two pools share an address block; give each pool its own first_host."
+  }
+
+  validation {
+    condition     = length(distinct([for pool in values(var.worker_pools) : pool.name_prefix])) == length(var.worker_pools)
+    error_message = "Two pools share a name_prefix, so their nodes would share names."
   }
 }
 
@@ -146,9 +193,14 @@ variable "etcd_backup_age_recipient" {
 }
 
 variable "tailnet_key_generation" {
-  description = "Changing this makes the next apply read fresh tailnet pre-auth keys from unfold-headscale instead of reusing the ones in the state. Bump it after expiring keys that leaked."
+  description = "A date, YYYY-MM-DD. Changing it gives every node a fresh tailnet pre-auth key on the next apply: the control planes the current tag:cp key, each worker a new single-use key minted for this generation, never the one stored for an earlier generation, which has expired after 24 hours. Bump it after expiring keys that leaked, or when a worker could not join because its key expired before the node first booted."
   type        = string
   default     = "2026-10-25"
+
+  validation {
+    condition     = can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.tailnet_key_generation))
+    error_message = "tailnet_key_generation is a date, YYYY-MM-DD; its eight digits name the worker key slot on unfold-headscale."
+  }
 }
 
 variable "host_firewall_enabled" {

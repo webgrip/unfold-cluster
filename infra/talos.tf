@@ -99,16 +99,14 @@ locals {
     }
   })
 
-  unfold_worker_patch = yamlencode({
-    apiVersion = "v1alpha1"
-    kind       = "KubeNodeConfig"
-    labels = {
-      "node.webgrip.io/pool" = "unfold"
-    }
-    taints = {
-      "node.webgrip.io/pool" = "unfold:NoSchedule"
-    }
-  })
+  worker_pool_patch = {
+    for name, pool in var.worker_pools : name => yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeNodeConfig"
+      labels     = pool.labels
+      taints     = pool.taints
+    })
+  }
 }
 
 resource "talos_machine_secrets" "cluster" {
@@ -185,15 +183,15 @@ resource "talos_machine_configuration_apply" "control_plane" {
   ])
 }
 
-resource "talos_machine_configuration_apply" "unfold_worker" {
-  for_each = { for name, server in hcloud_server.unfold_worker : name => server.ipv4_address }
+resource "talos_machine_configuration_apply" "worker" {
+  for_each = { for name, server in hcloud_server.worker : name => server.ipv4_address }
 
   client_configuration        = talos_machine_secrets.cluster.client_configuration
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = each.value
   endpoint                    = each.value
   config_patches = concat(local.disk_encryption_patches[each.key], [
-    local.unfold_worker_patch,
+    local.worker_pool_patch[local.workers[each.key].pool],
     local.tailscale_patch[each.key],
     yamlencode({
       apiVersion = "v1alpha1"
@@ -202,6 +200,11 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
       hostname   = each.key
     }),
   ])
+}
+
+moved {
+  from = talos_machine_configuration_apply.unfold_worker
+  to   = talos_machine_configuration_apply.worker
 }
 
 resource "talos_machine_bootstrap" "cluster" {
@@ -216,7 +219,7 @@ data "talos_client_configuration" "cluster" {
   cluster_name         = local.cluster_name
   client_configuration = talos_machine_secrets.cluster.client_configuration
   endpoints            = [for server in hcloud_server.control_plane : server.ipv4_address]
-  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.unfold_worker : server.ipv4_address])
+  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.worker : server.ipv4_address])
 }
 
 resource "talos_cluster_kubeconfig" "cluster" {
