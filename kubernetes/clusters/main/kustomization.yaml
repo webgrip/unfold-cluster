@@ -26,3 +26,5 @@ resources:
   - ../../platform/kata
   - ../../platform/sandbox-probes
   - ../../platform/observability
+  - ../../platform/kyverno
+  - ../../platform/trivy-operator

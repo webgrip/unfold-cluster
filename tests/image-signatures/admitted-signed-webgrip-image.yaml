@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: signed-webgrip-image
+  namespace: image-signature-test
+spec:
+  containers:
+    - name: unfold
+      image: ghcr.io/webgrip/unfold:0.4.0-rc.114@sha256:139d0a0fb8bf1bb1b2753416ef8d9a8d9fe6383e3f33b46f29beb9ae722c7796

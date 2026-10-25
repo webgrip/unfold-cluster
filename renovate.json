@@ -224,6 +224,45 @@
       ],
       "groupName": "unfold metal image",
       "pinDigests": true
+    },
+    {
+      "description": "Kyverno's chart and its images are released together and move in one PR. The Kyverno CLI in scripts/test-image-signatures.sh runs the same verification engine and must move with them.",
+      "matchDepNames": [
+        "ghcr.io/kyverno/charts/kyverno",
+        "/^ghcr\\.io/kyverno//",
+        "kyverno/kyverno"
+      ],
+      "groupName": "kyverno",
+      "prBodyNotes": [
+        "Update `kyverno_sha256_linux_amd64` in `scripts/test-image-signatures.sh` from the release's `checksums.txt`, and run `./scripts/test-image-signatures.sh --mutation-test`."
+      ]
+    },
+    {
+      "description": "The Trivy Operator chart and its operator image move together; Trivy itself is pinned on its own because it is released on its own.",
+      "matchDepNames": [
+        "trivy-operator",
+        "docker.io/aquasec/trivy-operator"
+      ],
+      "groupName": "trivy operator",
+      "prBodyNotes": [
+        "Check the new images' signatures before merging (runbook `docs/runbooks/vulnerability-scanning.md`, Changing it)."
+      ]
+    },
+    {
+      "description": "cosign, crane and Vector for the supply-chain tests are installed from pinned checksums, which Renovate cannot update. Approve on the dashboard and update the checksums in the same PR.",
+      "matchFileNames": [
+        "scripts/test-image-signatures.sh",
+        "scripts/test-trivy-report-shipper.sh"
+      ],
+      "matchDepNames": [
+        "sigstore/cosign",
+        "google/go-containerregistry",
+        "vectordotdev/vector"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update the matching `*_sha256_linux_amd64*` value in the script from the release's checksums file."
+      ]
     }
   ]
 }

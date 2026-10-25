@@ -103,6 +103,11 @@ If rootless BuildKit cannot run under gVisor on the node at all, the fallback is
 - That credential may write any tag under `webgrip/**`, and every job here can read it. A CI push is
   therefore untrusted until a separate trusted job signs it (RFC 0001, CI rules); production admits
   signed images only. Narrowing it to `webgrip/ci/**` is a change to Zot's access control.
+- A push can carry an SPDX SBOM and SLSA provenance in its image index: add
+  `--opt attest:sbom=generator=docker.io/docker/buildkit-syft-scanner:<tag>@<digest>` and
+  `--opt attest:provenance=mode=max` to `buildctl build`, as `ci-smoke` does. The scanner image comes
+  through Zot like any base image; the attestations are unsigned until the trusted job signs
+  ([image-signatures](image-signatures.md#sbom-and-provenance-from-ci)).
 - Base images are pulled through Zot's mirrors. `buildkitd.toml` sends `docker.io`, `ghcr.io`,
   `quay.io` and `registry.k8s.io` to `zot.zot.svc.cluster.local:5000/<registry>`, the layout Zot's
   sync uses. No registry on the internet is reachable from a job pod.

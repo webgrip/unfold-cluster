@@ -1,0 +1,139 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno
+spec:
+  interval: 1h
+  releaseName: kyverno
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: kyverno
+  install:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  values:
+    global:
+      image:
+        registry: ghcr.io
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+    crds:
+      migration:
+        image:
+          registry: ghcr.io
+          repository: kyverno/kyverno-cli
+          # renovate: datasource=docker depName=ghcr.io/kyverno/kyverno-cli
+          tag: v1.19.2@sha256:322ec5044d600930cb3af0e56dc33154a2d1d1fba58f4cadad3f47be7e78b11c
+        podResources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+            ephemeral-storage: 64Mi
+    webhooksCleanup:
+      image:
+        registry: ghcr.io
+        repository: kyverno/readiness-checker
+        # renovate: datasource=docker depName=ghcr.io/kyverno/readiness-checker
+        tag: v1.19.2@sha256:02600428e7c956e222f4376413525866ed9fec28e6bcb1222774ce6bf5fc904a
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+          ephemeral-storage: 64Mi
+    config:
+      webhooks:
+        namespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: NotIn
+              values:
+                - kube-system
+                - flux-system
+    features:
+      policyExceptions:
+        enabled: false
+      generateValidatingAdmissionPolicy:
+        enabled: false
+      generateMutatingAdmissionPolicy:
+        enabled: false
+      validatingAdmissionPolicyReports:
+        enabled: false
+      backgroundScan:
+        enabled: false
+      registryClient:
+        allowInsecure: false
+        credentialHelpers:
+          - default
+      tuf:
+        enabled: false
+    admissionController:
+      replicas: 2
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 1
+      priorityClassName: system-cluster-critical
+      sigstoreVolume:
+        emptyDir:
+          sizeLimit: 64Mi
+      initContainer:
+        image:
+          registry: ghcr.io
+          repository: kyverno/kyvernopre
+          # renovate: datasource=docker depName=ghcr.io/kyverno/kyvernopre
+          tag: v1.19.2@sha256:27f3cc52e628559b56d08363b85316819802086c9808606914f7805a244148f4
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+            ephemeral-storage: 64Mi
+      container:
+        image:
+          registry: ghcr.io
+          repository: kyverno/kyverno
+          # renovate: datasource=docker depName=ghcr.io/kyverno/kyverno
+          tag: v1.19.2@sha256:c8c4dd09e720d2cd7fd24ca73ac28e46651001372f988e0cba3f2f612f04b955
+        resources:
+          requests:
+            cpu: 100m
+            memory: 192Mi
+          limits:
+            memory: 512Mi
+            ephemeral-storage: 256Mi
+    reportsController:
+      replicas: 1
+      sigstoreVolume:
+        emptyDir:
+          sizeLimit: 64Mi
+      image:
+        registry: ghcr.io
+        repository: kyverno/reports-controller
+        # renovate: datasource=docker depName=ghcr.io/kyverno/reports-controller
+        tag: v1.19.2@sha256:5fb6d3e738050dbce84f60ecabaede7665fbe0578d07c1e8c912443b035e79c3
+      resources:
+        requests:
+          cpu: 50m
+          memory: 96Mi
+        limits:
+          memory: 256Mi
+          ephemeral-storage: 256Mi
+    backgroundController:
+      enabled: false
+    cleanupController:
+      enabled: false

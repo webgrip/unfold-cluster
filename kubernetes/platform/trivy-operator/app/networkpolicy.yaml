@@ -1,0 +1,152 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trivy-operator
+spec:
+  description: The operator watches workloads through the API server, starts scan jobs, asks the Trivy server whether it is healthy, fetches the check bundle from Zot's ghcr.io mirror, and posts every report it writes to the report shipper. vmagent scrapes its metrics. It reaches nothing outside the cluster.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: trivy-operator
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-server
+      toPorts:
+        - ports:
+            - port: "4954"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-report-shipper
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zot
+            app.kubernetes.io/name: zot
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trivy-server
+spec:
+  description: The Trivy server holds the vulnerability database, which it downloads from Zot's mirror of ghcr.io/aquasecurity/trivy-db, and answers the scan jobs and the operator's health check. It reaches nothing outside the cluster.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: trivy-server
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zot
+            app.kubernetes.io/name: zot
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-operator
+        - matchLabels:
+            app.kubernetes.io/managed-by: trivy-operator
+            vulnerabilityReport.scanner: Trivy
+      toPorts:
+        - ports:
+            - port: "4954"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trivy-scan-jobs
+spec:
+  description: A scan job pulls the image it scans from Zot, through the mirror path of the image's registry, and asks the Trivy server for the vulnerabilities in it. It holds no service-account token and reaches nothing else.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: trivy-operator
+      vulnerabilityReport.scanner: Trivy
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-server
+      toPorts:
+        - ports:
+            - port: "4954"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zot
+            app.kubernetes.io/name: zot
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trivy-report-shipper
+spec:
+  description: The report shipper receives each report from the operator and writes a compact record of it to the homelab's VictoriaLogs through the gateway on the tailnet, unfold-gateway.webgrip.dev:8427. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns that address. vmagent scrapes its metrics.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: trivy-report-shipper
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-operator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9598"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: unfold-gateway.webgrip.dev
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: unfold-gateway.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP

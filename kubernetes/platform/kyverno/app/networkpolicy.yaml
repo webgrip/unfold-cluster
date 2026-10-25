@@ -1,0 +1,76 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kyverno-apiserver
+spec:
+  description: Every Kyverno pod, its upgrade and uninstall hooks included, talks to the Kubernetes API. vmagent scrapes the controllers' metrics on 8000.
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kyverno-admission-controller
+spec:
+  description: The API server calls the admission webhook on 9443. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too. To check a webgrip image's cosign signature the controller reads the image's manifest and signature from the registry that serves it, over HTTPS for ghcr.io and forgejo.webgrip.dev and over plain HTTP for Zot inside the cluster. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: admission-controller
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: ghcr.io
+              - matchName: pkg-containers.githubusercontent.com
+              - matchName: forgejo.webgrip.dev
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zot
+            app.kubernetes.io/name: zot
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP

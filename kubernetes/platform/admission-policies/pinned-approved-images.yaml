@@ -35,6 +35,13 @@ spec:
         'docker.io/timberio/vector:',
         'quay.io/prometheus/node-exporter:',
         'registry.k8s.io/kube-state-metrics/kube-state-metrics:',
+        'docker.io/aquasec/trivy-operator:',
+        'ghcr.io/aquasecurity/trivy:',
+        'ghcr.io/kyverno/kyverno:',
+        'ghcr.io/kyverno/kyvernopre:',
+        'ghcr.io/kyverno/reports-controller:',
+        'ghcr.io/kyverno/kyverno-cli:',
+        'ghcr.io/kyverno/readiness-checker:',
         'registry.k8s.io/autoscaling/cluster-autoscaler:']
     - name: images
       expression: >-

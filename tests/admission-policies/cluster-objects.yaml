@@ -64,6 +64,13 @@ handler: kata
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: trivy-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: cluster-autoscaler
 ---
 apiVersion: scheduling.k8s.io/v1
