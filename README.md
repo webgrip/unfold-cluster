@@ -139,6 +139,10 @@ Hetzner tokens cannot be narrowed below a whole project, so each job gets its ow
 
 Treat every one of these tokens as the whole cluster. Any token can boot a node into rescue mode or image its disk, and neither protection stops that. Until the Talos partitions are encrypted (RFC 0001, disk encryption), the disk holds the cluster's certificate authorities and the key that encrypts Secrets in etcd in clear text. Two of the three tokens live inside the cluster: `HCLOUD_TOKEN_CLUSTER` in `kube-system`, and `HCLOUD_TOKEN_VIP` in every control plane's machine config. Encrypting the disks does not close this either if the key server runs in the same Hetzner project, because the same token can image the key server. It has to run where these tokens cannot reach it.
 
+All tokens in the project also share one API budget: Hetzner allows 3600 requests an hour per project, not per token, refilled at one a second. CI's OpenTofu, the cloud controller and CSI driver in `kube-system` and Talos moving the API address all draw on it, so a plan that fails with `rate_limit_exceeded` means something in the project spent the hour, often an apply's own waiting just before. The provider polls actions every 2 seconds rather than every 500 ms to spend less, and the `diagnose` run prints the budget left. A separate token buys no headroom; a second Hetzner project would.
+
+The workflow logs are readable without signing in. Hetzner's API errors print the first 32 characters of the token they refused, so the workflow masks that prefix of every Hetzner token as well as the whole value; rotate a token whose prefix ever reached a log.
+
 | Credential | Where it lives | Rotate |
 | --- | --- | --- |
 | `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu` | every 6 months |
