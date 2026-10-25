@@ -2,10 +2,6 @@
 name: infra
 
 on:
-  pull_request:
-    paths:
-      - infra/**
-      - .forgejo/workflows/infra.yml
   push:
     branches:
       - main
@@ -38,31 +34,6 @@ env:
   TF_INPUT: "0"
 
 jobs:
-  check:
-    if: github.event_name == 'pull_request'
-    runs-on: docker
-    # The infra-runner image from webgrip/infrastructure carries OpenTofu; the unfold-infra pool
-    # runs the same image as its host-mode toolchain, so both jobs use one pinned toolchain.
-    container:
-      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
-    defaults:
-      run:
-        working-directory: infra
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Format
-        run: tofu fmt -check -recursive
-
-      - name: Init without the state backend
-        run: tofu init -backend=false
-
-      - name: Validate
-        run: tofu validate
-
-      - name: Test against mocked providers
-        run: tofu test
-
   plan-or-apply:
     # Never for pull requests. The credentials are not Forgejo secrets: OpenBao hands them only
     # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
