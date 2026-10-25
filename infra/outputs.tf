@@ -54,8 +54,8 @@ output "headscale_ipv4" {
 }
 
 output "headscale_ssh_known_hosts" {
-  description = "The only SSH host key unfold-headscale presents, as a known_hosts line. Read with: tofu output -raw headscale_ssh_known_hosts >> ~/.ssh/known_hosts"
-  value       = "${var.headscale_hostname},${hcloud_primary_ip.headscale.ip_address} ${trimspace(tls_private_key.headscale_host.public_key_openssh)}"
+  description = "The only SSH host key unfold-headscale presents, as a known_hosts line. Every apply also writes it to OpenBao secret/unfold/headscale-address, property ssh_known_hosts (drill_ssh_known_hosts for the rebuild drill), where it is read without the state."
+  value       = local.headscale_known_hosts_line
 }
 
 output "homelab_gateway_tailnet_key" {

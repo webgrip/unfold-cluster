@@ -204,7 +204,7 @@ Everything under `secret/unfold-cluster/vars` becomes a Forgejo **variable**, re
 
 ### The Headscale server of 2026-10-25
 
-That server predates the apply's `install`, `policy` and `gateway` steps, and its sudoers rule refuses them. `headscale_generation` 3 replaces it: no command on the server, one apply. Its plan shows `hcloud_server.headscale` `must be replaced`, the three control-plane and two worker `terraform_data.*_tailnet_key` replaced, the five `talos_machine_configuration_apply` updated in place (new `TS_AUTHKEY` only), `terraform_data.homelab_gateway_tailnet_key` replaced, and nothing else destroyed. During the run the tailnet is down for 10 to 25 minutes; Kubernetes, Flux and the workloads keep running, and the APIs stay reachable from `ADMIN_CIDRS`. Afterwards register your own devices again (stage D, first box) and update `~/.ssh/known_hosts` from `tofu output -raw headscale_ssh_known_hosts`.
+That server predates the apply's `install`, `policy` and `gateway` steps, and its sudoers rule refuses them. `headscale_generation` 3 replaces it: no command on the server, one apply. Its plan shows `hcloud_server.headscale` `must be replaced`, the three control-plane and two worker `terraform_data.*_tailnet_key` replaced, the five `talos_machine_configuration_apply` updated in place (new `TS_AUTHKEY` only), `terraform_data.homelab_gateway_tailnet_key` replaced, and nothing else destroyed. During the run the tailnet is down for 10 to 25 minutes; Kubernetes, Flux and the workloads keep running, and the APIs stay reachable from `ADMIN_CIDRS`. Afterwards register your own devices again (stage D, first box) and update `~/.ssh/known_hosts` with the pinned line from `BAO_ADDR="$(just bao-addr)" bao kv get -field=ssh_known_hosts secret/unfold/headscale-address` (run in `homelab-cluster`; every apply writes it there).
 
 ### From the first apply's state (2026-10-24, done)
 
@@ -214,7 +214,7 @@ On 2026-10-24 the first apply had already created the network, the firewalls and
 - [ ] **R2.** Apply it with that run's digest.
 - [ ] **R3.** Only now merge the pull request that makes the apply self-contained. Merged before R2, its apply fails at Hetzner's delete protection, before any node exists.
 - [ ] **R4.** Read its plan on `main`: exactly `1 to destroy`, and that one is `hcloud_server.headscale`, `must be replaced` because of `terraform_data.headscale_generation`. Everything in C1 except what exists already is created. If the plan destroys anything else, stop.
-- [ ] **R5.** Apply as in C2 (two dispatches the first time, because of the snapshot), then C3 and C4. The new server is created with delete and rebuild protection on again. The server's SSH host key changes: `ssh-keygen -R headscale.webgrip.dev`, then add the pinned one from `tofu output -raw headscale_ssh_known_hosts` to `~/.ssh/known_hosts`.
+- [ ] **R5.** Apply as in C2 (two dispatches the first time, because of the snapshot), then C3 and C4. The new server is created with delete and rebuild protection on again. The server's SSH host key changes: `ssh-keygen -R headscale.webgrip.dev`, then add the pinned line from `BAO_ADDR="$(just bao-addr)" bao kv get -field=ssh_known_hosts secret/unfold/headscale-address` (run in `homelab-cluster`; every apply writes it there) to `~/.ssh/known_hosts`. Never answer `yes` to an unknown host key instead.
 
 ## D. Verification
 

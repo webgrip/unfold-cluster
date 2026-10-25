@@ -134,6 +134,13 @@ expect "the rendered bundle is stored whole" test "$(stored unfold-cluster_rende
 expect "the rendered bundle is never printed" bash -c '! grep -q canary "$1"' _ "${work}/out"
 expect "an empty sensitive output is refused" bash -c '! printf "" | "$1" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1' _ "$tool"
 
+known_hosts_line="headscale.webgrip.dev,198.51.100.23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDy5LGeG3jjYA5HxMiHteWkI9s1BdJPy8vVlMZBpZTnb"
+printf '%s\n' "$known_hosts_line" | "$tool" put known-hosts unfold/headscale-address ssh_known_hosts >/dev/null 2>&1
+expect "a known_hosts line is stored beside the address" test "$(stored unfold_headscale-address ssh_known_hosts)/$(stored unfold_headscale-address ipv4)" = "${known_hosts_line}/198.51.100.23"
+for refused in "headscale.webgrip.dev ssh-ed25519 AAAA" "headscale.webgrip.dev,198.51.100.23 ssh-rsa AAAAB3NzaC1yc2E" "headscale.webgrip.dev,198.51.100.23 ssh-ed25519 AAAA extra" ""; do
+  expect "'${refused}' is refused as a known_hosts line" bash -c '! printf "%s\n" "$1" | "$2" put known-hosts unfold/headscale-address ssh_known_hosts >/dev/null 2>&1' _ "$refused" "$tool"
+done
+
 expect "get prints the stored property" test "$("$tool" get unfold-cluster/talos-secrets bundle 2>/dev/null)" = "${bundle%$'\n'}"
 expect "get prints nothing for an absent secret" test -z "$("$tool" get unfold-cluster/nothing-here bundle 2>/dev/null)"
 expect "get keeps the workflow masks off stdout" bash -c '! "$1" get unfold-cluster/talos-secrets bundle 2>/dev/null | grep -q add-mask' _ "$tool"
