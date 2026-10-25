@@ -33,8 +33,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # renovate: datasource=github-releases depName=opentofu/opentofu extractVersion=^v(?<version>.+)$
-  TOFU_VERSION: 1.13.1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
 
@@ -42,26 +40,15 @@ jobs:
   check:
     if: github.event_name == 'pull_request'
     runs-on: docker
+    # The infra-runner image from webgrip/infrastructure carries OpenTofu; the unfold-infra pool
+    # runs the same image as its host-mode toolchain, so both jobs use one pinned toolchain.
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
     defaults:
       run:
         working-directory: infra
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Install OpenTofu with a verified checksum
-        working-directory: ${{ runner.temp }}
-        run: |
-          set -eu
-          base="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}"
-          archive="tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
-          curl -fsSLO "${base}/${archive}"
-          curl -fsSLO "${base}/tofu_${TOFU_VERSION}_SHA256SUMS"
-          grep " ${archive}\$" "tofu_${TOFU_VERSION}_SHA256SUMS" | sha256sum -c -
-          tar -xzf "${archive}" tofu
-          mkdir -p "${RUNNER_TEMP}/bin"
-          install -m 0755 tofu "${RUNNER_TEMP}/bin/tofu"
-          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
-          "${RUNNER_TEMP}/bin/tofu" version
 
       - name: Format
         run: tofu fmt -check -recursive
@@ -76,6 +63,7 @@ jobs:
     # Never for pull requests. The credentials are not Forgejo secrets: OpenBao hands them only
     # to a job whose OIDC token says this repository, refs/heads/main, and push, schedule or
     # workflow_dispatch (role ci-unfold-cluster), so a branch's own workflow cannot read them.
+    # Host mode: the steps run in the unfold-infra pool's toolchain image, the same infra-runner.
     if: github.event_name != 'pull_request'
     runs-on: unfold-infra
     enable-openid-connect: true
@@ -113,20 +101,6 @@ jobs:
             TF_VAR_tailscale_control_plane_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY_CONTROL_PLANE
             TF_VAR_tailscale_authkey=secret/data/unfold-cluster/tailnet#TAILSCALE_AUTHKEY
 
-      - name: Install OpenTofu with a verified checksum
-        working-directory: ${{ runner.temp }}
-        run: |
-          set -eu
-          base="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}"
-          archive="tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
-          curl -fsSLO "${base}/${archive}"
-          curl -fsSLO "${base}/tofu_${TOFU_VERSION}_SHA256SUMS"
-          grep " ${archive}\$" "tofu_${TOFU_VERSION}_SHA256SUMS" | sha256sum -c -
-          tar -xzf "${archive}" tofu
-          mkdir -p "${RUNNER_TEMP}/bin"
-          install -m 0755 tofu "${RUNNER_TEMP}/bin/tofu"
-          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
-          "${RUNNER_TEMP}/bin/tofu" version
 
       - name: Refuse to run without credentials
         run: |

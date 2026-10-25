@@ -2,7 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>webgrip/renovate-config#v1.14.0",
-    "local>webgrip/renovate-config:gitops#v1.14.0"
+    "local>webgrip/renovate-config:gitops#v1.14.0",
+    "local>webgrip/renovate-config:forgejo#v1.14.0"
   ],
   "flux": {
     "managerFilePatterns": [
@@ -17,17 +18,30 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts, their image digests, Flux and Headscale in infra/, chart image digests in kubernetes/, OpenTofu, age and etcd in the workflows, hcloud-upload-image in scripts/build-talos-snapshot.sh. A value written as tag@sha256:digest has both parts updated. One manager reads them all, so a version without the line is the only way to freeze silently.",
+      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts, their image digests, Flux and Headscale in infra/, chart image digests in kubernetes/, hcloud-upload-image in scripts/build-talos-snapshot.sh. A value written as tag@sha256:digest has both parts updated. One manager reads them all, so a version without the line is the only way to freeze silently.",
       "managerFilePatterns": [
         "/^infra/.+\\.tf$/",
         "/^kubernetes/.+\\.ya?ml$/",
         "/^talos/.+\\.ya?ml$/",
-        "/^\\.forgejo/workflows/.+\\.ya?ml$/",
         "/^scripts/.+\\.sh$/"
       ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[=:]\\s*\"?(?<currentValue>[^\"\\s@]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?\"?"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Step-level composite actions pinned by commit with the full Forgejo URL, `uses: https://forgejo.webgrip.dev/webgrip/<repo>/<path>@<40 hex> # vX.Y.Z`. The forgejo preset's digest manager expects the shorthand without the host, and its tag manager only the bare tag, so this form would freeze. gitea-tags resolves the tag to its commit, so the digest and the comment move together.",
+      "managerFilePatterns": [
+        "/^\\.forgejo/workflows/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "uses:\\s+https://forgejo\\.webgrip\\.dev/(?<depName>webgrip/[\\w.-]+)/[^@\\s]+@(?<currentDigest>[0-9a-f]{40})\\s+#\\s+(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "gitea-tags",
+      "registryUrlTemplate": "https://forgejo.webgrip.dev",
+      "versioningTemplate": "semver",
+      "depTypeTemplate": "action"
     }
   ],
   "packageRules": [
@@ -95,23 +109,6 @@
       ]
     },
     {
-      "description": "age is installed from a pinned checksum, which Renovate cannot update. Approve on the dashboard and update the checksum in the same PR.",
-      "matchDepNames": [
-        "FiloSottile/age"
-      ],
-      "dependencyDashboardApproval": true,
-      "prBodyNotes": [
-        "Update `AGE_SHA256` in `.forgejo/workflows/etcd-backup-check.yml` to the sha256 of the new `linux-amd64` archive."
-      ]
-    },
-    {
-      "description": "The restore check uses the etcd release the cluster runs, which Talos chooses. Move it when a Talos upgrade moves etcd, not before.",
-      "matchDepNames": [
-        "etcd-io/etcd"
-      ],
-      "dependencyDashboardApproval": true
-    },
-    {
       "description": "hcloud-upload-image is installed from pinned checksums, which Renovate cannot update. Approve on the dashboard and update the checksums in the same PR.",
       "matchDepNames": [
         "apricote/hcloud-upload-image"
@@ -122,7 +119,7 @@
       ]
     },
     {
-      "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu's version is tracked through TOFU_VERSION in the workflow.",
+      "description": "required_version constrains OpenTofu, which Renovate would otherwise look up as Terraform. OpenTofu itself comes with the infra-runner image from webgrip/infrastructure, where it is pinned and updated.",
       "matchManagers": [
         "terraform"
       ],
