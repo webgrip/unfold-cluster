@@ -127,7 +127,7 @@ run_node() {
     CONTROL_PLANE_IPS="198.51.100.11 198.51.100.12 198.51.100.13" \
     KUBE_TLS_SERVER_NAME=10.64.0.10 KMS_ENDPOINT=https://headscale.example.org:4050 \
     TALOSCONFIG="${TALOSCONFIG_OVERRIDE-${stub}/talosconfig}" \
-    ENCRYPT_NODE_WAIT_SECONDS=1 ENCRYPT_NODE_POLL_SECONDS=0 \
+    ENCRYPT_NODE_WAIT_SECONDS="${WAIT_SECONDS_OVERRIDE:-1}" ENCRYPT_NODE_POLL_SECONDS=0 \
     "$script" "$@" >"${stub}/out" 2>&1
 }
 
@@ -184,7 +184,7 @@ suite() {
   scenario; touch "${stub}/maintenance"; app1 "$s" encrypted reinstall && status=0 || status=$?
   expect "a new node in maintenance mode is not wiped" bash -c '[ "$1" -eq 0 ] && ! grep -qE "drain|reset" "$2"' _ "$status" "${stub}/calls"
 
-  scenario; touch "${stub}/maintenance"; echo 4 >"${stub}/booting"; TALOSCONFIG_OVERRIDE="" app1 "$s" encrypted reinstall && status=0 || status=$?
+  scenario; touch "${stub}/maintenance"; echo 4 >"${stub}/booting"; WAIT_SECONDS_OVERRIDE=60 TALOSCONFIG_OVERRIDE="" app1 "$s" encrypted reinstall && status=0 || status=$?
   expect "a new server still booting is waited for, then left to its first config" bash -c '[ "$1" -eq 0 ] && ! grep -qE "drain|reset" "$2"' _ "$status" "${stub}/calls"
 
   scenario; echo 1000000 >"${stub}/booting"; cp3 "$s" encrypted reinstall && status=0 || status=$?
