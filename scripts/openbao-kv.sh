@@ -18,6 +18,9 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
         ipv4           a public IPv4 address, or an empty line to clear it
         talos-secrets  a talosctl secrets bundle
         known-hosts    one known_hosts line: host,address ssh-ed25519 key
+        number         a server number, digits only
+        robot-transaction  a Robot order transaction id
+        mac            a MAC address, lower-case and colon-separated
 get   prints PROPERTY, or nothing when the secret or the property is absent.
 
 Neither prints a value. Environment: ACTIONS_ID_TOKEN_REQUEST_URL and
@@ -74,6 +77,18 @@ checked_value() {
       if ! has_yaml_key '' cluster "$value" || ! has_yaml_key '' certs "$value" || ! has_yaml_key ' +' k8sserviceaccount "$value"; then
         fail "stdin holds no talosctl secrets bundle"
       fi
+      ;;
+    number)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^[0-9]{1,12}$ ]] || fail "stdin holds no server number"
+      ;;
+    robot-transaction)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^[A-Za-z0-9-]{4,64}$ ]] || fail "stdin holds no Robot transaction id"
+      ;;
+    mac)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^[0-9a-f]{2}(:[0-9a-f]{2}){5}$ ]] || fail "stdin holds no MAC address"
       ;;
     *) usage_error ;;
   esac

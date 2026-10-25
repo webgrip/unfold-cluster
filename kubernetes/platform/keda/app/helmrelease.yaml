@@ -26,12 +26,24 @@ spec:
   values:
     crds:
       install: true
-    nodeSelector:
-      node.webgrip.io/pool: ci
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - ci
+                    - metal
     tolerations:
       - key: node.webgrip.io/pool
         operator: Equal
         value: ci
+        effect: NoSchedule
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: metal
         effect: NoSchedule
     http:
       timeout: 30000

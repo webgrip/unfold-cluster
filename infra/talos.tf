@@ -7,26 +7,30 @@ locals {
   cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
 
-  common_patches = concat([
-    yamlencode({
-      cluster = {
-        externalCloudProvider = {
-          enabled = true
-        }
+  hcloud_cloud_provider_patch = yamlencode({
+    cluster = {
+      externalCloudProvider = {
+        enabled = true
       }
-    }),
-    yamlencode({
-      apiVersion = "v1alpha1"
-      kind       = "UnattendedInstallConfig"
-      installer = {
-        image = local.install_image
+    }
+  })
+
+  cloud_install_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "UnattendedInstallConfig"
+    installer = {
+      image = local.install_image
+    }
+    provisioning = {
+      diskSelector = {
+        match = "disk.dev_path == \"/dev/sda\""
       }
-      provisioning = {
-        diskSelector = {
-          match = "disk.dev_path == \"/dev/sda\""
-        }
-      }
-    }),
+    }
+  })
+
+  common_patches = concat([local.hcloud_cloud_provider_patch, local.cloud_install_patch], local.node_patches)
+
+  node_patches = concat([
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "KubeNodeConfig"
@@ -200,7 +204,7 @@ resource "talos_machine_configuration_apply" "worker" {
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = each.value
   endpoint                    = each.value
-  config_patches = concat(local.disk_encryption_patches[each.key], [
+  config_patches = concat(local.disk_encryption_patches[each.key], local.worker_sandbox_patches[local.workers[each.key].pool], [
     local.worker_pool_patch[local.workers[each.key].pool],
     local.tailscale_patch[each.key],
     yamlencode({
@@ -237,7 +241,7 @@ data "talos_client_configuration" "cluster" {
   cluster_name         = local.cluster_name
   client_configuration = talos_machine_secrets.cluster.client_configuration
   endpoints            = [for server in hcloud_server.control_plane : server.ipv4_address]
-  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.worker : server.ipv4_address])
+  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.worker : server.ipv4_address], [for name in keys(var.metal_servers) : data.external.metal_server[name].result.server_ip])
 }
 
 resource "talos_cluster_kubeconfig" "cluster" {

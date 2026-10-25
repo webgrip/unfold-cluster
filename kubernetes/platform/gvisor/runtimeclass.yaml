@@ -4,11 +4,19 @@ kind: RuntimeClass
 metadata:
   name: gvisor
 handler: runsc
+overhead:
+  podFixed:
+    cpu: 50m
+    memory: 64Mi
 scheduling:
   nodeSelector:
-    node.webgrip.io/pool: ci
+    runtime.webgrip.io/gvisor: "true"
   tolerations:
     - key: node.webgrip.io/pool
       operator: Equal
       value: ci
+      effect: NoSchedule
+    - key: node.webgrip.io/pool
+      operator: Equal
+      value: metal
       effect: NoSchedule

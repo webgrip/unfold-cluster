@@ -19,4 +19,6 @@ resources:
   - ../../platform/ci-runners
   - ../../platform/zot
   - ../../platform/gvisor
+  - ../../platform/kata
+  - ../../platform/sandbox-probes
   - ../../platform/observability

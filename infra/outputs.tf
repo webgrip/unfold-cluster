@@ -19,6 +19,18 @@ output "workers" {
   }
 }
 
+output "metal_nodes" {
+  description = "Name, Robot server number, private address on the vSwitch and public IPv4 of each metal node."
+  value = {
+    for name in keys(var.metal_servers) : name => {
+      pool          = "metal"
+      server_number = data.external.metal_server[name].result.server_number
+      private_ip    = local.metal_nodes[name].private_ip
+      public_ipv4   = data.external.metal_server[name].result.server_ip
+    }
+  }
+}
+
 output "network_id" {
   description = "Cloud Network the vSwitch and the hcloud cloud controller attach to."
   value       = hcloud_network.cluster.id
