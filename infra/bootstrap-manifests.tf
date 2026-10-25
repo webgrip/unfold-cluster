@@ -88,6 +88,19 @@ data "helm_template" "hcloud_ccm" {
     networking = {
       enabled = false
     }
+    env = {
+      HCLOUD_NETWORK = {
+        valueFrom = {
+          secretKeyRef = {
+            name = "hcloud"
+            key  = "network"
+          }
+        }
+      }
+      HCLOUD_NETWORK_ROUTES_ENABLED = {
+        value = "false"
+      }
+    }
   })]
 }
 
