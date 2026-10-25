@@ -1,0 +1,39 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-runner
+  namespace: ci
+spec:
+  description: A CI job pod reaches Forgejo over HTTPS for its task, the checkout and the actions it uses, and Zot for base images, pushes and the layer cache. Nothing reaches the pod. Base images come through Zot's mirrors, so no registry on the internet is allowed. A pipeline that needs another host adds it here, in its own rule, with the reason in the description.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zot
+            app.kubernetes.io/name: zot
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
