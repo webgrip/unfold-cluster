@@ -31,7 +31,8 @@ mock_provider "hcloud" {
 
   mock_resource "hcloud_server" {
     defaults = {
-      id = "106"
+      id           = "106"
+      ipv4_address = "198.51.100.10"
     }
   }
 
@@ -81,6 +82,7 @@ override_data {
       server_ip       = "198.51.100.40"
       server_ipv6_net = "2a01:4f8::"
       status          = "ready"
+      cpu_vendor      = "intel"
     }
   }
 }
@@ -110,10 +112,229 @@ variables {
   metal_image_file          = "tests/fixtures/metal-image-pinned.yaml"
   metal_image_pull_username = "webgrip-ci"
   metal_image_pull_token    = "mock-read-package-token"
+  metal_servers = {
+    "unfold-metal-1" = { mode = "adopt", server_number = 2345678, product_prefix = "EX44", cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+  }
 }
 
-run "the_ax41_is_ordered_once_with_its_price_in_the_reviewed_plan" {
+run "an_adopted_server_without_its_number_is_skipped_cleanly" {
   command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = null, product_prefix = "EX44", cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+    }
+  }
+
+  assert {
+    condition     = length(local.metal_active) == 0 && length(data.external.metal_server) == 0 && length(terraform_data.metal_adoption) == 0 && length(terraform_data.robot_vswitch) == 0
+    error_message = "an adopted server whose number is not yet known calls Robot for nothing"
+  }
+}
+
+run "an_auction_shows_the_picked_offer_in_the_reviewed_plan" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = {
+        mode = "auction"
+        auction = {
+          cpu_cores       = { "Intel Core i7-8700" = 6, "Intel Core i5-12500" = 6, "Intel Core i9-9900K" = 8, "AMD Ryzen 7 3700X" = 8 }
+          min_cores       = 6
+          min_memory_gb   = 64
+          disk_type       = "NVMe"
+          datacenters     = ["FSN1", "NBG1", "HEL1"]
+          max_monthly_eur = 85
+        }
+        private_host = 31
+      }
+    }
+  }
+
+  override_data {
+    target = data.external.metal_auction_pick
+    values = {
+      result = {
+        state     = "to-order", server_number = "", product_id = "3097578", cpu = "Intel Core i7-8700", cpu_vendor = "intel"
+        memory_gb = "64", disks = "2x SSD M.2 NVMe 512 GB", datacenter = "FSN1-DC14", monthly_net_eur = "81.7", setup_net_eur = "0"
+      }
+    }
+  }
+
+  assert {
+    condition = terraform_data.metal_auction_order["unfold-metal-1"].input == {
+      offer           = "3097578", cpu = "Intel Core i7-8700", memory_gb = "64", disks = "2x SSD M.2 NVMe 512 GB", datacenter = "FSN1-DC14"
+      monthly_net_eur = "81.7", setup_net_eur = "0", primary_ipv4 = true, quoted_state = "to-order"
+    }
+    error_message = "the plan shows the exact offer the apply orders, so the reviewed digest covers that machine and its price"
+  }
+
+  assert {
+    condition     = length(terraform_data.metal_order) == 0 && length(data.external.metal_quote) == 0
+    error_message = "an auction never uses the standard order API"
+  }
+}
+
+run "an_auction_without_a_matching_offer_orders_nothing" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = {
+        mode         = "auction"
+        auction      = { cpu_cores = { "Intel Core i7-8700" = 6 }, min_cores = 6, min_memory_gb = 64, disk_type = "NVMe", datacenters = ["FSN1"], max_monthly_eur = 85 }
+        private_host = 31
+      }
+    }
+  }
+
+  override_data {
+    target = data.external.metal_auction_pick
+    values = {
+      result = {
+        state = "unavailable", server_number = "", product_id = "", cpu = "", cpu_vendor = "", memory_gb = "", disks = "", datacenter = "", monthly_net_eur = "", setup_net_eur = ""
+      }
+    }
+  }
+
+  assert {
+    condition     = length(terraform_data.metal_auction_order) == 0 && length(local.metal_active) == 0 && length(terraform_data.robot_vswitch) == 0
+    error_message = "with no offer in the market nothing is ordered or wired; the check warns instead"
+  }
+
+  expect_failures = [check.metal_auction_offer]
+}
+
+run "auction_criteria_outside_eu_central_are_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = {
+        mode         = "auction"
+        auction      = { cpu_cores = { "Intel Core i7-8700" = 6 }, min_cores = 6, min_memory_gb = 64, disk_type = "NVMe", datacenters = ["SIN1"], max_monthly_eur = 85 }
+        private_host = 31
+      }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "an_auction_ceiling_above_one_hundred_is_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = {
+        mode         = "auction"
+        auction      = { cpu_cores = { "Intel Core i7-8700" = 6 }, min_cores = 6, min_memory_gb = 64, disk_type = "NVMe", datacenters = ["FSN1"], max_monthly_eur = 120 }
+        private_host = 31
+      }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "an_allowlisted_cpu_below_min_cores_is_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = {
+        mode         = "auction"
+        auction      = { cpu_cores = { "Intel Core i5-7500" = 4 }, min_cores = 6, min_memory_gb = 64, disk_type = "NVMe", datacenters = ["FSN1"], max_monthly_eur = 85 }
+        private_host = 31
+      }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "an_adopted_server_is_never_ordered" {
+  command = plan
+
+  assert {
+    condition     = length(data.external.metal_quote) == 0 && length(terraform_data.metal_order) == 0
+    error_message = "adopting a server never reads a price or places an order"
+  }
+
+  assert {
+    condition = terraform_data.metal_adoption["unfold-metal-1"].input == {
+      server_number = 2345678
+      product       = "EX44"
+      location      = "FSN1"
+    }
+    error_message = "the plan shows which Robot server is taken over and what it must be"
+  }
+
+  assert {
+    condition     = length(terraform_data.metal_robot_firewall) == 1 && length(terraform_data.metal_install) == 1 && length(talos_machine_configuration_apply.metal) == 1
+    error_message = "an adopted server gets the same firewall, install and config as an ordered one"
+  }
+}
+
+run "an_intel_node_loads_kvm_intel_and_an_amd_node_kvm_amd" {
+  command = plan
+
+  assert {
+    condition     = local.metal_kvm_module[data.external.metal_server["unfold-metal-1"].result.cpu_vendor] == "kvm_intel" && local.metal_kvm_module.amd == "kvm_amd"
+    error_message = "the KVM module follows the CPU vendor Robot's record gives the server"
+  }
+
+  assert {
+    condition     = contains(local.metal_official_extensions, "siderolabs/intel-ucode") && contains(local.metal_official_extensions, "siderolabs/amd-ucode")
+    error_message = "the metal image carries the microcode of both vendors, so one image serves the EX44 and an AMD server"
+  }
+}
+
+run "an_adopted_server_without_a_product_prefix_is_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = 2345678, cpu_vendor = "intel", location = "FSN1", private_host = 31 }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "a_server_number_on_an_ordered_server_is_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "order", server_number = 2345678, product = "AX41-NVMe", cpu_vendor = "amd", location = "FSN1", max_monthly_eur = 65, private_host = 31 }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "an_unknown_cpu_vendor_is_refused" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "adopt", server_number = 2345678, product_prefix = "EX44", cpu_vendor = "arm", location = "FSN1", private_host = 31 }
+    }
+  }
+
+  expect_failures = [var.metal_servers]
+}
+
+run "a_server_robot_sells_is_ordered_once_with_its_price_in_the_reviewed_plan" {
+  command = plan
+
+  variables {
+    metal_servers = {
+      "unfold-metal-1" = { mode = "order", product = "AX41-NVMe", cpu_vendor = "amd", location = "FSN1", max_monthly_eur = 65, private_host = 31 }
+    }
+  }
 
   assert {
     condition = terraform_data.metal_order["unfold-metal-1"].input == {
@@ -129,7 +350,7 @@ run "the_ax41_is_ordered_once_with_its_price_in_the_reviewed_plan" {
 
   assert {
     condition     = length(var.metal_servers) == 1 && var.metal_servers["unfold-metal-1"].max_monthly_eur == 65 && var.metal_servers["unfold-metal-1"].max_setup_eur == 0
-    error_message = "git declares exactly one AX41 with a ceiling of 65 EUR a month and no setup fee"
+    error_message = "the order path keeps its ceiling of 65 EUR a month and no setup fee"
   }
 }
 
@@ -228,9 +449,11 @@ run "kvm_can_fall_back_to_systrap" {
   variables {
     metal_servers = {
       "unfold-metal-1" = {
-        product         = "AX41-NVMe"
+        mode            = "adopt"
+        server_number   = 2345678
+        product_prefix  = "EX44"
+        cpu_vendor      = "intel"
         location        = "FSN1"
-        max_monthly_eur = 65
         private_host    = 31
         gvisor_platform = "systrap"
       }
@@ -284,8 +507,8 @@ run "an_unpinned_image_orders_and_wires_the_server_but_installs_nothing" {
   }
 
   assert {
-    condition     = length(terraform_data.metal_order) == 1 && length(terraform_data.metal_robot_firewall) == 1 && length(terraform_data.metal_install) == 0 && length(talos_machine_configuration_apply.metal) == 0
-    error_message = "while talos/metal-image.yaml holds Renovate's placeholder digests, the server is ordered, firewalled and on the vSwitch, and nothing is installed"
+    condition     = length(terraform_data.metal_adoption) == 1 && length(terraform_data.metal_robot_firewall) == 1 && length(terraform_data.metal_install) == 0 && length(talos_machine_configuration_apply.metal) == 0
+    error_message = "while talos/metal-image.yaml holds Renovate's placeholder digests, the server is taken over, firewalled and on the vSwitch, and nothing is installed"
   }
 }
 
@@ -339,7 +562,7 @@ run "a_metal_node_not_named_unfold_metal_n_is_refused" {
 
   variables {
     metal_servers = {
-      "gpu-1" = { product = "AX41-NVMe", location = "FSN1", max_monthly_eur = 65, private_host = 31 }
+      "gpu-1" = { product = "AX41-NVMe", cpu_vendor = "amd", location = "FSN1", max_monthly_eur = 65, private_host = 31 }
     }
   }
 
@@ -351,7 +574,7 @@ run "a_price_ceiling_above_one_hundred_is_refused" {
 
   variables {
     metal_servers = {
-      "unfold-metal-1" = { product = "AX41-NVMe", location = "FSN1", max_monthly_eur = 150, private_host = 31 }
+      "unfold-metal-1" = { product = "AX41-NVMe", cpu_vendor = "amd", location = "FSN1", max_monthly_eur = 150, private_host = 31 }
     }
   }
 
@@ -363,7 +586,7 @@ run "a_location_outside_the_network_zone_is_refused" {
 
   variables {
     metal_servers = {
-      "unfold-metal-1" = { product = "AX41-NVMe", location = "HEL1", max_monthly_eur = 65, private_host = 31 }
+      "unfold-metal-1" = { product = "AX41-NVMe", cpu_vendor = "amd", location = "SIN1", max_monthly_eur = 65, private_host = 31 }
     }
   }
 
@@ -375,7 +598,7 @@ run "an_unknown_gvisor_platform_is_refused" {
 
   variables {
     metal_servers = {
-      "unfold-metal-1" = { product = "AX41-NVMe", location = "FSN1", max_monthly_eur = 65, private_host = 31, gvisor_platform = "ptrace" }
+      "unfold-metal-1" = { product = "AX41-NVMe", cpu_vendor = "amd", location = "FSN1", max_monthly_eur = 65, private_host = 31, gvisor_platform = "ptrace" }
     }
   }
 

@@ -14,7 +14,10 @@ Read-only:
                  The server named NAME when Robot has it; otherwise the
                  product's monthly and setup price in LOCATION, primary IPv4
                  included, refused when either exceeds its ceiling.
-  server         stdin {name}: number and addresses of the server named NAME.
+  server         stdin {name, server_number, product, location}: number and
+                 addresses of the server named NAME, or, with server_number, of
+                 that server after checking it is on this account, a PRODUCT
+                 model in LOCATION and not cancelled.
   mac            stdin {name, record_path}: the MAC address the install
                  recorded for NAME, empty before the install.
   vswitch-id     stdin {name, vlan}: id of the vSwitch with that name and VLAN.
@@ -26,6 +29,9 @@ Changing (local-exec only):
                  server of that name, an order is recorded in OpenBao or one
                  is in process, and never past SERVER_LIMIT servers, another
                  product or a price ceiling. A test order goes first.
+  adopt          Takes over SERVER_NUMBER, a server a person ordered, as NAME:
+                 the same checks as server, then names it and records it in
+                 OpenBao. Never calls the order API.
   vswitch-ensure Creates the vSwitch VSWITCH_NAME on VLAN VSWITCH_VLAN unless it
                  exists.
   vswitch-attach Adds SERVER_NUMBER to VSWITCH_ID and waits until it is ready.
@@ -186,13 +192,58 @@ command_quote() {
   product_quote "$product" "$location" "$max_monthly" "$max_setup" | jq -c '. + {state: "to-order", server_number: ""}'
 }
 
+adopted_server() {
+  local number="$1" product_prefix="$2" location="$3" server product dc
+  [[ "$number" =~ ^[0-9]+$ ]] || fail "server_number ${number} is not a Robot server number"
+  robot_call GET "/server/${number}"
+  case "$ROBOT_STATUS" in
+    200) ;;
+    404) fail "Robot has no server ${number} on this account; refusing to adopt it" ;;
+    *) fail "GET /server/${number}: Robot answered HTTP ${ROBOT_STATUS} $(robot_error_code)" ;;
+  esac
+  server="$(jq -c '.server' <<<"$ROBOT_BODY")"
+  product="$(jq -r '.product // ""' <<<"$server")"
+  dc="$(jq -r '.dc // ""' <<<"$server")"
+  [[ "$product" == "${product_prefix}"* ]] || fail "server ${number} is a ${product:-server of unknown product}, not ${product_prefix}; refusing to adopt it"
+  [[ "${dc^^}" == "${location^^}"* ]] || fail "server ${number} is in ${dc:-an unknown datacenter}, not ${location}; refusing to adopt it"
+  [ "$(jq -r '.cancelled // false' <<<"$server")" = "false" ] || fail "server ${number} is cancelled; refusing to adopt it"
+  printf '%s' "$server"
+}
+
 command_server() {
   require_credentials
-  local name server
-  name="$(jq -r '.name')"
-  server="$(server_named "$(servers_json)" "$name")"
-  [ -n "$server" ] || fail "Robot has no server named ${name}; the order step names it"
-  jq -c '{server_number: (.server_number | tostring), server_ip: (.server_ip // ""), server_ipv6_net: (.server_ipv6_net // ""), status: .status}' <<<"$server"
+  local query name server number
+  query="$(cat)"
+  name="$(jq -r '.name' <<<"$query")"
+  number="$(jq -r '.server_number // ""' <<<"$query")"
+  if [ -n "$number" ]; then
+    server="$(adopted_server "$number" "$(jq -r '.product' <<<"$query")" "$(jq -r '.location' <<<"$query")")"
+  else
+    server="$(server_named "$(servers_json)" "$name")"
+    [ -n "$server" ] || fail "Robot has no server named ${name}; the order step names it"
+  fi
+  local record_path vendor
+  record_path="$(jq -r '.record_path // ""' <<<"$query")"
+  vendor=""
+  [ -z "$record_path" ] || vendor="$("$openbao_kv" get "$record_path" cpu_vendor)"
+  vendor="${vendor:-$(jq -r '.cpu_vendor // ""' <<<"$query")}"
+  [[ "$vendor" =~ ^(intel|amd)$ ]] || fail "the CPU vendor of ${name} is not known: the order records it, an adopted server declares it"
+  jq -c --arg vendor "$vendor" '{server_number: (.server_number | tostring), server_ip: (.server_ip // ""), server_ipv6_net: (.server_ipv6_net // ""), status: .status, cpu_vendor: $vendor}' <<<"$server"
+}
+
+command_adopt() {
+  require_credentials
+  for variable in NAME SERVER_NUMBER PRODUCT LOCATION RECORD_PATH CPU_VENDOR; do
+    [ -n "${!variable:-}" ] || fail "${variable} is not set"
+  done
+  local server
+  server="$(adopted_server "$SERVER_NUMBER" "$PRODUCT" "$LOCATION")"
+  say "adopting server ${SERVER_NUMBER} ($(jq -r '.product' <<<"$server"), $(jq -r '.dc' <<<"$server")) as ${NAME}; nothing is ordered"
+  record_put number server_number "$SERVER_NUMBER"
+  record_put cpu-vendor cpu_vendor "$CPU_VENDOR"
+  if [ "$(jq -r '.server_name // ""' <<<"$server")" != "$NAME" ]; then
+    name_server "$SERVER_NUMBER"
+  fi
 }
 
 command_mac() {
@@ -224,8 +275,8 @@ wait_for_transaction() {
   local transaction_id="$1" deadline status number
   deadline=$((SECONDS + ${ORDER_WAIT_SECONDS:-7200}))
   while :; do
-    robot_call GET "/order/server/transaction/${transaction_id}"
-    robot_expect "GET /order/server/transaction/${transaction_id}" 200
+    robot_call GET "/order/${catalogue}/transaction/${transaction_id}"
+    robot_expect "GET /order/${catalogue}/transaction/${transaction_id}" 200
     status="$(jq -r '.transaction.status' <<<"$ROBOT_BODY")"
     number="$(jq -r '.transaction.server_number // empty' <<<"$ROBOT_BODY")"
     case "$status" in
@@ -243,16 +294,97 @@ wait_for_transaction() {
 }
 
 in_process_orders() {
-  robot_call GET /order/server/transaction
+  local listed="[]" one
+  for one in server server_market; do
+    robot_call GET "/order/${one}/transaction"
+    case "$ROBOT_STATUS" in
+      200) listed="$(jq -c --argjson listed "$listed" --arg c "$one" '$listed + [.[].transaction | select(.status == "in process") | . + {catalogue: $c}]' <<<"$ROBOT_BODY")" ;;
+      404) ;;
+      *) fail "GET /order/${one}/transaction: Robot answered HTTP ${ROBOT_STATUS} $(robot_error_code)" ;;
+    esac
+  done
+  echo "$listed"
+}
+
+market_matches() {
+  jq -c --argjson c "$1" '
+    [ .[]
+      | . as $p
+      | (($p.orderable_addons // []) | map(select(.id == "primary_ipv4")) | first) as $ipv4
+      | (($ipv4.prices // []) | map(select(.location as $l | $p.datacenter | startswith($l))) | first // (($ipv4.prices // []) | first)) as $ipv4price
+      | select($ipv4price != null)
+      | ((($p.price | tonumber) + ($ipv4price.price.net | tonumber)) * 10000 | round / 10000) as $monthly
+      | select(($c.cpu_cores[$p.cpu] // 0) >= $c.min_cores)
+      | select($p.memory_size >= $c.min_memory_gb)
+      | select((([$p.hdd_text // ""] + ($p.description // [])) | join(" ")) | test($c.disk_type; "i"))
+      | select(any($c.datacenters[]; . as $d | $p.datacenter | startswith($d)))
+      | select(($p.price_setup | tonumber) <= $c.max_setup_eur)
+      | select($monthly <= $c.max_monthly_eur)
+      | {
+          product_id: ($p.id | tostring),
+          cpu: $p.cpu,
+          cpu_vendor: (if ($p.cpu | test("^AMD"; "i")) then "amd" else "intel" end),
+          memory_gb: ($p.memory_size | tostring),
+          disks: ((($p.description // []) | map(select(test("NVMe|SSD|HDD"; "i")))) | join("; ")),
+          datacenter: $p.datacenter,
+          monthly_net_eur: ($monthly | tostring),
+          setup_net_eur: (($p.price_setup | tonumber) + 0 | tostring)
+        }
+    ]
+    | sort_by((.monthly_net_eur | tonumber), (.product_id | tonumber))'
+}
+
+market_products() {
+  robot_call GET /order/server_market/product
   case "$ROBOT_STATUS" in
-    200) jq -c '[.[].transaction | select(.status == "in process")]' <<<"$ROBOT_BODY" ;;
+    200) jq -c '[.[].product]' <<<"$ROBOT_BODY" ;;
     404) echo '[]' ;;
-    *) fail "GET /order/server/transaction: Robot answered HTTP ${ROBOT_STATUS} $(robot_error_code)" ;;
+    *) fail "GET /order/server_market/product: Robot answered HTTP ${ROBOT_STATUS} $(robot_error_code)" ;;
   esac
 }
 
+command_auction_pick() {
+  require_credentials
+  local query name criteria record_path server pick
+  query="$(cat)"
+  name="$(jq -r '.name' <<<"$query")"
+  record_path="$(jq -r '.record_path' <<<"$query")"
+  criteria="$(jq -r '.criteria' <<<"$query")"
+  jq -e '.cpu_cores | type == "object"' <<<"$criteria" >/dev/null || fail "criteria hold no CPU allowlist"
+  server="$(server_named "$(servers_json)" "$name")"
+  if [ -n "$server" ]; then
+    jq -c '{state: "ordered", server_number: (.server_number | tostring), product_id: "", cpu: "", cpu_vendor: "", memory_gb: "", disks: "", datacenter: (.dc // ""), monthly_net_eur: "", setup_net_eur: ""}' <<<"$server"
+    return
+  fi
+  if [ -n "$("$openbao_kv" get "$record_path" transaction_id)" ]; then
+    jq -nc '{state: "ordering", server_number: "", product_id: "", cpu: "", cpu_vendor: "", memory_gb: "", disks: "", datacenter: "", monthly_net_eur: "", setup_net_eur: ""}'
+    return
+  fi
+  pick="$(market_products | market_matches "$criteria" | jq -c 'first // empty')"
+  if [ -z "$pick" ]; then
+    say "no server on the market matches the criteria for ${name}; nothing is ordered"
+    jq -nc '{state: "unavailable", server_number: "", product_id: "", cpu: "", cpu_vendor: "", memory_gb: "", disks: "", datacenter: "", monthly_net_eur: "", setup_net_eur: ""}'
+    return
+  fi
+  jq -c '. + {state: "to-order", server_number: ""}' <<<"$pick"
+}
+
+market_quote() {
+  local product_id="$1" criteria="$2" match
+  [[ "$product_id" =~ ^[0-9]+$ ]] || fail "${product_id} is not a server market id"
+  robot_call GET "/order/server_market/product/${product_id}"
+  case "$ROBOT_STATUS" in
+    200) ;;
+    404) fail "server market offer ${product_id} is gone (sold or withdrawn); nothing was ordered. The next plan picks another offer" ;;
+    *) fail "GET /order/server_market/product/${product_id}: Robot answered HTTP ${ROBOT_STATUS} $(robot_error_code)" ;;
+  esac
+  match="$(jq -c '[.product]' <<<"$ROBOT_BODY" | market_matches "$criteria" | jq -c 'first // empty')"
+  [ -n "$match" ] || fail "server market offer ${product_id} no longer meets the criteria (CPU allowlist, cores, memory, disks, datacenter, price); refusing to order it"
+  printf '%s' "$match"
+}
+
 finish_order() {
-  local transaction_id="$1" number
+  local transaction_id="$1" number catalogue="${ORDER_CATALOGUE:-server}"
   number="$(wait_for_transaction "$transaction_id")"
   record_put number server_number "$number"
   name_server "$number"
@@ -260,8 +392,14 @@ finish_order() {
 
 command_order() {
   require_credentials
-  local servers server number transaction_id orders matching key_fingerprint
-  for variable in NAME PRODUCT LOCATION MAX_MONTHLY_EUR MAX_SETUP_EUR SERVER_LIMIT METAL_NAME_PREFIX RECORD_PATH; do
+  local servers server number transaction_id orders matching key_fingerprint required
+  local catalogue="${ORDER_CATALOGUE:-server}"
+  case "$catalogue" in
+    server) required=(NAME PRODUCT LOCATION MAX_MONTHLY_EUR MAX_SETUP_EUR SERVER_LIMIT METAL_NAME_PREFIX RECORD_PATH CPU_VENDOR) ;;
+    server_market) required=(NAME PRODUCT CRITERIA SERVER_LIMIT METAL_NAME_PREFIX RECORD_PATH) ;;
+    *) fail "unknown ORDER_CATALOGUE ${catalogue}" ;;
+  esac
+  for variable in "${required[@]}"; do
     [ -n "${!variable:-}" ] || fail "${variable} is not set"
   done
 
@@ -282,7 +420,7 @@ command_order() {
   fi
 
   orders="$(in_process_orders)"
-  matching="$(jq -c --arg p "$PRODUCT" '[.[] | select(.product.id == $p)]' <<<"$orders")"
+  matching="$(jq -c --arg p "$PRODUCT" --arg c "$catalogue" '[.[] | select(.catalogue == $c and (.product.id | tostring) == $p)]' <<<"$orders")"
   case "$(jq 'length' <<<"$matching")" in
     0) ;;
     1)
@@ -301,28 +439,33 @@ command_order() {
   [ "$owned" -lt "$SERVER_LIMIT" ] \
     || fail "${owned} metal servers exist or are in process, and ${SERVER_LIMIT} are declared; refusing to order ${NAME}"
 
-  product_quote "$PRODUCT" "$LOCATION" "$MAX_MONTHLY_EUR" "$MAX_SETUP_EUR" >"${workdir}/quote.json"
-  say "ordering ${PRODUCT} in ${LOCATION} for ${NAME}: $(jq -r '.monthly_net_eur' "${workdir}/quote.json") EUR a month net with its IPv4 address, setup $(jq -r '.setup_net_eur' "${workdir}/quote.json")"
+  local order_fields=()
+  if [ "$catalogue" = server_market ]; then
+    market_quote "$PRODUCT" "$CRITERIA" >"${workdir}/quote.json"
+    CPU_VENDOR="$(jq -r '.cpu_vendor' "${workdir}/quote.json")"
+    say "ordering server market offer ${PRODUCT} for ${NAME}: $(jq -r '.cpu' "${workdir}/quote.json"), $(jq -r '.memory_gb' "${workdir}/quote.json") GB, $(jq -r '.datacenter' "${workdir}/quote.json"), $(jq -r '.monthly_net_eur' "${workdir}/quote.json") EUR a month net with its IPv4 address, setup $(jq -r '.setup_net_eur' "${workdir}/quote.json")"
+    order_fields=("product_id=${PRODUCT}")
+  else
+    product_quote "$PRODUCT" "$LOCATION" "$MAX_MONTHLY_EUR" "$MAX_SETUP_EUR" >"${workdir}/quote.json"
+    say "ordering ${PRODUCT} in ${LOCATION} for ${NAME}: $(jq -r '.monthly_net_eur' "${workdir}/quote.json") EUR a month net with its IPv4 address, setup $(jq -r '.setup_net_eur' "${workdir}/quote.json")"
+    order_fields=("product_id=${PRODUCT}" "location=${LOCATION}")
+  fi
 
   new_session_key "order-${NAME}"
   key_fingerprint="$session_key_fingerprint"
   keep_session_key_for_the_delivery
-  local order_fields=(
-    "product_id=${PRODUCT}"
-    "location=${LOCATION}"
-    "authorized_key[]=${key_fingerprint}"
-    "addon[]=primary_ipv4"
-  )
+  order_fields+=("authorized_key[]=${key_fingerprint}" "addon[]=primary_ipv4")
 
-  robot_call POST /order/server/transaction "${order_fields[@]}" "test=true"
+  robot_call POST "/order/${catalogue}/transaction" "${order_fields[@]}" "test=true"
   robot_expect "test order of ${PRODUCT}" 200 201
   say "Robot accepted the test order; placing the real one"
 
-  robot_call POST /order/server/transaction "${order_fields[@]}"
+  robot_call POST "/order/${catalogue}/transaction" "${order_fields[@]}"
   robot_expect "order of ${PRODUCT}" 200 201
   transaction_id="$(jq -r '.transaction.id // empty' <<<"$ROBOT_BODY")"
   [ -n "$transaction_id" ] || fail "Robot accepted the order but returned no transaction id; look in Robot before anything else"
   record_put robot-transaction transaction_id "$transaction_id"
+  record_put cpu-vendor cpu_vendor "$CPU_VENDOR"
   say "ordered: transaction ${transaction_id}"
   finish_order "$transaction_id"
 }
@@ -655,11 +798,13 @@ done
 
 case "${1:-}" in
   quote) command_quote ;;
+  auction-pick) command_auction_pick ;;
   server) command_server ;;
   mac) command_mac ;;
   vswitch-id) command_vswitch_id ;;
   status) shift; command_status "$@" ;;
   order) command_order ;;
+  adopt) command_adopt ;;
   vswitch-ensure) command_vswitch_ensure ;;
   vswitch-attach) command_vswitch_attach ;;
   firewall) command_firewall ;;

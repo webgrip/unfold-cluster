@@ -20,7 +20,13 @@ locals {
   metal_image_tag = {
     for key in ["installerImage", "diskImage"] : key => try(regex(":([^:@/]+)@sha256:", local.metal_image[key])[0], "")
   }
-  metal_installable = local.metal_image_pinned ? var.metal_servers : {}
+  metal_ordered    = { for name, server in var.metal_servers : name => server if server.mode == "order" }
+  metal_adopted    = { for name, server in var.metal_servers : name => server if server.mode == "adopt" && server.server_number != null }
+  metal_auctioned  = { for name, server in var.metal_servers : name => server if server.mode == "auction" }
+  metal_auction_on = { for name, server in local.metal_auctioned : name => server if data.external.metal_auction_pick[name].result.state != "unavailable" }
+  metal_active     = merge(local.metal_ordered, local.metal_adopted, local.metal_auction_on)
+
+  metal_installable = local.metal_image_pinned ? local.metal_active : {}
 
   metal_nodes = {
     for name, server in var.metal_servers : name => {
@@ -64,6 +70,13 @@ locals {
     ]
   }
 
+  metal_kvm_module = {
+    intel = "kvm_intel"
+    amd   = "kvm_amd"
+  }
+
+  metal_official_extensions = yamldecode(file("${path.module}/../talos/schematics/metal.yaml")).customization.systemExtensions.officialExtensions
+
   metal_install_patch = yamlencode({
     apiVersion = "v1alpha1"
     kind       = "UnattendedInstallConfig"
@@ -103,7 +116,7 @@ locals {
 }
 
 data "external" "metal_quote" {
-  for_each = var.metal_servers
+  for_each = local.metal_ordered
 
   program = [local.robot_program, "quote"]
   query = {
@@ -116,7 +129,7 @@ data "external" "metal_quote" {
 }
 
 resource "terraform_data" "metal_order" {
-  for_each = var.metal_servers
+  for_each = local.metal_ordered
 
   triggers_replace = [each.key]
 
@@ -155,19 +168,103 @@ resource "terraform_data" "metal_order" {
   }
 }
 
+data "external" "metal_auction_pick" {
+  for_each = local.metal_auctioned
+
+  program = [local.robot_program, "auction-pick"]
+  query = {
+    name        = each.key
+    record_path = "${local.metal_record_prefix}/${each.key}"
+    criteria    = jsonencode(each.value.auction)
+  }
+}
+
+check "metal_auction_offer" {
+  assert {
+    condition     = alltrue([for name in keys(local.metal_auctioned) : data.external.metal_auction_pick[name].result.state != "unavailable"])
+    error_message = "No server market offer meets the auction criteria of ${join(", ", [for name in keys(local.metal_auctioned) : name if data.external.metal_auction_pick[name].result.state == "unavailable"])}; nothing is ordered for it. A later plan picks one when the market has it, or the criteria change in a reviewed pull request."
+  }
+}
+
+resource "terraform_data" "metal_auction_order" {
+  for_each = local.metal_auction_on
+
+  triggers_replace = [each.key]
+
+  input = {
+    offer           = data.external.metal_auction_pick[each.key].result.product_id
+    cpu             = data.external.metal_auction_pick[each.key].result.cpu
+    memory_gb       = data.external.metal_auction_pick[each.key].result.memory_gb
+    disks           = data.external.metal_auction_pick[each.key].result.disks
+    datacenter      = data.external.metal_auction_pick[each.key].result.datacenter
+    monthly_net_eur = data.external.metal_auction_pick[each.key].result.monthly_net_eur
+    setup_net_eur   = data.external.metal_auction_pick[each.key].result.setup_net_eur
+    primary_ipv4    = true
+    quoted_state    = data.external.metal_auction_pick[each.key].result.state
+  }
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+
+  provisioner "local-exec" {
+    command = "${local.robot_program} order"
+    environment = {
+      ORDER_CATALOGUE    = "server_market"
+      NAME               = each.key
+      PRODUCT            = data.external.metal_auction_pick[each.key].result.product_id
+      CRITERIA           = jsonencode(each.value.auction)
+      SERVER_LIMIT       = tostring(length(var.metal_servers))
+      METAL_NAME_PREFIX  = local.metal_name_prefix
+      RECORD_PATH        = "${local.metal_record_prefix}/${each.key}"
+      ORDER_WAIT_SECONDS = "7200"
+      ORDER_POLL_SECONDS = "60"
+    }
+  }
+}
+
+resource "terraform_data" "metal_adoption" {
+  for_each = local.metal_adopted
+
+  triggers_replace = [each.key, each.value.server_number]
+
+  input = {
+    server_number = each.value.server_number
+    product       = each.value.product_prefix
+    location      = each.value.location
+  }
+
+  provisioner "local-exec" {
+    command = "${local.robot_program} adopt"
+    environment = {
+      NAME          = each.key
+      SERVER_NUMBER = tostring(each.value.server_number)
+      PRODUCT       = each.value.product_prefix
+      LOCATION      = each.value.location
+      CPU_VENDOR    = each.value.cpu_vendor
+      RECORD_PATH   = "${local.metal_record_prefix}/${each.key}"
+    }
+  }
+}
+
 data "external" "metal_server" {
-  for_each = var.metal_servers
+  for_each = local.metal_active
 
   program = [local.robot_program, "server"]
   query = {
-    name = each.key
+    name          = each.key
+    server_number = each.value.server_number == null ? "" : tostring(each.value.server_number)
+    product       = each.value.mode == "adopt" ? each.value.product_prefix : each.value.product == null ? "" : each.value.product
+    location      = each.value.location == null ? "" : each.value.location
+    cpu_vendor    = each.value.cpu_vendor == null ? "" : each.value.cpu_vendor
+    record_path   = "${local.metal_record_prefix}/${each.key}"
   }
 
-  depends_on = [terraform_data.metal_order]
+  depends_on = [terraform_data.metal_order, terraform_data.metal_auction_order]
 }
 
 resource "terraform_data" "robot_vswitch" {
-  count = length(var.metal_servers) > 0 ? 1 : 0
+  count = length(local.metal_active) > 0 ? 1 : 0
 
   triggers_replace = [local.metal_vswitch_name, var.metal_vswitch_vlan]
 
@@ -181,7 +278,7 @@ resource "terraform_data" "robot_vswitch" {
 }
 
 data "external" "robot_vswitch" {
-  count = length(var.metal_servers) > 0 ? 1 : 0
+  count = length(local.metal_active) > 0 ? 1 : 0
 
   program = [local.robot_program, "vswitch-id"]
   query = {
@@ -193,7 +290,7 @@ data "external" "robot_vswitch" {
 }
 
 resource "terraform_data" "metal_vswitch_membership" {
-  for_each = var.metal_servers
+  for_each = local.metal_active
 
   triggers_replace = [data.external.metal_server[each.key].result.server_number, data.external.robot_vswitch[0].result.id]
 
@@ -209,7 +306,7 @@ resource "terraform_data" "metal_vswitch_membership" {
 }
 
 resource "terraform_data" "metal_robot_firewall" {
-  for_each = var.metal_servers
+  for_each = local.metal_active
 
   triggers_replace = [data.external.metal_server[each.key].result.server_number, sha256(jsonencode(local.metal_robot_firewall))]
 
@@ -241,6 +338,11 @@ resource "terraform_data" "metal_install" {
 
   lifecycle {
     precondition {
+      condition     = contains(local.metal_official_extensions, "siderolabs/${data.external.metal_server[each.key].result.cpu_vendor}-ucode")
+      error_message = "${each.key} has a ${data.external.metal_server[each.key].result.cpu_vendor} CPU, but talos/schematics/metal.yaml, the metal image's extension list, carries no siderolabs/${data.external.metal_server[each.key].result.cpu_vendor}-ucode."
+    }
+
+    precondition {
       condition     = startswith(local.metal_image_tag.installerImage, "${local.talos_version}-")
       error_message = "talos/metal-image.yaml must pin an installer whose tag starts with Talos ${local.talos_version} from talos/talenv.yaml."
     }
@@ -265,7 +367,7 @@ resource "terraform_data" "metal_install" {
     }
   }
 
-  depends_on = [terraform_data.metal_robot_firewall, terraform_data.metal_vswitch_membership]
+  depends_on = [terraform_data.metal_robot_firewall, terraform_data.metal_vswitch_membership, terraform_data.metal_adoption]
 }
 
 data "external" "metal_link" {
@@ -356,6 +458,11 @@ locals {
     for name, server in local.metal_installable : name => concat(
       local.disk_encryption_patches[name],
       local.gvisor_runtime_patches[server.gvisor_platform],
+      [yamlencode({
+        apiVersion = "v1alpha1"
+        kind       = "KernelModuleConfig"
+        name       = local.metal_kvm_module[data.external.metal_server[name].result.cpu_vendor]
+      })],
       [local.metal_tailscale_patch[name], local.metal_registry_auth_patch],
       module.metal_node_patches[name].patches,
     )
