@@ -28,7 +28,7 @@
     },
     {
       "action": "accept",
-      "src": ["tag:node"],
+      "src": ["tag:cp"],
       "dst": ["tag:homelab-gateway:9150"]
     },
     {
