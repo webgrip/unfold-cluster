@@ -1,0 +1,46 @@
+---
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: webgrip-image-signatures
+spec:
+  validationActions:
+    - Audit
+    - Warn
+  failurePolicy: Ignore
+  webhookConfiguration:
+    timeoutSeconds: 15
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    - glob: "ghcr.io/webgrip/*"
+    - glob: "forgejo.webgrip.dev/webgrip/*"
+    - glob: "harbor.webgrip.dev/webgrip/*"
+  credentials:
+    allowInsecureRegistry: false
+  validationConfigurations:
+    required: true
+    verifyDigest: true
+    mutateDigest: false
+  attestors:
+    - name: webgrip
+      cosign:
+        key:
+          data: |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENZNMVrjnz1b/6v+HBD4met8g6cPZ
+            Q0uB6SKChV5S9xn8YD1nD6R1wJzmsNbhn3UQzcX3yJfWH7CnpTle0gSS9g==
+            -----END PUBLIC KEY-----
+        ctlog:
+          insecureIgnoreTlog: true
+          insecureIgnoreSCT: true
+  validations:
+    - expression: >-
+        images.containers.all(image, verifyImageSignatures(image, [attestors.webgrip]) > 0)
+        && images.?initContainers.orValue([]).all(image, verifyImageSignatures(image, [attestors.webgrip]) > 0)
+        && images.?ephemeralContainers.orValue([]).all(image, verifyImageSignatures(image, [attestors.webgrip]) > 0)
+      message: every webgrip image must carry a cosign signature from the estate's signing key (OpenBao Transit cosign-webgrip)

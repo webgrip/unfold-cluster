@@ -6,7 +6,7 @@ Unfold collects its own metrics and logs and sends them to the homelab over the 
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| vmagent | Unfold, `observability`, Deployment | Scrapes the API servers, kubelets and cAdvisor, etcd (`:2383` on the control planes), node-exporter, kube-state-metrics, Cilium agent and operator, Hubble, CoreDNS, the Flux controllers and Vector. Adds `cluster=unfold`. Remote-writes to `http://unfold-gateway.webgrip.dev:8427/api/v1/write`. Buffers up to 1.8 GB in an emptyDir, which covers a homelab outage of many hours at this cluster's size. |
+| vmagent | Unfold, `observability`, Deployment | Scrapes the API servers, kubelets and cAdvisor, etcd (`:2383` on the control planes), node-exporter, kube-state-metrics, Cilium agent and operator, Hubble, CoreDNS, the Flux controllers, Vector, the Trivy operator and its report shipper ([vulnerability-scanning](runbooks/vulnerability-scanning.md)) and the Kyverno controllers ([image-signatures](runbooks/image-signatures.md)). Adds `cluster=unfold`. Remote-writes to `http://unfold-gateway.webgrip.dev:8427/api/v1/write`. Buffers up to 1.8 GB in an emptyDir, which covers a homelab outage of many hours at this cluster's size. |
 | Vector | Unfold, `observability`, DaemonSet, host network | Reads pod logs from `/var/log/pods`, Talos service logs on `127.0.0.1:6050` and kernel logs on `127.0.0.1:6051` (JSON lines from Talos `machine.logging` and `KmsgLogConfig`), the API server audit log `/var/log/audit/kube/*.log` on the control planes, Hubble's egress flow log `/var/log/hubble/egress-flows.log` ([egress by name](runbooks/egress-by-name.md#flow-evidence)), and Tetragon's event file `/var/log/tetragon/tetragon.log` as `source=tetragon` ([runtime security](runbooks/runtime-security.md)). Sends them to the gateway's `/insert/jsonline` and `/audit/insert/jsonline`. Buffers 2 GiB of logs and 1 GiB of audit events per node under `/var/lib/vector`. |
 | node-exporter, kube-state-metrics | Unfold, `observability`, Helm charts | The usual node and object metrics. |
 | Talos patches | `infra/log-shipping.tf`, `infra/metrics-ports.tf`, `infra/host-firewall.tf` | Log destinations, and host firewall rules that open the scraped ports to the pod network only. |
@@ -17,7 +17,7 @@ Unfold collects its own metrics and logs and sends them to the homelab over the 
 
 ## Who may connect
 
-The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets `tag:cp` and `tag:node` open `tag:homelab-gateway` on 8200 and 8427, and `tag:node` alone on 9150, and nothing else; besides them only the devices people register (`autogroup:member`) reach those ports, and only the Headscale server (`tag:headscale`) reaches 443, Authentik's way in ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only the vmagent, External Secrets and KEDA operator pods have a Cilium egress rule to the gateway name, and Vector runs on the host network. Metrics and logs carry no bearer token yet; External Secrets now exists on Unfold, so a vmauth token minted in the homelab can follow.
+The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets every node role open `tag:homelab-gateway` on 8427 (Vector ships each node's logs from its host network), and `tag:cp` alone on 8200 and 9150 (External Secrets and KEDA run only on the control planes), and nothing else ([node roles](runbooks/infra-workflow.md#node-roles-on-the-tailnet)); besides them only the devices people register (`autogroup:member`) reach those ports, and only the Headscale server (`tag:headscale`) reaches 443, Authentik's way in ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only the vmagent, External Secrets and KEDA operator pods have a Cilium egress rule to the gateway name, and Vector runs on the host network. Metrics and logs carry no bearer token yet; External Secrets now exists on Unfold, so a vmauth token minted in the homelab can follow.
 
 ## How the policy and the key get there, with nobody typing them
 
@@ -46,7 +46,7 @@ On Unfold: `kubectl get clustersecretstore openbao-homelab` shows `Ready`.
 
 ## Alerts
 
-vmalert-unfold evaluates `vmrule-unfold.yaml` in the homelab: Unfold stopped sending (only once it has sent in the last 7 days, so an unfinished setup does not page), node NotReady, no API server answering, etcd without a leader or near its quota, Flux resources not Ready, kubelet, client and cert-manager certificates close to expiry, no successful etcd backup for 7 hours, and growing send buffers.
+vmalert-unfold evaluates `vmrule-unfold-cluster.yaml` and `vmrule-unfold-supply-chain.yaml` (vulnerabilities, secrets in images, unsigned webgrip images; see [vulnerability-scanning](runbooks/vulnerability-scanning.md#alerts-homelab-vmalert-unfold-vmrule-unfold-supply-chainyaml)) in the homelab: Unfold stopped sending (only once it has sent in the last 7 days, so an unfinished setup does not page), node NotReady, no API server answering, etcd without a leader or near its quota, Flux resources not Ready, kubelet, client and cert-manager certificates close to expiry, no successful etcd backup for 7 hours, and growing send buffers.
 
 ## Known limits
 

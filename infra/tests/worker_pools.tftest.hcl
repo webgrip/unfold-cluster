@@ -155,7 +155,7 @@ run "a_new_key_generation_asks_for_a_new_worker_key_instead_of_the_stored_one" {
   assert {
     condition = alltrue([
       for name, server in hcloud_server.worker :
-      data.external.worker_tailnet_key[name].query.request == "worker ${server.id}20261102"
+      data.external.worker_tailnet_key[name].query.request == "worker ${server.id}20261102 ${local.worker_tailnet_tag[name]}"
     ])
     error_message = "after a generation bump each worker asks for the key slot of that generation, which unfold-headscale has not filled yet, so it mints a fresh key instead of returning the expired one it stored"
   }

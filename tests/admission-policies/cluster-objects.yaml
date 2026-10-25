@@ -60,3 +60,22 @@ kind: RuntimeClass
 metadata:
   name: kata
 handler: kata
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trivy-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cluster-autoscaler
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ci-runner
+value: -5
+preemptionPolicy: Never

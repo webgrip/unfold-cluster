@@ -16,6 +16,7 @@ on:
       - kubernetes/platform/flux-operator/**
       - kubernetes/platform/flux-instance/**
       - kubernetes/platform/etcd-backup/namespace.yaml
+      - kubernetes/platform/cluster-autoscaler/**
       - scripts/write-cluster-secrets.sh
       - scripts/encrypt-node.sh
       - scripts/disk-kms-key.sh

@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-25
 ---
 
-# ADR 0010: Tetragon alone detects at runtime, on every node, in monitor mode first
+# ADR 0012: Tetragon alone detects at runtime, on every node, in monitor mode first
 
 ## Context and problem statement
 

@@ -27,7 +27,7 @@ variable "control_plane_server_type" {
 }
 
 variable "worker_pools" {
-  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33. ci is the CI worker of RFC 0001 step 13, a CX43 (8 vCPU, 16 GB) in Nuremberg because Falkenstein had no CX43 to place on 2026-10-25, whose CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
+  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33; until the Unfold application or the metal node takes its place, it also runs up to two CI jobs under gVisor, the baseline that needs no cold node (docs/adr/0004-ci-baseline-on-the-hub-and-autoscaled-overflow.md). ci is the CI pool of RFC 0001 step 13; it has no fixed node (node_count 0) and the cluster-autoscaler grows it from zero with CPX42 servers in Nuremberg when CI overflows the hub worker (autoscaled_worker_pools); its CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
   type = map(object({
     server_type = string
     location    = optional(string)
@@ -43,7 +43,7 @@ variable "worker_pools" {
       node_count  = 1
       name_prefix = "unfold-app"
       first_host  = 21
-      labels      = { "node.webgrip.io/pool" = "unfold" }
+      labels      = { "node.webgrip.io/pool" = "unfold", "runtime.webgrip.io/gvisor" = "true" }
       taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
     }
     ci = {
@@ -98,24 +98,31 @@ variable "admin_cidrs" {
 }
 
 variable "metal_servers" {
-  description = "The Robot dedicated servers the cluster runs on, by node name. The apply orders each one through the Robot webservice once, only inside an apply whose reviewed plan shows the order, and refuses another product, a location the product is not sold in, more servers than are declared here, a monthly price (net, the primary IPv4 address included) above max_monthly_eur or a setup fee above max_setup_eur. It then puts the server on the vSwitch, sets its Robot firewall and installs Talos from the rescue system. Raising install_generation is the reviewed way to wipe and reinstall a node; nothing else reinstalls one that runs Talos. gvisor_platform is kvm on bare metal, systrap the fallback. Cancelling a server stays a person's act in Robot (docs/runbooks/metal-node.md)."
+  description = "The Robot dedicated servers the cluster runs on, by node name, in one of three modes. auction: the plan picks the cheapest server on Hetzner's server market that meets the declared criteria (CPU allowlist with core counts, memory, disk type, datacenters, a monthly ceiling net with the primary IPv4 address, a setup ceiling) and shows it; the apply orders exactly that offer once, re-checking it first, and fails without ordering when it was sold in between. order: a product Robot's order API sells, ordered once within max_monthly_eur and max_setup_eur. adopt: a server a person ordered, taken over by server_number after GET /server shows it on this account, a product starting with product_prefix, in location and not cancelled; while server_number is null the node is skipped. Every mode refuses more servers than are declared, keeps its order in OpenBao so nothing is bought twice, and never orders when a server with the node's name exists. The apply then puts the server on the vSwitch, sets its Robot firewall and installs Talos from the rescue system; raising install_generation is the reviewed way to wipe and reinstall a node. cpu_vendor (intel or amd) is declared for order and adopt and comes from the bought CPU for auction; it picks the KVM module. gvisor_platform is kvm, systrap the fallback. Cancelling stays a person's act in Robot (docs/runbooks/metal-node.md)."
   type = map(object({
-    product            = string
-    location           = string
-    max_monthly_eur    = number
+    mode           = optional(string, "order")
+    server_number  = optional(number)
+    product        = optional(string)
+    product_prefix = optional(string)
+    cpu_vendor     = optional(string)
+    location       = optional(string)
+    auction = optional(object({
+      cpu_cores       = map(number)
+      min_cores       = number
+      min_memory_gb   = number
+      disk_type       = string
+      datacenters     = list(string)
+      max_monthly_eur = number
+      max_setup_eur   = optional(number, 0)
+    }))
+    max_monthly_eur    = optional(number, 0)
     max_setup_eur      = optional(number, 0)
     private_host       = number
     install_generation = optional(number, 1)
     gvisor_platform    = optional(string, "kvm")
   }))
-  default = {
-    "unfold-metal-1" = {
-      product         = "AX41-NVMe"
-      location        = "FSN1"
-      max_monthly_eur = 65
-      private_host    = 31
-    }
-  }
+  nullable = false
+  default  = {}
 
   validation {
     condition     = alltrue([for name in keys(var.metal_servers) : can(regex("^unfold-metal-[0-9]+$", name))])
@@ -123,13 +130,57 @@ variable "metal_servers" {
   }
 
   validation {
-    condition     = alltrue([for server in values(var.metal_servers) : contains(["FSN1", "NBG1"], server.location)])
-    error_message = "A metal server lives in FSN1 or NBG1, where the vSwitch reaches the Cloud Network's eu-central zone."
+    condition     = alltrue([for server in values(var.metal_servers) : contains(["order", "adopt", "auction"], server.mode)])
+    error_message = "mode is auction (the apply buys the cheapest matching server market offer), order (a product Robot's order API sells) or adopt (a person ordered it; the apply takes it over by server_number)."
   }
 
   validation {
-    condition     = alltrue([for server in values(var.metal_servers) : server.max_monthly_eur > 0 && server.max_monthly_eur <= 100 && server.max_setup_eur >= 0 && server.max_setup_eur <= 100])
-    error_message = "Each metal server declares a price ceiling between 0 and 100 EUR a month and a setup ceiling no higher than 100 EUR; a larger purchase is a decision for a person, not a variable."
+    condition = alltrue([for server in values(var.metal_servers) : (
+      server.mode == "adopt" ? try(length(server.product_prefix) > 0, false) :
+      server.mode == "order" ? try(length(server.product) > 0, false) :
+      server.auction != null
+    )])
+    error_message = "An adopted server declares product_prefix (EX44), an ordered one product (the exact Robot product id), an auctioned one its auction criteria."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.mode == "auction" ? server.cpu_vendor == null : contains(["intel", "amd"], coalesce(server.cpu_vendor, "unset"))])
+    error_message = "cpu_vendor is intel or amd for order and adopt; for auction it comes from the CPU of the offer bought, so it is not declared."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.mode == "auction" || contains(["FSN1", "NBG1", "HEL1"], coalesce(server.location, "unset"))])
+    error_message = "A metal server lives in FSN1, NBG1 or HEL1, Hetzner's eu-central zone, where the vSwitch reaches the Cloud Network."
+  }
+
+  validation {
+    condition = alltrue([for server in values(var.metal_servers) : server.mode != "auction" || (
+      length(server.auction.cpu_cores) > 0 &&
+      alltrue([for cores in values(server.auction.cpu_cores) : cores >= server.auction.min_cores]) &&
+      length(server.auction.datacenters) > 0 &&
+      alltrue([for dc in server.auction.datacenters : contains(["FSN1", "NBG1", "HEL1"], dc)]) &&
+      server.auction.min_memory_gb >= 8
+    )])
+    error_message = "Auction criteria name at least one CPU, each with at least min_cores cores, and only eu-central datacenters (FSN1, NBG1, HEL1)."
+  }
+
+  validation {
+    condition = alltrue([for server in values(var.metal_servers) : (
+      server.mode == "adopt" ? true :
+      server.mode == "order" ? server.max_monthly_eur > 0 && server.max_monthly_eur <= 100 && server.max_setup_eur >= 0 && server.max_setup_eur <= 100 :
+      server.auction.max_monthly_eur > 0 && server.auction.max_monthly_eur <= 100 && server.auction.max_setup_eur >= 0 && server.auction.max_setup_eur <= 100
+    )])
+    error_message = "Each bought server has a price ceiling between 0 and 100 EUR a month and a setup ceiling no higher than 100 EUR; a larger purchase is a decision for a person, not a variable."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.mode == "adopt" || server.server_number == null])
+    error_message = "server_number is only for mode adopt; a bought server is found by its name."
+  }
+
+  validation {
+    condition     = alltrue([for server in values(var.metal_servers) : server.server_number == null ? true : server.server_number > 0 && floor(server.server_number) == server.server_number])
+    error_message = "server_number is the Robot server number, a positive whole number."
   }
 
   validation {
@@ -180,6 +231,24 @@ variable "hcloud_cluster_token" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "hcloud_autoscaler_token" {
+  description = "Hetzner Cloud API token of the cluster-autoscaler, read from OpenBao secret/hetzner/unfold-autoscaler HCLOUD_TOKEN_AUTOSCALER. A fourth token, so the one that creates and deletes servers can be revoked alone. The apply writes it, with the worker config the autoscaler boots new nodes with, to the Secret cluster-autoscaler/cluster-autoscaler-hcloud. Empty writes nothing, and the autoscaler waits for its Secret (docs/runbooks/ci-autoscaler.md)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "autoscaled_worker_pools" {
+  description = "The worker pools the cluster-autoscaler grows from zero. Each names a pool in worker_pools, whose labels, taints and gVisor config its nodes boot with; the node group's server type, location and size live in the cluster-autoscaler HelmRelease (kubernetes/platform/cluster-autoscaler)."
+  type        = set(string)
+  default     = ["ci"]
+
+  validation {
+    condition     = alltrue([for pool in var.autoscaled_worker_pools : contains(keys(var.worker_pools), pool)])
+    error_message = "An autoscaled pool must be a pool in worker_pools, which holds its labels and taints."
+  }
 }
 
 variable "hcloud_vip_token" {
@@ -283,9 +352,9 @@ variable "disk_encryption_kms_endpoint" {
 }
 
 variable "disk_encryption_nodes" {
-  description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so adding a running cloud node here re-installs it: the apply drains it, takes a control plane out of etcd, wipes both volumes and applies the encrypted config (disk-encryption-rollout.tf). One running node per reviewed plan; scripts/guard-encryption-rollout.sh refuses more. A node created while listed is encrypted from its first boot. See docs/disk-encryption.md."
+  description = "Nodes whose STATE and EPHEMERAL volumes are encrypted. Talos encrypts a volume only when it formats it and refuses to mount a plain volume once encryption is configured, so adding a running cloud node here re-installs it: the apply drains it, takes a control plane out of etcd, wipes both volumes and applies the encrypted config (disk-encryption-rollout.tf). One running node per reviewed plan; scripts/guard-encryption-rollout.sh refuses more. A node created while listed is encrypted from its first boot. Every declared metal node is encrypted from its first install without being listed (local.encrypted_nodes). See docs/disk-encryption.md."
   type        = set(string)
-  default     = ["unfold-metal-1"]
+  default     = []
 
   validation {
     condition     = alltrue([for name in var.disk_encryption_nodes : contains(keys(local.cluster_nodes), name)])

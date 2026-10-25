@@ -1,6 +1,6 @@
 # Runtime security
 
-Tetragon watches every node's kernel and records process starts, credential reads, writes to node paths, privilege raises, kernel module loads, outbound connects and ptrace, mount and setns calls. The events go to the homelab VictoriaLogs, where LogsQL rules alert on the ones that should never happen. Nothing is blocked yet: every policy runs in `monitor` mode. Why Tetragon and not Falco, and what it cannot see, is [ADR 0010](../adr/0010-runtime-detection-with-tetragon-alone.md). This is RFC 0001 section 9 and delivery step 12.
+Tetragon watches every node's kernel and records process starts, credential reads, writes to node paths, privilege raises, kernel module loads, outbound connects and ptrace, mount and setns calls. The events go to the homelab VictoriaLogs, where LogsQL rules alert on the ones that should never happen. Nothing is blocked yet: every policy runs in `monitor` mode. Why Tetragon and not Falco, and what it cannot see, is [ADR 0012](../adr/0012-runtime-detection-with-tetragon-alone.md). This is RFC 0001 section 9 and delivery step 12.
 
 ## What runs where
 

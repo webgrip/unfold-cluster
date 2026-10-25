@@ -172,3 +172,44 @@ scrape_configs:
         target_label: controller
       - source_labels: [__meta_kubernetes_pod_name]
         target_label: pod
+
+  - job_name: trivy-operator
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - trivy-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_number]
+        regex: trivy-operator;8080
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  - job_name: trivy-report-shipper
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - trivy-system
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_name]
+        regex: trivy-report-shipper;metrics
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  - job_name: kyverno
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - kyverno
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_part_of, __meta_kubernetes_pod_container_port_number]
+        regex: kyverno;8000
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        target_label: component
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod

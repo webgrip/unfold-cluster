@@ -241,7 +241,7 @@ data "talos_client_configuration" "cluster" {
   cluster_name         = local.cluster_name
   client_configuration = talos_machine_secrets.cluster.client_configuration
   endpoints            = [for server in hcloud_server.control_plane : server.ipv4_address]
-  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.worker : server.ipv4_address], [for name in keys(var.metal_servers) : data.external.metal_server[name].result.server_ip])
+  nodes                = concat([for server in hcloud_server.control_plane : server.ipv4_address], [for server in hcloud_server.worker : server.ipv4_address], [for name in keys(local.metal_active) : data.external.metal_server[name].result.server_ip])
 }
 
 resource "talos_cluster_kubeconfig" "cluster" {

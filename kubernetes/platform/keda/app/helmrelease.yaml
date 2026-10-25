@@ -26,24 +26,11 @@ spec:
   values:
     crds:
       install: true
-    affinity:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: node.webgrip.io/pool
-                  operator: In
-                  values:
-                    - ci
-                    - metal
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
     tolerations:
-      - key: node.webgrip.io/pool
-        operator: Equal
-        value: ci
-        effect: NoSchedule
-      - key: node.webgrip.io/pool
-        operator: Equal
-        value: metal
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
         effect: NoSchedule
     http:
       timeout: 30000

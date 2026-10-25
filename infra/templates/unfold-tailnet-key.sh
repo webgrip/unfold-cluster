@@ -3,7 +3,7 @@ set -eu
 
 readonly usage="usage: unfold-tailnet-key renew
        unfold-tailnet-key control-plane read|mint
-       unfold-tailnet-key worker SERVER_ID read|mint
+       unfold-tailnet-key worker SLOT TAG read|mint
        unfold-tailnet-key gateway GENERATION read|mint
        unfold-tailnet-key policy set < policy.hujson
        unfold-tailnet-key config set < config.yaml
@@ -12,6 +12,7 @@ readonly usage="usage: unfold-tailnet-key renew
        unfold-tailnet-key idp reconcile
        unfold-tailnet-key install < unfold-tailnet-key
        unfold-tailnet-key nodes list
+       unfold-tailnet-key nodes tag NAME TAG
 
 renew                    make sure the control planes' reusable tag:cp pre-auth key
                          has more than RENEW_WHEN_DAYS_LEFT days left, creating the
@@ -19,10 +20,11 @@ renew                    make sure the control planes' reusable tag:cp pre-auth 
                          the key it replaces
 control-plane read       print the control planes' key, or nothing when there is none
 control-plane mint       renew, check Headscale's public health endpoint, print the key
-worker SERVER_ID read    print the single-use tag:node key made for that Hetzner
-                         server, or nothing when none was made
-worker SERVER_ID mint    the same, first making the key when none was made: one per
-                         server, expiring after WORKER_KEY_LIFETIME_HOURS
+worker SLOT TAG read     print the single-use TAG key made for that key slot (a
+                         server id and a key generation), or nothing when none was
+                         made; TAG is one of WORKER_TAGS, the worker's pool role
+worker SLOT TAG mint     the same, first making the key when none was made: one per
+                         slot and tag, expiring after WORKER_KEY_LIFETIME_HOURS
 gateway GENERATION read  print the single-use GATEWAY_TAG key made for that
                          generation of the homelab gateway, or nothing
 gateway GENERATION mint  the same, first making the key when none was made
@@ -52,15 +54,21 @@ idp reconcile            join this server to its own tailnet as HEADSCALE_TAG wi
 install                  replace this program with the one on stdin after a
                          syntax check, when it differs
 nodes list               print the nodes Headscale knows as JSON, name and
-                         whether it is online, and nothing else"
+                         whether it is online, and nothing else
+nodes tag NAME TAG       give every node named NAME the tag TAG and no other, so a
+                         node that joined with an earlier role's key takes its pool's
+                         role without logging in again; TAG is CONTROL_PLANE_TAG or
+                         one of WORKER_TAGS, and a node not on the tailnet yet is
+                         left to the key it will join with"
 
 settings_file="${UNFOLD_TAILNET_SETTINGS:-/etc/unfold-tailnet/settings.env}"
 # shellcheck source=/dev/null
 . "$settings_file"
 
-: "${NODE_USER:?}" "${ADMIN_USER:?}" "${CONTROL_PLANE_TAG:?}" "${WORKER_TAG:?}"
+: "${NODE_USER:?}" "${ADMIN_USER:?}" "${CONTROL_PLANE_TAG:?}"
 : "${CONTROL_PLANE_KEY_LIFETIME_HOURS:?}" "${RENEW_WHEN_DAYS_LEFT:?}" "${WORKER_KEY_LIFETIME_HOURS:?}"
 : "${STATE_DIR:?}" "${HEALTH_URL:?}" "${HEALTH_CONNECT_TO:?}"
+: "${WORKER_TAGS:=tag:hub tag:ci tag:runs tag:metal}"
 : "${GATEWAY_TAG:=tag:homelab-gateway}"
 : "${GATEWAY_KEY_LIFETIME_HOURS:=168}"
 : "${POLICY_PATH:=/etc/headscale/acl.hujson}"
@@ -145,17 +153,28 @@ renew_control_plane_key() {
 }
 
 worker_key_file() {
-  echo "${STATE_DIR}/workers/${1}.authkey"
+  echo "${STATE_DIR}/workers/${1}-${2#tag:}.authkey"
 }
 
 create_worker_key() {
   mkdir -p "${STATE_DIR}/workers"
   key_from "$(headscale preauthkeys create \
     --user "$(user_id "$NODE_USER")" \
-    --tags "$WORKER_TAG" \
+    --tags "$2" \
     --expiration "${WORKER_KEY_LIFETIME_HOURS}h" \
-    -o json)" >"$(worker_key_file "$1").new"
-  mv "$(worker_key_file "$1").new" "$(worker_key_file "$1")"
+    -o json)" >"$(worker_key_file "$1" "$2").new"
+  mv "$(worker_key_file "$1" "$2").new" "$(worker_key_file "$1" "$2")"
+}
+
+is_worker_tag() {
+  for allowed in $WORKER_TAGS; do
+    [ "$1" = "$allowed" ] && return 0
+  done
+  return 1
+}
+
+is_node_tag() {
+  [ "$1" = "$CONTROL_PLANE_TAG" ] || is_worker_tag "$1"
 }
 
 gateway_key_file() {
@@ -485,6 +504,27 @@ install_self() {
   echo "program installed"
 }
 
+tag_node() {
+  name="$1"
+  tag="$2"
+  nodes="$(headscale nodes list -o json)"
+  if ! printf '%s' "$nodes" | jq -e --arg name "$name" '[(. // [])[] | select(.name == $name or .given_name == $name)] | length > 0' >/dev/null; then
+    echo "${name} is not on the tailnet yet; it joins with a ${tag} key"
+    return
+  fi
+  retag_ids="$(printf '%s' "$nodes" | jq -r --arg name "$name" --arg tag "$tag" \
+    '(. // [])[] | select(.name == $name or .given_name == $name) | select((.tags // []) != [$tag]) | .id')"
+  if [ -z "$retag_ids" ]; then
+    echo "${name} already has ${tag}"
+    return
+  fi
+  for id in $retag_ids; do
+    headscale nodes tag --identifier "$id" --tags "$tag" -o json >/dev/null \
+      || fail "headscale refused ${tag} for ${name} (node ${id})"
+  done
+  echo "${name} now has ${tag}"
+}
+
 list_nodes() {
   headscale nodes list -o json | jq -c '[(. // [])[] | {name: (.given_name // .name), online: (.online // false)}] | sort_by(.name)'
 }
@@ -510,12 +550,14 @@ case "$mode" in
     action="$2"
     ;;
   worker)
-    [ "$#" -eq 3 ] || usage_error
+    [ "$#" -eq 4 ] || usage_error
     server_id="$2"
-    action="$3"
+    worker_tag="$3"
+    action="$4"
     case "$server_id" in
       '' | *[!0-9]*) usage_error ;;
     esac
+    is_worker_tag "$worker_tag" || usage_error
     ;;
   gateway)
     [ "$#" -eq 3 ] || usage_error
@@ -548,14 +590,23 @@ case "$mode" in
     [ "$#" -eq 1 ] || usage_error
     ;;
   nodes)
-    [ "$#" -eq 2 ] || usage_error
+    [ "$#" -ge 2 ] || usage_error
     action="$2"
-    [ "$action" = "list" ] || usage_error
+    case "$action/$#" in
+      list/2) ;;
+      tag/4)
+        node_name="$3"
+        node_tag="$4"
+        printf '%s' "$node_name" | grep -qE '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' || usage_error
+        is_node_tag "$node_tag" || usage_error
+        ;;
+      *) usage_error ;;
+    esac
     ;;
   *) usage_error ;;
 esac
 case "${action:-renew}" in
-  renew | read | mint | set | list | apply | reconcile) ;;
+  renew | read | mint | set | list | tag | apply | reconcile) ;;
   *) usage_error ;;
 esac
 
@@ -579,15 +630,15 @@ case "$mode/${action:-}" in
     cat "$key_file"
     ;;
   worker/read)
-    print_if_present "$(worker_key_file "$server_id")"
+    print_if_present "$(worker_key_file "$server_id" "$worker_tag")"
     ;;
   worker/mint)
-    if [ ! -s "$(worker_key_file "$server_id")" ]; then
+    if [ ! -s "$(worker_key_file "$server_id" "$worker_tag")" ]; then
       require_headscale
       require_public_health
-      create_worker_key "$server_id"
+      create_worker_key "$server_id" "$worker_tag"
     fi
-    cat "$(worker_key_file "$server_id")"
+    cat "$(worker_key_file "$server_id" "$worker_tag")"
     ;;
   gateway/read)
     print_if_present "$(gateway_key_file "$generation")"
@@ -621,5 +672,9 @@ case "$mode/${action:-}" in
   nodes/list)
     require_headscale
     list_nodes
+    ;;
+  nodes/tag)
+    require_headscale
+    tag_node "$node_name" "$node_tag"
     ;;
 esac

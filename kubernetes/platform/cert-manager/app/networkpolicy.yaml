@@ -1,0 +1,58 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-apiserver
+spec:
+  description: Every cert-manager pod talks to the Kubernetes API, and the API server calls the webhook on 10250. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too.
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-acme-dns01
+spec:
+  description: The controller orders certificates from Let's Encrypt, writes the DNS-01 TXT record through the Cloudflare API, and checks that the record has propagated by asking Cloudflare's resolver over DNS-over-HTTPS. Its lookups go through Cilium's DNS proxy, which is how this rule learns the three addresses, and it may open nothing else outside the cluster.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: acme-v02.api.letsencrypt.org
+              - matchName: acme-staging-v02.api.letsencrypt.org
+              - matchName: api.cloudflare.com
+              - matchName: cloudflare-dns.com
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: acme-v02.api.letsencrypt.org
+        - matchName: acme-staging-v02.api.letsencrypt.org
+        - matchName: api.cloudflare.com
+        - matchName: cloudflare-dns.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

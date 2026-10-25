@@ -22,7 +22,7 @@ output "workers" {
 output "metal_nodes" {
   description = "Name, Robot server number, private address on the vSwitch and public IPv4 of each metal node."
   value = {
-    for name in keys(var.metal_servers) : name => {
+    for name in keys(local.metal_active) : name => {
       pool          = "metal"
       server_number = data.external.metal_server[name].result.server_number
       private_ip    = local.metal_nodes[name].private_ip

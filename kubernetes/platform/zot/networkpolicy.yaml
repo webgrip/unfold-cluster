@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: zot
 spec:
-  description: Zot serves pulls to the nodes' containerd and to the CI namespace, and fetches what it mirrors from the four upstream registries and the CDNs they redirect blob downloads to, over HTTPS only. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
+  description: Zot serves pulls to the nodes' containerd, the CI namespace, the Trivy scanner in trivy-system and the Kyverno admission controller, which reads webgrip signatures from it, and fetches what it mirrors from the four upstream registries and the CDNs they redirect blob downloads to, over HTTPS only. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: zot
@@ -19,6 +19,16 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ci
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: trivy-system
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kyverno
+            app.kubernetes.io/component: admission-controller
       toPorts:
         - ports:
             - port: "5000"
