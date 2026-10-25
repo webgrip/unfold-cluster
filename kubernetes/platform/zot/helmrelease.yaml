@@ -1,0 +1,205 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: zot
+spec:
+  interval: 1h
+  releaseName: zot
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: zot
+  install:
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+  values:
+    image:
+      repository: ghcr.io/project-zot/zot
+      # renovate: datasource=docker depName=ghcr.io/project-zot/zot
+      tag: v2.1.22@sha256:96cda11459ce6f8c60da3b03f03e9f67fd11b3ae2d82c4c04c92b3c608996080
+    serviceAccount:
+      create: false
+      name: zot
+    service:
+      type: NodePort
+      port: 5000
+      nodePort: 30500
+    configFiles:
+      config.json: null
+    secretFiles:
+      htpasswd: null
+    persistence: true
+    pvc:
+      create: false
+      name: zot-data
+    extraVolumes:
+      - name: htpasswd
+        secret:
+          secretName: zot-push-credentials
+          items:
+            - key: htpasswd
+              path: htpasswd
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+    extraVolumeMounts:
+      - name: htpasswd
+        mountPath: /secret
+        readOnly: true
+      - name: tmp
+        mountPath: /tmp
+    env:
+      - name: GOMEMLIMIT
+        value: 900MiB
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      fsGroupChangePolicy: OnRootMismatch
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    startupProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      failureThreshold: 30
+    nodeSelector:
+      node.webgrip.io/pool: unfold
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
+        effect: NoSchedule
+    config:
+      distSpecVersion: 1.1.1
+      log:
+        level: info
+      storage:
+        rootDirectory: /var/lib/registry/zot
+        dedupe: true
+        commit: true
+        gc: true
+        gcDelay: 1h
+        gcInterval: 6h
+        retention:
+          delay: 24h
+          policies:
+            - repositories:
+                - webgrip/**
+              deleteReferrers: true
+              deleteUntagged: true
+              keepTags:
+                - patterns:
+                    - ^v?[0-9]+\.[0-9]+\.[0-9]+$
+                  mostRecentlyPushedCount: 20
+                - patterns:
+                    - .*
+                  mostRecentlyPushedCount: 10
+                  pulledWithin: 720h
+              keepUntagged:
+                pulledWithin: 720h
+            - repositories:
+                - docker.io/**
+                - ghcr.io/**
+                - quay.io/**
+                - registry.k8s.io/**
+              deleteReferrers: true
+              deleteUntagged: true
+              keepTags:
+                - patterns:
+                    - .*
+                  pulledWithin: 720h
+              keepUntagged:
+                pulledWithin: 720h
+      http:
+        address: 0.0.0.0
+        port: "5000"
+        realm: zot
+        compat:
+          - docker2s2
+        auth:
+          failDelay: 5
+          htpasswd:
+            path: /secret/htpasswd
+        accessControl:
+          repositories:
+            "**":
+              anonymousPolicy:
+                - read
+              defaultPolicy:
+                - read
+            webgrip/**:
+              anonymousPolicy:
+                - read
+              defaultPolicy:
+                - read
+              policies:
+                - users:
+                    - ci
+                  actions:
+                    - read
+                    - create
+                    - update
+      extensions:
+        scrub:
+          enable: true
+          interval: 24h
+        sync:
+          enable: true
+          registries:
+            - urls:
+                - https://registry-1.docker.io
+              content:
+                - prefix: "**"
+                  destination: /docker.io
+              onDemand: true
+              tlsVerify: true
+              maxRetries: 2
+              retryDelay: 5s
+              manifestCheckInterval: 1h
+            - urls:
+                - https://ghcr.io
+              content:
+                - prefix: "**"
+                  destination: /ghcr.io
+              onDemand: true
+              tlsVerify: true
+              maxRetries: 2
+              retryDelay: 5s
+              manifestCheckInterval: 1h
+            - urls:
+                - https://quay.io
+              content:
+                - prefix: "**"
+                  destination: /quay.io
+              onDemand: true
+              tlsVerify: true
+              maxRetries: 2
+              retryDelay: 5s
+              manifestCheckInterval: 1h
+            - urls:
+                - https://registry.k8s.io
+              content:
+                - prefix: "**"
+                  destination: /registry.k8s.io
+              onDemand: true
+              tlsVerify: true
+              maxRetries: 2
+              retryDelay: 5s
+              manifestCheckInterval: 1h

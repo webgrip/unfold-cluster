@@ -45,6 +45,7 @@ redact() {
     -e 's/hskey-[A-Za-z0-9_-]+/hskey-<redacted>/g' \
     -e 's/tskey-[A-Za-z0-9_-]+/tskey-<redacted>/g' \
     -e 's/([Bb]earer)[[:space:]]+[^[:space:]"]+/\1 <redacted>/g' \
+    -e "s/(for token ')[^']*/\\1<redacted>/g" \
     -e 's/([Aa]uth[_-]?[Kk]ey|[Tt]oken|[Pp]assword|[Ss]ecret)("?[[:space:]]*[=:][[:space:]]*"?)[^[:space:]",}]+/\1\2<redacted>/g' \
     -e 's/([0-9a-f]{32})([0-9a-f]{32})/\1@@hex@@\2/g' \
     -e ':token' \

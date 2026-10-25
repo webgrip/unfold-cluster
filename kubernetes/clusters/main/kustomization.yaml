@@ -14,4 +14,5 @@ resources:
   - ../../platform/human-access
   - ../../platform/keda
   - ../../platform/ci-runners
+  - ../../platform/zot
   - ../../platform/gvisor
