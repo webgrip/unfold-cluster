@@ -70,8 +70,8 @@ resource "hcloud_server" "headscale" {
   location           = var.location
   ssh_keys           = [hcloud_ssh_key.admin.id]
   firewall_ids       = [hcloud_firewall.headscale.id]
-  delete_protection  = true
-  rebuild_protection = true
+  delete_protection  = false
+  rebuild_protection = false
 
   public_net {
     ipv4_enabled = true
