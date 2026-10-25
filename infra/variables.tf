@@ -49,7 +49,7 @@ variable "worker_pools" {
     ci = {
       server_type = "cx43"
       location    = "nbg1"
-      node_count  = 1
+      node_count  = 0
       name_prefix = "unfold-ci"
       first_host  = 31
       labels      = { "node.webgrip.io/pool" = "ci" }

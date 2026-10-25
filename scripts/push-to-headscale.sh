@@ -9,9 +9,10 @@ program itself, 'policy' runs 'policy set' with the Headscale policy.
 
 Environment: HEADSCALE_HOST, HEADSCALE_HOST_PUBLIC_KEY (the pinned ed25519
 host key), HEADSCALE_TOFU_KEY (the tofu user's private key), CONTENT_B64.
-SSH trusts nothing but the pinned host key. An unreachable server is retried
-for UNFOLD_TAILNET_WAIT_SECONDS (default 1500), because a new server answers
-only once cloud-init has finished."
+SSH trusts nothing but the pinned host key. An unreachable server, or one
+whose Headscale does not answer on its socket yet, is retried for
+UNFOLD_TAILNET_WAIT_SECONDS (default 1500), because a new server answers only
+once cloud-init has finished and Headscale has its certificate."
 
 fail() {
   echo "push-to-headscale: $*" >&2
@@ -54,13 +55,17 @@ send() {
     "tofu@${HEADSCALE_HOST}" "$request" <"${workdir}/content" 2>"${workdir}/stderr"
 }
 
+headscale_still_starting() {
+  grep -q 'headscale does not answer on its socket yet' "${workdir}/stderr"
+}
+
 deadline=$((SECONDS + ${UNFOLD_TAILNET_WAIT_SECONDS:-1500}))
 until send; do
   status=$?
   if grep -qiE 'host key verification failed|remote host identification has changed|host key for .* has changed' "${workdir}/stderr"; then
     fail "${HEADSCALE_HOST} did not present the pinned SSH host key; refusing to talk to it"
   fi
-  if [ "$status" -ne 255 ]; then
+  if [ "$status" -ne 255 ] && ! headscale_still_starting; then
     fail "unfold-tailnet-key ${request} refused (a server created before this mode existed is replaced by raising headscale_generation): $(tr '\n' ' ' <"${workdir}/stderr")"
   fi
   [ "$SECONDS" -lt "$deadline" ] || fail "${HEADSCALE_HOST} unreachable: $(tr '\n' ' ' <"${workdir}/stderr")"
