@@ -91,7 +91,7 @@ sinks:
     type: http
     inputs:
       - audit_kept
-    uri: http://unfold-ingest.webgrip.dev:8427/audit/insert/jsonline
+    uri: http://unfold-gateway.webgrip.dev:8427/audit/insert/jsonline
     method: post
     compression: gzip
     encoding:
@@ -114,7 +114,7 @@ sinks:
     inputs:
       - pod_records
       - talos_records
-    uri: http://unfold-ingest.webgrip.dev:8427/insert/jsonline
+    uri: http://unfold-gateway.webgrip.dev:8427/insert/jsonline
     method: post
     compression: gzip
     encoding:

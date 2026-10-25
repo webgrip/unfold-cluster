@@ -21,7 +21,7 @@ spec:
               protocol: TCP
           rules:
             dns:
-              - matchName: unfold-ingest.webgrip.dev
+              - matchName: unfold-gateway.webgrip.dev
               - matchPattern: "*.cluster.local"
     - toEntities:
         - kube-apiserver
@@ -72,7 +72,7 @@ spec:
             - port: "8080"
               protocol: TCP
     - toFQDNs:
-        - matchName: unfold-ingest.webgrip.dev
+        - matchName: unfold-gateway.webgrip.dev
       toPorts:
         - ports:
             - port: "8427"

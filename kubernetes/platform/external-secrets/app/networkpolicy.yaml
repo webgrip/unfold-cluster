@@ -24,15 +24,27 @@ kind: CiliumNetworkPolicy
 metadata:
   name: external-secrets-openbao-homelab
 spec:
-  description: The controller reads the homelab OpenBao, the only original of every secret, through the Service openbao-homelab in this namespace. That Service has no selector; the link to the homelab fills its endpoints, so this rule follows the link wherever it lands and allows nothing else.
+  description: The controller reads the homelab OpenBao, the only original of every secret, at unfold-gateway.webgrip.dev:8200. That name resolves to the homelab gateway's tailnet address; its lookups go through Cilium's DNS proxy, which is how this rule learns the address, and the controller may open nothing else outside the cluster.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: external-secrets
   egress:
-    - toServices:
-        - k8sService:
-            serviceName: openbao-homelab
-            namespace: external-secrets
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: unfold-gateway.webgrip.dev
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: unfold-gateway.webgrip.dev
       toPorts:
         - ports:
             - port: "8200"

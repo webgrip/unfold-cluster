@@ -41,7 +41,7 @@ spec:
             - -httpListenAddr=:8429
             - -promscrape.config=/config/scrape.yaml
             - -promscrape.config.strictParse=true
-            - -remoteWrite.url=http://unfold-ingest.webgrip.dev:8427/api/v1/write
+            - -remoteWrite.url=http://unfold-gateway.webgrip.dev:8427/api/v1/write
             - -remoteWrite.tmpDataPath=/buffer
             - -remoteWrite.maxDiskUsagePerURL=1800MB
             - -remoteWrite.flushInterval=5s
