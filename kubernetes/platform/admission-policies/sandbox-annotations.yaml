@@ -43,4 +43,4 @@ metadata:
   name: sandbox-annotations
 spec:
   policyName: sandbox-annotations
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
