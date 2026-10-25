@@ -38,4 +38,4 @@ metadata:
   name: pod-security-floor
 spec:
   policyName: pod-security-floor
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
