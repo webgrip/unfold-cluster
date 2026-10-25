@@ -22,6 +22,8 @@ on:
       - scripts/openbao-kv.sh
       - scripts/lift-headscale-protection.sh
       - scripts/set-etcd-backup-lifecycle.sh
+      - scripts/plan-digest.sh
+      - scripts/tofu-plan.sh
   workflow_dispatch:
     inputs:
       apply:
@@ -145,13 +147,13 @@ jobs:
             && github.ref == 'refs/heads/main'
             && inputs.apply == 'apply'
             && 'allowed' || 'read-only' }}
-        run: tofu plan -lock-timeout=5m -out=infra.tfplan
+        run: ../scripts/tofu-plan.sh -lock-timeout=5m -out=infra.tfplan
 
       - name: Print the plan digest to quote when applying
         run: |
           set -eu
           tofu show -no-color infra.tfplan > "${RUNNER_TEMP}/infra.plan.txt"
-          digest="$(sha256sum "${RUNNER_TEMP}/infra.plan.txt" | cut -d' ' -f1)"
+          digest="$(../scripts/plan-digest.sh < "${RUNNER_TEMP}/infra.plan.txt")"
           echo "::notice::plan digest ${digest}"
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             echo "plan digest \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
@@ -188,7 +190,7 @@ jobs:
         run: |
           set -eu
           tofu show -no-color infra.tfplan > "${RUNNER_TEMP}/infra.plan.txt"
-          digest="$(sha256sum "${RUNNER_TEMP}/infra.plan.txt" | cut -d' ' -f1)"
+          digest="$(../scripts/plan-digest.sh < "${RUNNER_TEMP}/infra.plan.txt")"
           if [ -z "${PLAN_DIGEST}" ] || [ "${PLAN_DIGEST}" != "${digest}" ]; then
             echo "::error::the plan changed since it was reviewed; read this run's plan and dispatch again with its digest (${digest})"
             exit 1

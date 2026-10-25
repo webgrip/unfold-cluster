@@ -26,6 +26,8 @@ on:
       - scripts/openbao-kv.sh
       - scripts/lift-headscale-protection.sh
       - scripts/set-etcd-backup-lifecycle.sh
+      - scripts/plan-digest.sh
+      - scripts/tofu-plan.sh
       - scripts/rebuild-drill.sh
       - scripts/test-*.sh
       - .forgejo/workflows/rebuild-drill.yml
@@ -76,6 +78,14 @@ jobs:
       - name: Test that the escrowed Talos secrets restore the same cluster identity
         working-directory: .
         run: ./scripts/test-talos-secrets-escrow.sh
+
+      - name: Test that a minted tailnet key leaves the plan digest alone
+        working-directory: .
+        run: ./scripts/test-plan-digest.sh
+
+      - name: Test that a plan is retried only after a Hetzner 5xx
+        working-directory: .
+        run: ./scripts/test-tofu-plan.sh
 
       - name: Test the OpenBao reads and writes of the apply
         working-directory: .

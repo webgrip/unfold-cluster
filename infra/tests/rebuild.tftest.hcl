@@ -155,6 +155,48 @@ run "the_apply_publishes_the_headscale_address_for_the_homelab_dns" {
   }
 }
 
+run "the_apply_publishes_the_pinned_headscale_host_key_beside_its_address" {
+  command = plan
+
+  override_resource {
+    target = hcloud_primary_ip.headscale
+    values = {
+      id         = "103"
+      ip_address = "198.51.100.23"
+    }
+  }
+
+  override_resource {
+    target = tls_private_key.headscale_host
+    values = {
+      public_key_openssh = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockHostKey\n"
+    }
+  }
+
+  assert {
+    condition     = terraform_data.headscale_known_hosts.triggers_replace[0] == "headscale.webgrip.dev,198.51.100.23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockHostKey" && terraform_data.headscale_known_hosts.triggers_replace[1] == "ssh_known_hosts"
+    error_message = "the apply must write the known_hosts line of the server it pins to ssh_known_hosts, so the owner reads it from OpenBao and not from the state"
+  }
+
+  assert {
+    condition     = output.headscale_ssh_known_hosts == terraform_data.headscale_known_hosts.triggers_replace[0]
+    error_message = "OpenBao and the output must publish the same host key"
+  }
+}
+
+run "the_drill_publishes_its_host_key_under_its_own_property" {
+  command = plan
+
+  variables {
+    headscale_address_property = "drill_ipv4"
+  }
+
+  assert {
+    condition     = terraform_data.headscale_known_hosts.triggers_replace[1] == "drill_ssh_known_hosts"
+    error_message = "the rebuild drill must never overwrite the production host key in OpenBao"
+  }
+}
+
 run "only_the_two_published_addresses_may_be_written" {
   command = plan
 

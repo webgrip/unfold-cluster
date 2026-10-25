@@ -82,4 +82,4 @@ metadata:
   name: sandboxed-workloads
 spec:
   policyName: sandboxed-workloads
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]

@@ -20,16 +20,32 @@ The digest is the SHA-256 of `tofu show -no-color` of the plan. An apply run pla
 
 Something other than the code changed between the two plans. Read the new run's plan: it must create, change and destroy the same resources as the one you read. If it does, dispatch again with its digest. If it does not, stop and find out why.
 
-Two causes are expected, and both settle after one extra dispatch:
+One cause is expected, and it settles after one extra dispatch:
 
 1. **The Talos snapshot was built by the apply run.** Plan-only runs never build it, so before the first build their plan shows the image `talos-snapshot-is-built-by-the-apply-run`; the apply run builds it before planning and plans the numeric snapshot id. The snapshot exists from then on.
-2. **The apply run minted a tailnet key.** A plan-only run only reads keys from `unfold-headscale`. An apply run may make one before it plans: the control planes' `tag:cp` key when it is missing or has 45 days or fewer left, and a worker's `tag:node` key when none was made for that worker's key slot yet (see [Worker tailnet keys](#worker-tailnet-keys)). The key itself is sensitive and never printed, but two things derived from it are in the plan text: whether the `input` of `terraform_data.*_tailnet_key` shows as changed, and the `machine_configuration_hash` of `talos_machine_configuration_apply.*`, which Talos computes over a machine config that embeds the key. So when a key resource is created or replaced in that plan, the plan-only run planned it with the key it could read (often none) and the apply run with the key it just made, and the digests differ. The key now exists on `unfold-headscale`, so the next apply run reads the same key and plans the same digest.
 
-   Seen on 2026-10-25 with the bump of `tailnet_key_generation`: the plan-only run on `main` printed `e0293ce5…`, the first apply run `ae310573…` with the same eight resources, and the second apply run `ae310573…` again, which applied.
+### A minted tailnet key does not change the digest
 
-   It does not happen when a key resource is not created or replaced: `terraform_data` ignores later changes to its `input`, so a running node keeps the key it was created with. Nor does it happen for a server created in the same apply: its server id is unknown until Hetzner creates it, so both runs plan its key as read during the apply.
+A plan-only run only reads keys from `unfold-headscale`; an apply run may mint one before it plans (the control planes' `tag:cp` key when it is missing or has 45 days or fewer left, a worker's `tag:node` key for a new key slot, the gateway's key for a new generation). Until 2026-10-25 this changed the digest of every apply that minted: when a `terraform_data.*_tailnet_key` is created or replaced, the plan-only run planned it with no key, which `tofu show` leaves out, and the apply run with the minted key, which it shows as `+ input = (sensitive value)`. Runs 168 (`f2d6e3b4…`, plan-only) and 169/170 (`7b4800c2…`, apply) differed in that one line.
+
+The digest is therefore not the SHA-256 of the raw `tofu show -no-color` text but of that text with two kinds of line left out, and only inside the blocks of `terraform_data.control_plane_tailnet_key`, `worker_tailnet_key` and `homelab_gateway_tailnet_key` (`scripts/plan-digest.sh`, `--normalized` prints the text it hashes):
+
+* the `input` line, whose value the plan only ever shows as `(sensitive value)` or `null`, so the line says whether a key could be read, not which one;
+* the `# (N unchanged attributes hidden)` count, which counts that same `input` when the stored key was read again.
+
+Nothing a reviewer can see is lost: each key resource's header (created, replaced, destroyed) and its `triggers_replace` stay in the digest, and an `input` line of any other resource does too. A newly read or minted key never reaches the plan text anyway: the new `output` of a created or replaced key resource, and every machine config built from it, are `(known after apply)` in both runs. `scripts/test-plan-digest.sh` plans such resources with tofu, with no key, the stored key and a minted one, and fails if their digests differ or if a change outside those lines keeps the digest.
+
+Letting plan-only runs mint was the other option. It was not taken: a push-triggered plan would then write to `unfold-headscale` and wait up to 25 minutes for it, and a key minted by a plan that is never applied is still a live single-use key.
 
 Anything else that changes between two runs, such as a Renovate merge, another pull request, or a resource changed outside OpenTofu, also changes the digest; that is what the gate is for.
+
+## A Hetzner 5xx during the plan
+
+Hetzner's API sometimes answers a read with `internal server error (server_error)`, `Status code: 500` (run 171, refreshing `hcloud_primary_ip.headscale`). The Plan step runs `scripts/tofu-plan.sh`, which plans again when every error of a failed plan is a Hetzner 5xx: at most three attempts, 30 and 60 seconds apart, each announced as a `::warning::`. A rate limit (429), a configuration error, a failed postcondition, or a 5xx together with any of those ends the run at once.
+
+Only the plan is retried. A plan changes nothing at Hetzner; the one thing an apply run's plan may write is a tailnet key on `unfold-headscale`, minted once per slot and read back on the next attempt. `tofu apply` of the saved plan is never retried: if it fails, read what it changed and dispatch a new apply. `scripts/test-tofu-plan.sh` checks the cases against a stubbed tofu.
+
+The same script replaces every `hskey-auth-…` in the printed plan with `hskey-auth-<redacted>`. A plan that replaces a tailnet key resource shows its stored `output`, the key itself, in plain text, because `sensitive()` on `input` does not mark `output`; runs 165 and 166 printed the keys of the Headscale server they then replaced.
 
 ## Worker pools
 
@@ -73,7 +89,7 @@ So a worker gets a fresh key whenever it needs one:
 
 * **A new server** has a new id, so a new slot, and its key is minted in the apply that creates it.
 * **A generation bump** replaces every `terraform_data.worker_tailnet_key` and asks every worker for the slot of the new generation, which is empty, so each gets a newly minted key instead of the expired one stored for the previous generation. Until the CI pool change the slot was the server id alone, and a bump handed the worker its old, expired key.
-* **An apply that failed after the server was created** and is retried more than 24 hours later finds the key in the state expired, and the node cannot join (`ext-tailscale` logs an invalid or expired auth key). Bump `tailnet_key_generation` to today's date in a pull request; its apply gives that node a fresh key. Expect the digest to change once on that apply (cause 2 above).
+* **An apply that failed after the server was created** and is retried more than 24 hours later finds the key in the state expired, and the node cannot join (`ext-tailscale` logs an invalid or expired auth key). Bump `tailnet_key_generation` to today's date in a pull request; its apply gives that node a fresh key, with the digest of the plan-only run on `main`.
 
 A running node never needs its key again: Talos joins once (`TS_AUTH_ONCE=true`) and tagged nodes do not expire, so a bump re-applies the machine configs without disturbing the tailnet.
 

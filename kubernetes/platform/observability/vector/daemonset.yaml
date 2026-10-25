@@ -62,6 +62,7 @@ spec:
               memory: 96Mi
             limits:
               memory: 512Mi
+              ephemeral-storage: 256Mi
           volumeMounts:
             - name: config
               mountPath: /etc/vector

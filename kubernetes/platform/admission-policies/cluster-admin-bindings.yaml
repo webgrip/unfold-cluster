@@ -37,4 +37,4 @@ metadata:
   name: cluster-admin-bindings
 spec:
   policyName: cluster-admin-bindings
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
