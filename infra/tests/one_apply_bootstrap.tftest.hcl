@@ -337,3 +337,34 @@ run "the_talos_seed_installs_the_cloud_controller_exactly_as_flux_reconciles_it"
     error_message = "the Talos seed must render the cloud controller chart and version its HelmRelease points Flux at"
   }
 }
+
+run "kube_proxy_is_off_because_cilium_replaces_it_through_kubeprism" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      contains(local.control_plane_patches, local.kube_proxy_disabled_patch),
+      yamldecode(local.kube_proxy_disabled_patch) == { apiVersion = "v1alpha1", kind = "KubeProxyConfig", enabled = false },
+    ])
+    error_message = "the control planes must carry a KubeProxyConfig with enabled: false; deleting the document falls back to the v1alpha1 default, which deploys kube-proxy"
+  }
+
+  assert {
+    condition     = !anytrue([for patch in concat(local.common_patches, local.control_plane_patches) : try(yamldecode(patch).kind, "") == "KubeProxyConfig" && try(yamldecode(patch)["$patch"], "") == "delete"])
+    error_message = "a $patch: delete on KubeProxyConfig turns kube-proxy back on"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(file("${path.module}/../kubernetes/platform/cilium/values.yaml")).kubeProxyReplacement == true,
+      yamldecode(file("${path.module}/../kubernetes/platform/cilium/values.yaml")).k8sServiceHost == "localhost",
+      yamldecode(file("${path.module}/../kubernetes/platform/cilium/values.yaml")).k8sServicePort == 7445,
+    ])
+    error_message = "without kube-proxy, Cilium must replace it and reach the API server through KubePrism on localhost:7445, which needs no Service"
+  }
+
+  assert {
+    condition     = !anytrue([for patch in concat(local.common_patches, local.control_plane_patches) : try(yamldecode(patch).kind, "") == "KubePrismConfig"])
+    error_message = "Cilium reaches the API server through KubePrism; leave Talos's KubePrismConfig at its default, enabled on 7445"
+  }
+}
