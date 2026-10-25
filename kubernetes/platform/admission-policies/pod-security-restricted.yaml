@@ -149,7 +149,7 @@ metadata:
   name: pod-security-restricted
 spec:
   policyName: pod-security-restricted
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
   matchResources:
     namespaceSelector:
       matchExpressions:
