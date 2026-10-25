@@ -36,7 +36,7 @@ readonly kubectl_version="v1.37.1"
 readonly kubectl_sha256_linux_amd64="65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8"
 readonly kubectl_sha256_linux_arm64="ff749f4b78d9c4f1ec87307df9b50119ed819e2094aa9810cb9acffc3286c8c7"
 
-readonly kube_system_log_pattern='hcloud-cloud-controller-manager|cilium'
+readonly kube_system_log_pattern='kube-apiserver|hcloud-cloud-controller-manager|cilium'
 
 failed_checks=()
 
@@ -166,6 +166,8 @@ report_node() {
   check "${node}: services" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" service
   check "${node}: ext-tailscale log, last 50 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs ext-tailscale --tail 50
   check "${node}: addresses" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get addresses
+  check "${node}: machined controllers log, last 150 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs controller-runtime --tail 150
+  check "${node}: kubelet log, last 60 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs kubelet --tail 60
 }
 
 report_etcd() {
