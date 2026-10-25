@@ -20,11 +20,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # renovate: datasource=github-releases depName=FiloSottile/age
-  AGE_VERSION: v1.3.2
-  AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
-  # renovate: datasource=github-releases depName=etcd-io/etcd
-  ETCD_VERSION: v3.7.2
   BUCKET: unfold-cluster-etcd
   PREFIX: unfold-main
   MAX_AGE_HOURS: "7"
@@ -34,31 +29,14 @@ env:
 jobs:
   restore-latest-snapshot:
     if: vars.ETCD_BACKUP_CHECK == 'enabled'
+    # Host mode on the unfold-infra pool: the steps run in its toolchain image, infra-runner from
+    # webgrip/infrastructure, which carries age and the etcd tools pinned and checksum-verified.
     runs-on: unfold-infra
     # The read key and the age key come from OpenBao, which gives them only to this repository's
     # main branch (role ci-unfold-cluster); they are not Forgejo secrets.
     enable-openid-connect: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Install age and etcd with verified checksums
-        working-directory: ${{ runner.temp }}
-        run: |
-          set -eu
-          age_archive="age-${AGE_VERSION}-linux-amd64.tar.gz"
-          curl -fsSLO "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/${age_archive}"
-          echo "${AGE_SHA256}  ${age_archive}" | sha256sum -c -
-          mkdir -p "${RUNNER_TEMP}/bin"
-          tar -xzf "${age_archive}" age/age
-          install -m 0755 age/age "${RUNNER_TEMP}/bin/age"
-
-          etcd_archive="etcd-${ETCD_VERSION}-linux-amd64.tar.gz"
-          curl -fsSLO "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/${etcd_archive}"
-          curl -fsSLO "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/SHA256SUMS"
-          grep " ${etcd_archive}\$" SHA256SUMS | sha256sum -c -
-          tar -xzf "${etcd_archive}"
-          install -m 0755 "etcd-${ETCD_VERSION}-linux-amd64/etcd" "etcd-${ETCD_VERSION}-linux-amd64/etcdctl" "etcd-${ETCD_VERSION}-linux-amd64/etcdutl" "${RUNNER_TEMP}/bin/"
-          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Read the restore credentials from OpenBao
         uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
