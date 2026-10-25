@@ -9,3 +9,4 @@ resources:
   - ../../platform/network-policy
   - ../../platform/admission-policies
   - ../../platform/etcd-backup
+  - ../../platform/human-access
