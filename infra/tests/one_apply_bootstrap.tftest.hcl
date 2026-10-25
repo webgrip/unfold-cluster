@@ -68,7 +68,7 @@ run "a_plan_only_run_before_the_snapshot_exists_still_plans_every_node" {
   command = plan
 
   assert {
-    condition     = length(hcloud_server.control_plane) == 3 && length(hcloud_server.worker) == 2
+    condition     = length(hcloud_server.control_plane) == 3 && length(hcloud_server.worker) == sum([for pool in values(var.worker_pools) : pool.node_count])
     error_message = "a plan-only run must show every cluster node, with no human-set gate"
   }
 

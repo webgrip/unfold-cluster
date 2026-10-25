@@ -62,6 +62,25 @@ variables {
   state_passphrase     = "mock-passphrase-of-at-least-thirty-two-characters"
   admin_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
   admin_cidrs          = ["203.0.113.7/32"]
+  worker_pools = {
+    unfold = {
+      server_type = "cx33"
+      node_count  = 1
+      name_prefix = "unfold-app"
+      first_host  = 21
+      labels      = { "node.webgrip.io/pool" = "unfold" }
+      taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
+    }
+    ci = {
+      server_type = "cx43"
+      location    = "nbg1"
+      node_count  = 1
+      name_prefix = "unfold-ci"
+      first_host  = 31
+      labels      = { "node.webgrip.io/pool" = "ci" }
+      taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
+    }
+  }
 }
 
 run "the_ci_pool_is_one_cx43_tainted_for_ci_only" {
