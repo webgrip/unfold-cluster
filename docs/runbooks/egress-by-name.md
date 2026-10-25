@@ -53,6 +53,14 @@ Forgejo is not on the list: Flux reads this repository from GitHub. A new Flux s
 
 The Cilium agent, operator and envoy, kube-proxy (while it still exists) and the control-plane static pods run on the host network. Pod policies do not select them; Talos's host firewall covers the nodes ([host firewall](host-firewall.md)).
 
+### cluster-autoscaler
+
+| Pods | Destination | Port | Why |
+| --- | --- | --- | --- |
+| cluster-autoscaler | kube-dns | 53 | lookups of `api.hetzner.cloud` and cluster names, through the DNS proxy |
+| cluster-autoscaler | `kube-apiserver` | any | pending pods, nodes, its status ConfigMap and leader lease |
+| cluster-autoscaler | `api.hetzner.cloud` | 443 | lists, creates and deletes the CI overflow servers ([ci-autoscaler](ci-autoscaler.md)) |
+
 ## Flow evidence
 
 Every Cilium agent writes each new egress connection (not replies) to `/var/log/hubble/egress-flows.log` on its node, through Hubble's static exporter (`hubble.export.static` in [the Cilium values](../../kubernetes/platform/cilium/values.yaml), 10 MB, two rotations). Each record keeps only these fields:
