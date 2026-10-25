@@ -17,6 +17,7 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
         authkey        a Headscale pre-auth key (hskey-auth-...), masked in the log
         ipv4           a public IPv4 address, or an empty line to clear it
         talos-secrets  a talosctl secrets bundle
+        known-hosts    one known_hosts line: host,address ssh-ed25519 key
 get   prints PROPERTY, or nothing when the secret or the property is absent.
 
 Neither prints a value. Environment: ACTIONS_ID_TOKEN_REQUEST_URL and
@@ -63,6 +64,10 @@ checked_value() {
     ipv4)
       value="$(tr -d '\r\n ')"
       [ -z "$value" ] || is_public_ipv4 "$value" || fail "stdin holds no public IPv4 address"
+      ;;
+    known-hosts)
+      value="$(tr -d '\r\n')"
+      [[ "$value" =~ ^[a-z0-9.-]+,[0-9.]+\ ssh-ed25519\ [A-Za-z0-9+/]+=*$ ]] || fail "stdin holds no known_hosts line"
       ;;
     talos-secrets)
       value="$(cat)"
