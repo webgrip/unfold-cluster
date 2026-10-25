@@ -55,4 +55,6 @@ terraform {
   }
 }
 
-provider "hcloud" {}
+provider "hcloud" {
+  poll_interval = "2s"
+}
