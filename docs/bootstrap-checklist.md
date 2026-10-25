@@ -2,15 +2,16 @@
 
 The owner's ordered list for taking this repository from nothing to a running, GitOps-managed cluster. Work top to bottom and tick each box. The [README](../README.md#from-nothing-to-gitops) explains the design; this page is only the steps.
 
-Five stages:
+Four stages. Nothing happens by hand between the applies any more: the `infra` apply run builds the Talos snapshot, Headscale makes its own users and pre-auth keys, and OpenTofu reads those keys from the Headscale server over SSH.
 
 | Stage | What happens | Roughly |
 | --- | --- | --- |
 | [A](#a-hetzner-project-and-tokens) | Hetzner project and API tokens | 15 minutes |
 | [B](#b-keys-buckets-and-openbao) | Keys, buckets, and every value the workflows need, put into OpenBao | 45 minutes |
-| [C](#c-first-apply) | First apply: network, firewalls, Headscale server | 10 minutes |
-| [D](#d-between-the-applies) | DNS record, tailnet key, Talos snapshot | 30 minutes |
-| [E](#e-second-apply-and-verification) | Second apply: the cluster; then prove it works | 1 hour, plus up to 6 hours waiting for the first backup |
+| [C](#c-the-apply) | One apply: snapshot, network, firewalls, Headscale, tailnet keys, the cluster | 30 minutes |
+| [D](#d-verification) | Prove it works | 1 hour, plus up to 6 hours waiting for the first backup |
+
+Coming from the state of 2026-10-24, with only `unfold-headscale` created: follow [From the first apply's state](#from-the-first-applys-state) instead of C.
 
 Words used below:
 
@@ -18,7 +19,7 @@ Words used below:
 * **Credentials are read per run**: a workflow job on `main` proves who it is with its Forgejo OIDC token and reads the credentials straight from OpenBao (role `ci-unfold-cluster`, homelab-cluster ADR-0061). They are never Forgejo secrets, so a pull request or a workflow added on a branch cannot read them, and a new value counts from the next run.
 * **The bridge**: the homelab CronJob `forgejo-actions-secrets` (namespace `forgejo`, hourly at minute 23). It copies only `secret/unfold-cluster/vars` onto this repository, as Forgejo Actions **variables** (readable plain text). So a variable put into OpenBao reaches the workflows within the hour. To start it at once from a homelab shell: `kubectl -n forgejo create job --from=cronjob/forgejo-actions-secrets forgejo-actions-secrets-now`. Nobody types secrets into Forgejo's settings pages; this is the estate's secret model (homelab-cluster ADR-0055).
 * **Password manager**: the owner's own vault, with an offline copy (paper or an encrypted USB stick in a drawer). OpenBao runs in the homelab, so anything that cannot be made again, the state passphrase, the age key and the Talos secrets bundle, also goes here, so a lost homelab does not lose the cluster.
-* **Apply**: a run of the `infra` workflow (Actions → `infra` → **Run workflow** on `main`, choose `apply` in the dropdown, and paste into `plan_digest` the `plan digest` printed by the run whose plan you read). Pushes to `main` only plan, and pull requests only check the code, without secrets; nothing at Hetzner changes until a run with `apply` whose fresh plan has exactly that digest. If it differs, the run stops and prints its own digest: read that run's plan and dispatch again.
+* **Apply**: a run of the `infra` workflow (Actions → `infra` → **Run workflow** on `main`, choose `apply` in the dropdown, and paste into `plan_digest` the `plan digest` printed by the run whose plan you read). Pushes only plan; nothing at Hetzner changes until a run with `apply` whose own plan has the digest you gave. When the plans differ, the run stops and prints its digest: read that run's plan and dispatch again with it.
 
 ## What is made by hand, and why
 
@@ -27,10 +28,17 @@ Almost everything is created by OpenTofu or Flux. These few things cannot be, an
 | Item | Why it cannot be code |
 | --- | --- |
 | The Hetzner Cloud project | Hetzner's API works inside a project; it has no call to create one. |
-| The three Hetzner API tokens (plus a short-lived one for the snapshot) | Tokens are created only in the Hetzner Console; the API cannot mint tokens. Their values then go into OpenBao like every other secret. |
+| The three Hetzner API tokens | Tokens are created only in the Hetzner Console; the API cannot mint tokens. Their values then go into OpenBao like every other secret. |
 | The Garage buckets and keys | The off-site Garage is a hand-run box outside both clusters, with no declarative controller. |
-| The Cloudflare record for `headscale.webgrip.dev`, for now | The record points at an address that exists only after the first apply, and it must be DNS only. It could be declared instead: `webgrip.dev` records are owned by the homelab's external-dns (`kubernetes/apps/network/cloudflare-dns` in homelab-cluster; the `webgrip/cloudflare` DNSControl repo covers only `webgrip.nl`), so a `DNSEndpoint` there with the provider-specific setting `external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"` would make it code (not tried yet). That puts a production record in the homelab's hands, which is the owner's call. A hand-made record is safe meanwhile: external-dns deletes only records carrying its own ownership marker. |
-| The Headscale pre-auth key | Headscale makes it, on its own server, after the first apply. |
+| The values in OpenBao | Tokens, bucket keys, the state passphrase and the age key are provided values: someone has to create them where they are issued and put them in OpenBao once (homelab-cluster ADR-0055). The bridge carries them from there. |
+
+No longer by hand:
+
+| Item | Now |
+| --- | --- |
+| The Cloudflare record for `headscale.webgrip.dev` | Declared in homelab-cluster, `kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml`, DNS only, owned by the homelab's external-dns. It points at the Headscale primary IP, which outlives the server. |
+| The Headscale users and pre-auth keys | cloud-init creates the users `nodes` and the admin user; `unfold-tailnet-key` on the server makes the control planes' reusable `tag:cp` key, renews it by timer, and makes a single-use `tag:node` key for each new worker. OpenTofu reads them over SSH during the apply. |
+| The Talos snapshot | The apply run builds it with `scripts/build-talos-snapshot.sh` when no snapshot carries the labels of the pinned Talos version and schematic; OpenTofu finds it by those labels. |
 
 ## A. Hetzner project and tokens
 
@@ -189,73 +197,37 @@ What each value is:
 | `secret/unfold-cluster/vars` | `ADMIN_CIDRS` | JSON list, e.g. `["203.0.113.7/32"]` | the public IPv4 of home, where the Forgejo runners also leave from: `curl -4 https://ifconfig.me` from the home network. If the home address changes, the Talos and Kubernetes APIs close to CI until this is updated |
 | `secret/unfold-cluster/vars` | `ADMIN_SSH_PUBLIC_KEY` | one line, `ssh-ed25519 AAAA… comment` | `~/.ssh/id_ed25519.pub` |
 | `secret/unfold-cluster/vars` | `ETCD_BACKUP_AGE_RECIPIENT` | `age1…` | B2 |
-| `secret/unfold-cluster/vars` | `TALOS_SNAPSHOT_ID` | a number, e.g. `312345678` | **stage D**, D4 |
-| `secret/unfold-cluster/tailnet` | `TAILSCALE_AUTHKEY_CONTROL_PLANE` | reusable `tag:cp` Headscale pre-auth key | **stage D**, D3; leave unset now |
-| `secret/unfold-cluster/tailnet` | `TAILSCALE_AUTHKEY` | single-use `tag:node` Headscale pre-auth key | **stage D**, D3; leave unset now |
-| `secret/unfold-cluster/vars` | `CLUSTER_NODES` | `enabled` | **stage D**, D3, once both tailnet keys are in; leave unset now |
-| `secret/unfold-cluster/vars` | `ETCD_BACKUP_CHECK` | `enabled` | **stage E**, after the first snapshot; leave unset now |
+| `secret/unfold-cluster/vars` | `ETCD_BACKUP_CHECK` | `enabled` | **stage D**, after the first snapshot; leave unset now |
 
 Everything under `secret/unfold-cluster/vars` becomes a Forgejo **variable**, readable by anyone with access to the repository settings; everything else stays in OpenBao and is read by the runs that need it.
 
-- [ ] All rows set except the last five.
+- [ ] All rows set except the last.
 - [ ] After the bridge's next run, this repository's **Settings → Actions → Variables** lists the six variables with their values, and **Secrets** lists none. A variable missing there means the bridge did not pick it up: check the job's log in the homelab, `kubectl -n forgejo logs job/<newest forgejo-actions-secrets job>`. The credentials are checked by the first run itself: its OpenBao step prints each name it read and the path it came from, never a value, and stops naming any path or key that is missing.
 - [ ] The runner `unfold-infra` shows as online under **Settings → Actions → Runners**. It is defined in the homelab (`kubernetes/apps/forgejo/forgejo-runner/app/infra/`); no job here runs without it.
 
-## C. First apply
+## C. The apply
 
-With neither tailnet key set, OpenTofu creates only the network, the firewalls, the Headscale server and its address. No cluster node yet.
+- [ ] **C1.** Open the newest `infra` run on `main` and read its plan. It creates the network, its subnet, two firewalls, the placement group, the SSH key, the Headscale primary IP, `hcloud_server.headscale`, `tls_private_key.headscale_tofu`, `tls_private_key.headscale_host`, `terraform_data.headscale_generation`, three `terraform_data.control_plane_tailnet_key`, one `terraform_data.worker_tailnet_key`, the two `external` key reads (read during apply), three `control_plane` servers, one `unfold_worker`, the Talos secrets, the machine-config applies, the bootstrap and the kubeconfig. Nothing is destroyed. The node servers show the image `talos-snapshot-is-built-by-the-apply-run` until the snapshot exists. Copy the run's plan digest.
+- [ ] **C2.** Actions → `infra` → **Run workflow**, branch `main`, `apply`, and the digest. The run builds the Talos snapshot first (a few minutes and one temporary CX23, deleted again), then plans. The first time, that plan names the snapshot instead of the placeholder, so its digest differs and the run stops, printing its own. Read that run's plan: the same resources, with a numeric image. Dispatch again with its digest. If the create fails with the server type unavailable, Hetzner has no stock in `fsn1` at that moment: retry later, or set `location` to `nbg1` in `infra/variables.tf` through a PR; every node must share one location.
+- [ ] **C3.** The apply waits for Headscale: `scripts/read-tailnet-key.sh` retries SSH to `tofu@<headscale_ipv4>`, trusting only the pinned host key, for up to 25 minutes, until cloud-init has finished and `https://headscale.webgrip.dev/health` passes with a Let's Encrypt certificate. A run that times out there names `read-tailnet-key` in its error; one that says the server `did not present the pinned SSH host key` stopped on purpose and must not be retried until that is understood; `ssh admin@headscale.webgrip.dev` then `sudo cloud-init status --long` and `sudo journalctl -u headscale` show why.
+- [ ] **C4. Escrow the Talos secrets.** From a shell with the state credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` set to the B3 state key and `TF_VAR_state_passphrase` to B1, read with `bao kv get secret/unfold-cluster/tofu-state`), in `infra/` after the same `tofu init` the workflow runs: `tofu output -raw talos_machine_secrets` into the password manager and the offline copy. `tofu output -raw talosconfig` and `tofu output -raw kubeconfig` give the admin files; keep them out of git (both names are in `.gitignore`).
 
-- [ ] **C1.** Open the newest `infra` run on `main` and read its plan: it should create `hcloud_network`, its subnet, two firewalls, the placement group, the SSH key, the Headscale primary IP and `hcloud_server.headscale`, and nothing named `control_plane` or `unfold_worker`.
-- [ ] **C2.** Copy the `plan digest` line from the end of that run's plan step. Actions → `infra` → **Run workflow**, branch `main`, choose `apply` in the dropdown (the default `plan-only` creates nothing) and paste the digest into `plan_digest`.
-- [ ] **C3.** At the end of the run, note the output `headscale_ipv4`. If the create fails with the server type unavailable, Hetzner has no CX stock in `fsn1` at that moment: retry later, or set `location` to `nbg1` in `infra/variables.tf` through a PR. Decide that before the second apply, because every node must share one location.
+### From the first apply's state
 
-## D. Between the applies
+On 2026-10-24 the first apply had already created the network, the firewalls and `unfold-headscale`, from code that had no `tofu` user, no key tool and no timer. cloud-init runs only when a server is created, so that server is replaced through code. It holds nothing yet (no users, no keys, no nodes), and the primary IP `2.31.73.11` stays, so the DNS record stays valid. Hetzner refuses to delete a server with delete protection, and the provider does not lift it before a replacement, so this takes two pull requests and two applies, in this order:
 
-- [ ] **D1. DNS record.** In Cloudflare, zone `webgrip.dev`: add an `A` record `headscale` → the `headscale_ipv4` address, proxy status **DNS only** (grey cloud). Headscale serves its own TLS, and the Tailscale protocol does not pass through Cloudflare's proxy.
-- [ ] **D2. Wait for Headscale.** `curl -fsS https://headscale.webgrip.dev/health` answers once Headscale has fetched its Let's Encrypt certificate, usually within a few minutes of the record resolving.
-- [ ] **D3. Tailnet keys.** Headscale is the self-hosted server that tells tailnet devices how to find each other; a pre-auth key lets a node join without a person approving it. The control planes get their own key, tagged `tag:cp`: only that tag may have the cluster subnet route approved, so a key read from the worker cannot take the route over. The worker's key is single-use, spent when the worker joins.
+- [ ] **R1.** Merge the pull request that lifts delete and rebuild protection on `unfold-headscale` only. Its plan on `main`: `0 to add, 1 to change, 0 to destroy`, the change being `hcloud_server.headscale` with `delete_protection` and `rebuild_protection` going from `true` to `false`. Anything else in that plan: stop.
+- [ ] **R2.** Apply it with that run's digest.
+- [ ] **R3.** Only now merge the pull request that makes the apply self-contained. Merged before R2, its apply fails at Hetzner's delete protection, before any node exists.
+- [ ] **R4.** Read its plan on `main`: exactly `1 to destroy`, and that one is `hcloud_server.headscale`, `must be replaced` because of `terraform_data.headscale_generation`. Everything in C1 except what exists already is created. If the plan destroys anything else, stop.
+- [ ] **R5.** Apply as in C2 (two dispatches the first time, because of the snapshot), then C3 and C4. The new server is created with delete and rebuild protection on again. The server's SSH host key changes: `ssh-keygen -R headscale.webgrip.dev`, then add the pinned one from `tofu output -raw headscale_ssh_known_hosts` to `~/.ssh/known_hosts`.
 
-  ```sh
-  ssh admin@headscale.webgrip.dev
-  sudo headscale users create ryan
-  sudo headscale preauthkeys create --reusable --tags tag:cp --expiration 2160h
-  sudo headscale preauthkeys create --tags tag:node --expiration 24h
-  ```
-
-  Put both into OpenBao from the homelab-cluster checkout, and tell the workflow to read them. Make the worker key on the day of the second apply, because it expires after 24 hours:
-
-  ```sh
-  read -r -s -p 'tag:cp key: ' cp; echo; read -r -s -p 'tag:node key: ' node; echo
-  bao kv put secret/unfold-cluster/tailnet TAILSCALE_AUTHKEY_CONTROL_PLANE="$cp" TAILSCALE_AUTHKEY="$node"; unset cp node
-  bao kv patch secret/unfold-cluster/vars CLUSTER_NODES=enabled
-  ```
-
-  The `tag:cp` key expires after 90 days; renew it with the same Headscale command, `bao kv patch` it, and run an apply. Running nodes stay on the tailnet when a key expires or is spent, because they only log in when they are not logged in yet (`TS_AUTH_ONCE`). A new worker needs a fresh single-use key.
-- [ ] **D4. Talos snapshot.** The cluster nodes boot from a Hetzner snapshot of Talos with the extensions in `talos/schematics/cloud.yaml`. Use a separate, short-lived token so the CI token never sits on the laptop: in the Hetzner project, generate a Read & Write token named `unfold-snapshot`, then from a clone of this repository:
-
-  ```sh
-  ./scripts/build-talos-snapshot.sh --dry-run
-  read -r -s -p 'Hetzner token: ' HCLOUD_TOKEN; echo; export HCLOUD_TOKEN
-  ./scripts/build-talos-snapshot.sh
-  unset HCLOUD_TOKEN
-  ```
-
-  The dry run checks that the schematic matches `infra/variables.tf` and that the Image Factory serves the image, without touching Hetzner. The real run creates a temporary CX23 server, writes the image to its disk from Hetzner's rescue system, snapshots it, deletes the server and prints the snapshot id on the last line; it reuses an existing snapshot with the same Talos version and schematic instead of building another. The temporary server is a CX23 because a snapshot can only be used on servers whose disk is at least as large as the one it was taken from, and CX23's 40 GB is the smallest disk in the cluster. If the run fails halfway, `./scripts/build-talos-snapshot.sh --cleanup` removes what it left behind.
-
-  Put the number into OpenBao with `bao kv patch secret/unfold-cluster/vars TALOS_SNAPSHOT_ID=<id>` and wait for the bridge; the variable appears under **Settings → Actions → Variables**. Then delete the `unfold-snapshot` token in Hetzner.
-
-## E. Second apply and verification
-
-- [ ] **E0.** Under **Settings → Actions → Variables**, `TALOS_SNAPSHOT_ID` exists and `CLUSTER_NODES` is `enabled`, and `bao kv get -format=json secret/unfold-cluster/tailnet | jq '.data.data | keys'` lists both keys without printing them. Without `CLUSTER_NODES`, the plan creates no node at all.
-- [ ] **E1.** Read the plan of a fresh `infra` run: it now creates three `control_plane` servers, one `unfold_worker`, the Talos secrets, the machine-config applies, the bootstrap and the kubeconfig. Nothing is replaced or destroyed.
-- [ ] **E2.** Run it with `apply` and that run's `plan digest`.
-- [ ] **E3. Escrow the Talos secrets.** From a shell with the state credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` set to the B3 state key and `TF_VAR_state_passphrase` to B1, read with `bao kv get secret/unfold-cluster/tofu-state`), in `infra/` after the same `tofu init` the workflow runs: `tofu output -raw talos_machine_secrets` into the password manager and the offline copy. `tofu output -raw talosconfig` and `tofu output -raw kubeconfig` give the admin files; keep them out of git (both names are in `.gitignore`).
-
-### Verify
+## D. Verification
 
 Each check names what must be seen. A check that has not been seen has not passed.
 
-- [ ] **Join the tailnet.** On the laptop: `tailscale up --login-server=https://headscale.webgrip.dev`. It prints a register command; run it on the Headscale server with `--user ryan`, e.g. `sudo headscale nodes register --user ryan --key <key from the URL>`. Then `tailscale status` lists `unfold-cp-1` to `-3` and `unfold-app-1`, and `sudo headscale nodes list-routes` shows `10.64.0.0/24` approved on the three control planes and on nothing else.
+- [ ] **Join the tailnet.** On the laptop: `tailscale up --login-server=https://headscale.webgrip.dev`. It prints a register command; run it on the Headscale server with `--user ryan`, e.g. `sudo headscale nodes register --user ryan --key <key from the URL>`. Then `tailscale status` lists `unfold-cp-1` to `-3` and `unfold-app-1`, and `sudo headscale nodes list-routes` shows `10.64.0.0/24` approved, advertised by the `tag:cp` nodes.
+- [ ] **The key renews itself.** On the Headscale server: `systemctl list-timers unfold-tailnet-key.timer` shows the next run, `sudo headscale preauthkeys list` shows one unexpired reusable `tag:cp` key, and `sudo ls -l /var/lib/unfold-tailnet` shows files owned by root with mode `-rw-------`.
 - [ ] **The APIs answer over the tailnet.** With Tailscale up: `kubectl --kubeconfig kubeconfig get nodes` lists four nodes, Ready, through `https://10.64.0.10:6443`. That address is the VIP, so this also proves the `private0` alias found the private NIC.
 - [ ] **The APIs do not answer from the internet.** From a network that is not in `ADMIN_CIDRS`, for example a phone hotspot, with Tailscale off: `curl -k --max-time 5 https://<public IPv4 of unfold-cp-1>:6443/version` must time out, and so must port `50000`. From home they still answer, because home is in `ADMIN_CIDRS` for CI; the README's "Open" section tracks closing that.
 - [ ] **Flux deploys only signed commits.** `kubectl -n flux-system get gitrepository` is Ready, and `kubectl -n flux-system describe gitrepository` shows the condition `SourceVerified` `True` for the commit on `main`. A commit not signed by a key in `infra/trusted-signers/` must leave it not Ready with a verification error; that refusal has not been exercised on this cluster yet, and proving it once is still open. A pull request merged with Forgejo's button is such a commit: merge locally with `git merge --no-ff -S` (README, "Only signed commits deploy").

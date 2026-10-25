@@ -9,10 +9,10 @@ variable "location" {
   }
 }
 
-variable "talos_snapshot_id" {
-  description = "Id of the Hetzner snapshot built from talos/schematics/cloud.yaml at the Talos version in talos/talenv.yaml. Needed once the cluster nodes are created."
-  type        = string
-  default     = ""
+variable "talos_snapshot_required" {
+  description = "True on apply runs, which build the Talos snapshot before they plan. A plan that would boot a node without that snapshot then fails, instead of showing a placeholder image as plan-only runs do."
+  type        = bool
+  default     = false
 }
 
 variable "control_plane_server_type" {
@@ -98,7 +98,7 @@ variable "headscale_server_type" {
 }
 
 variable "headscale_hostname" {
-  description = "Public DNS name of Headscale. Its A record points at the headscale_ipv4 output and is created by hand in Cloudflare, unproxied."
+  description = "Public DNS name of Headscale. Its A record, unproxied, points at the headscale_ipv4 output and is declared in homelab-cluster (kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml)."
   type        = string
   default     = "headscale.webgrip.dev"
 }
@@ -110,22 +110,8 @@ variable "acme_email" {
 }
 
 variable "admin_ssh_public_key" {
-  description = "The owner's SSH public key, the only way into the Headscale server."
+  description = "The owner's SSH public key, the only interactive way into the Headscale server. OpenTofu's own key there may run nothing but the tailnet key command."
   type        = string
-}
-
-variable "tailscale_authkey" {
-  description = "Headscale pre-auth key, tagged tag:node, that the Talos workers join the tailnet with. Workers advertise no routes and may start no connection. Null until Headscale runs; while null, no cluster node is created."
-  type        = string
-  default     = null
-  sensitive   = true
-}
-
-variable "tailscale_control_plane_authkey" {
-  description = "Reusable Headscale pre-auth key, tagged tag:cp, that only the control planes join the tailnet with. Only tag:cp devices get the cloud subnet route approved automatically, so this key never goes to a worker. Null until Headscale runs; while null, no cluster node is created."
-  type        = string
-  default     = null
-  sensitive   = true
 }
 
 variable "headscale_admin_user" {

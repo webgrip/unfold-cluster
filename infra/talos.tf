@@ -127,28 +127,6 @@ locals {
     link       = local.private_link_alias
     apiToken   = var.hcloud_vip_token
   })
-
-  control_plane_tailscale_patch = yamlencode({
-    apiVersion = "v1alpha1"
-    kind       = "ExtensionServiceConfig"
-    name       = "tailscale"
-    environment = [
-      "TS_AUTHKEY=${coalesce(var.tailscale_control_plane_authkey, "unset")}",
-      "TS_AUTH_ONCE=true",
-      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-tags=tag:cp --advertise-routes=${local.cloud_subnet_range}",
-    ]
-  })
-
-  tailscale_patch = yamlencode({
-    apiVersion = "v1alpha1"
-    kind       = "ExtensionServiceConfig"
-    name       = "tailscale"
-    environment = [
-      "TS_AUTHKEY=${coalesce(var.tailscale_authkey, "unset")}",
-      "TS_AUTH_ONCE=true",
-      "TS_EXTRA_ARGS=--login-server=https://${var.headscale_hostname} --accept-dns=false --advertise-tags=tag:node",
-    ]
-  })
 }
 
 data "talos_machine_configuration" "control_plane" {
@@ -160,7 +138,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = concat(local.common_patches, local.control_plane_patches, [local.control_plane_tailscale_patch, local.api_vip_patch])
+  config_patches     = concat(local.common_patches, local.control_plane_patches, [local.api_vip_patch])
 }
 
 data "talos_machine_configuration" "worker" {
@@ -172,7 +150,7 @@ data "talos_machine_configuration" "worker" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = concat(local.common_patches, [local.tailscale_patch])
+  config_patches     = local.common_patches
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {
@@ -183,6 +161,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
   node                        = each.value.ipv4_address
   endpoint                    = each.value.ipv4_address
   config_patches = [
+    local.tailscale_patch[each.key],
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "HostnameConfig"
@@ -209,6 +188,7 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
   endpoint                    = each.value.ipv4_address
   config_patches = [
     local.unfold_worker_patch,
+    local.tailscale_patch[each.key],
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "HostnameConfig"
@@ -219,8 +199,6 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
 }
 
 resource "talos_machine_bootstrap" "cluster" {
-  count = local.cluster_enabled ? 1 : 0
-
   client_configuration = talos_machine_secrets.cluster.client_configuration
   node                 = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
   endpoint             = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
@@ -236,8 +214,6 @@ data "talos_client_configuration" "cluster" {
 }
 
 resource "talos_cluster_kubeconfig" "cluster" {
-  count = local.cluster_enabled ? 1 : 0
-
   client_configuration = talos_machine_secrets.cluster.client_configuration
   node                 = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
   endpoint             = hcloud_server.control_plane["unfold-cp-1"].ipv4_address
