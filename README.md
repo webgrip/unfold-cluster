@@ -122,6 +122,17 @@ The workflow runs only on `unfold-infra`, a runner registered on this repository
 
 No job installs anything. The steps run in `infra-runner`, a toolchain image built in [webgrip/infrastructure](https://forgejo.webgrip.dev/webgrip/infrastructure) (`ops/docker/infra-runner`) on a Docker Hardened Image base, with OpenTofu, age and the etcd tools baked in at pinned versions and verified checksums, signed and served from the homelab's Harbor. The `unfold-infra` pool runs it as its own container, so the secret-holding jobs never touch the shared Docker daemon; the pull-request check runs the same image as a job container on the shared `docker` pool, where it holds nothing. A tool update is a release of that image and a digest bump here and in homelab-cluster. Its etcd stays on the minor release Talos runs (a 3.7.3 `etcdutl` was tested restoring a 3.7.2 snapshot), and moves to a new minor only with a Talos upgrade that moves etcd.
 
+### Diagnosing the cluster without the tailnet
+
+When nobody can reach Kubernetes, run Actions → `infra` → **Run workflow** on `main` with `diagnose` in the `apply` dropdown; `plan_digest` stays empty. The `diagnose` job reads the same OpenBao credentials as a plan, runs `tofu init` against the state, and stops there: no plan, no apply, and no Hetzner call except one. `scripts/diagnose-cluster.sh` then prints:
+
+* the Hetzner project's API budget, from the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers of one `GET /v1/locations?per_page=1` (the limit is per project, so every token in it shares the budget);
+* per node, through `talosctl` against the public address: `version`, `get members`, `service`, the last 50 lines of `ext-tailscale` and `get addresses`, then `etcd members`;
+* per node, the Kubernetes containers (`talosctl containers -k`) and the last 100 log lines of every `kube-system` container of the cloud controller and Cilium;
+* through `kubectl`: nodes, pods, `kube-system` events, the cloud controller's log and Flux's sources. The kubeconfig points at the private VIP, so the script asks the first control plane's public address on 6443, which the firewall opens to `ADMIN_CIDRS`, and checks the certificate against the VIP's address, a name the API server's certificate is issued for.
+
+The talosconfig and kubeconfig come from `tofu output -raw`, are written with mode 0600 under `$RUNNER_TEMP`, and are deleted when the script ends; neither is printed. The job log of this public repository is public, so every line the script prints passes through a redaction of `hskey-` and `tskey-` keys, `Bearer` values, `token=`/`password:`-style values and 64-character mixed-case tokens such as a Hetzner API token. A check that gets no answer is listed as a warning at the end; the job fails only when it cannot read the state. The script installs `talosctl` and `kubectl` at the versions pinned at its top, checked against pinned SHA-256 sums, because `infra-runner` does not carry them; Renovate proposes their bumps for approval on the dashboard.
+
 ## Credentials and rotation
 
 Hetzner tokens cannot be narrowed below a whole project, so each job gets its own token and each can be revoked alone. Every server, the network and the Headscale address carry Hetzner's delete protection, which slows down deletion but nothing else.
