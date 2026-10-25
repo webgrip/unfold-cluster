@@ -15,9 +15,14 @@ locals {
     "unfold-cp-3" = "10.64.0.13"
   }
 
-  unfold_worker = {
-    "unfold-app-1" = "10.64.0.21"
-  }
+  workers = merge([
+    for pool_name, pool in var.worker_pools : {
+      for index in range(pool.node_count) : "${pool.name_prefix}-${index + 1}" => {
+        pool       = pool_name
+        private_ip = cidrhost(local.cloud_subnet_range, pool.first_host + index)
+      }
+    }
+  ]...)
 }
 
 resource "hcloud_network" "cluster" {

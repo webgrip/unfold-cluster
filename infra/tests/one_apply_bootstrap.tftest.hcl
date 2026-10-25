@@ -68,7 +68,7 @@ run "a_plan_only_run_before_the_snapshot_exists_still_plans_every_node" {
   command = plan
 
   assert {
-    condition     = length(hcloud_server.control_plane) == 3 && length(hcloud_server.unfold_worker) == 1
+    condition     = length(hcloud_server.control_plane) == 3 && length(hcloud_server.worker) == 2
     error_message = "a plan-only run must show every cluster node, with no human-set gate"
   }
 
@@ -87,7 +87,7 @@ run "an_apply_run_refuses_to_boot_nodes_without_the_snapshot" {
 
   expect_failures = [
     hcloud_server.control_plane,
-    hcloud_server.unfold_worker,
+    hcloud_server.worker,
   ]
 }
 
@@ -150,7 +150,7 @@ run "an_apply_run_boots_nodes_from_the_labelled_snapshot_with_the_key_read_from_
   }
 
   assert {
-    condition     = data.external.worker_tailnet_key["unfold-app-1"].query.request == "worker ${hcloud_server.unfold_worker["unfold-app-1"].id}"
+    condition     = data.external.worker_tailnet_key["unfold-app-1"].query.request == "worker ${hcloud_server.worker["unfold-app-1"].id}"
     error_message = "a worker key is asked for by the worker's own server id, so each server gets one"
   }
 

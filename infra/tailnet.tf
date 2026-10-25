@@ -45,23 +45,23 @@ resource "terraform_data" "control_plane_tailnet_key" {
 }
 
 data "external" "worker_tailnet_key" {
-  for_each = local.unfold_worker
+  for_each = local.workers
 
   program = ["${path.module}/../scripts/read-tailnet-key.sh"]
-  query   = merge(local.tailnet_key_query, { request = "worker ${hcloud_server.unfold_worker[each.key].id}" })
+  query   = merge(local.tailnet_key_query, { request = "worker ${hcloud_server.worker[each.key].id}" })
 
   depends_on = [hcloud_server.headscale]
 }
 
 resource "terraform_data" "worker_tailnet_key" {
-  for_each = local.unfold_worker
+  for_each = local.workers
 
   input            = sensitive(data.external.worker_tailnet_key[each.key].result.key)
   triggers_replace = var.tailnet_key_generation
 
   lifecycle {
     ignore_changes       = [input]
-    replace_triggered_by = [hcloud_server.unfold_worker[each.key].id]
+    replace_triggered_by = [hcloud_server.worker[each.key].id]
 
     postcondition {
       condition     = startswith(self.output, "hskey-auth-")
@@ -81,7 +81,7 @@ locals {
       }
     },
     {
-      for name in keys(local.unfold_worker) : name => {
+      for name in keys(local.workers) : name => {
         authkey    = terraform_data.worker_tailnet_key[name].output
         extra_args = local.tailscale_login_args
       }

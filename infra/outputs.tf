@@ -8,11 +8,12 @@ output "control_planes" {
   }
 }
 
-output "unfold_worker" {
-  description = "Name, private address and public IPv4 of the Unfold worker."
+output "workers" {
+  description = "Name, pool, private address and public IPv4 of each worker."
   value = {
-    for name, server in hcloud_server.unfold_worker : name => {
-      private_ip  = local.unfold_worker[name]
+    for name, server in hcloud_server.worker : name => {
+      pool        = local.workers[name].pool
+      private_ip  = local.workers[name].private_ip
       public_ipv4 = server.ipv4_address
     }
   }
