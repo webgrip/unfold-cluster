@@ -25,7 +25,9 @@ Environment:
   WAIT_SECONDS             how long to keep retrying, default 1800
   DRY_RUN                  server asks the API to validate and not store
 
-Never prints a request or response body: both carry the Secret values."
+Refuses to write anything when a value is empty, so a value missing from
+OpenBao fails the apply instead of blanking a working Secret. Never prints a
+request or response body: both carry the Secret values."
 
 readonly api_port=6443
 readonly field_manager=opentofu
@@ -106,6 +108,12 @@ apply_secret_until_deadline() {
   done
 }
 
+refuse_empty_values() {
+  local empty
+  empty="$(jq -r '[.[] | .metadata as $secret | (.data // {}) | to_entries[] | select(.value == "") | "\($secret.namespace)/\($secret.name) \(.key)"] | join(", ")' <<<"$CLUSTER_SECRETS")"
+  [ -z "$empty" ] || fail "refusing to write any Secret while a value is empty, which would replace a working one: ${empty}"
+}
+
 main() {
   if [ "$#" -gt 0 ]; then
     echo "$usage"
@@ -115,6 +123,7 @@ main() {
   require_tools
   jq -e 'type == "array" and all(.[]; .kind == "Secret" and (.metadata.name | length > 0) and (.metadata.namespace | length > 0))' \
     <<<"$CLUSTER_SECRETS" >/dev/null || fail "CLUSTER_SECRETS is not a list of named, namespaced Secrets"
+  refuse_empty_values
 
   work_dir="$(mktemp -d)"
   trap 'rm -rf "$work_dir"' EXIT

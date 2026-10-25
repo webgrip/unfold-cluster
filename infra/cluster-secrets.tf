@@ -58,16 +58,4 @@ resource "terraform_data" "cluster_secrets" {
       KUBE_CLIENT_KEY         = talos_cluster_kubeconfig.cluster.kubernetes_client_configuration.client_key
     }
   }
-
-  lifecycle {
-    precondition {
-      condition = alltrue([
-        var.hcloud_cluster_token != "",
-        var.etcd_backup_s3_access_key != "",
-        var.etcd_backup_s3_secret_key != "",
-        startswith(var.etcd_backup_age_recipient, "age1"),
-      ])
-      error_message = "The cloud controller token and the etcd backup key pair and age recipient must all be set: this apply writes them into the running cluster, and an empty value would replace the working one."
-    }
-  }
 }

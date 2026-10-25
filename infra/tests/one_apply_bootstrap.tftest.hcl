@@ -59,13 +59,9 @@ mock_provider "external" {
 }
 
 variables {
-  state_passphrase          = "mock-passphrase-of-at-least-thirty-two-characters"
-  admin_ssh_public_key      = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
-  admin_cidrs               = ["203.0.113.7/32"]
-  hcloud_cluster_token      = "mock-cluster-token"
-  etcd_backup_s3_access_key = "mock-access-key"
-  etcd_backup_s3_secret_key = "mock-secret-key"
-  etcd_backup_age_recipient = "age1mockrecipient"
+  state_passphrase     = "mock-passphrase-of-at-least-thirty-two-characters"
+  admin_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockOwnerKey owner"
+  admin_cidrs          = ["203.0.113.7/32"]
 }
 
 run "a_plan_only_run_before_the_snapshot_exists_still_plans_every_node" {
@@ -500,16 +496,4 @@ run "every_apply_rewrites_the_seeded_secrets_into_the_running_cluster" {
     condition     = issensitive(local.cluster_secrets_apply_body) && issensitive(terraform_data.cluster_secrets.triggers_replace)
     error_message = "the Secret values must stay sensitive, or the plan log prints them"
   }
-}
-
-run "an_apply_never_writes_an_empty_credential_into_the_cluster" {
-  command = plan
-
-  variables {
-    hcloud_cluster_token = ""
-  }
-
-  expect_failures = [
-    terraform_data.cluster_secrets,
-  ]
 }
