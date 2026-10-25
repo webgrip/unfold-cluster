@@ -17,6 +17,9 @@ on:
       - kubernetes/platform/flux-instance/**
       - kubernetes/platform/etcd-backup/namespace.yaml
       - scripts/write-cluster-secrets.sh
+      - scripts/encrypt-node.sh
+      - scripts/disk-kms-key.sh
+      - scripts/guard-encryption-rollout.sh
       - scripts/mask-hcloud-token-prefixes.sh
       - scripts/test-mask-hcloud-token-prefixes.sh
       - scripts/diagnose-cluster.sh
@@ -70,6 +73,18 @@ jobs:
       - name: Test the rendered Headscale configuration and policy on the pinned Headscale, with its identity provider down
         working-directory: .
         run: ./scripts/test-headscale-config.sh
+
+      - name: Test the disk-encryption re-install against a stubbed cluster, mutants included
+        working-directory: .
+        run: ./scripts/test-encrypt-node.sh
+
+      - name: Test the one-node-per-plan rollout guard, mutants included
+        working-directory: .
+        run: ./scripts/test-guard-encryption-rollout.sh
+
+      - name: Test that the disk KMS master key is minted once and never replaced, mutants included
+        working-directory: .
+        run: ./scripts/test-disk-kms-key.sh
 
       - name: Test that the escrowed Talos secrets restore the same cluster identity
         working-directory: .

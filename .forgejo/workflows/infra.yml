@@ -18,6 +18,9 @@ on:
       - kubernetes/platform/flux-instance/**
       - kubernetes/platform/etcd-backup/namespace.yaml
       - scripts/write-cluster-secrets.sh
+      - scripts/encrypt-node.sh
+      - scripts/disk-kms-key.sh
+      - scripts/guard-encryption-rollout.sh
       - scripts/openbao-kv.sh
       - scripts/lift-headscale-protection.sh
       - scripts/set-etcd-backup-lifecycle.sh
@@ -166,6 +169,26 @@ jobs:
           echo "::notice::plan digest ${digest}"
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             echo "plan digest \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Refuse a plan that re-installs more than one running node for disk encryption
+        run: tofu show -json infra.tfplan | ../scripts/guard-encryption-rollout.sh
+
+      - name: Give the disk-encryption rollout talosctl, kubectl and the cluster's talosconfig
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.apply == 'apply'
+        run: |
+          set -eu
+          ../scripts/diagnose-cluster.sh --install-tools "${RUNNER_TEMP}/rollout-bin"
+          echo "${RUNNER_TEMP}/rollout-bin" >> "${GITHUB_PATH}"
+          talosconfig="${RUNNER_TEMP}/rollout-talosconfig"
+          if ( umask 077; tofu output -raw talosconfig > "$talosconfig" 2>/dev/null ) && [ -s "$talosconfig" ]; then
+            echo "TALOSCONFIG=${talosconfig}" >> "${GITHUB_ENV}"
+          else
+            rm -f "$talosconfig"
+            echo "the state has no talosconfig yet: only nodes in maintenance mode can be configured, none re-installed"
           fi
 
       - name: Apply, only when asked for by hand on main with the reviewed digest

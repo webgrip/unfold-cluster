@@ -193,7 +193,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
   ])
 
   lifecycle {
-    replace_triggered_by = [hcloud_server.control_plane[each.key].id]
+    replace_triggered_by = [hcloud_server.control_plane[each.key].id, terraform_data.disk_encryption_reinstall[each.key]]
   }
 }
 
@@ -216,7 +216,7 @@ resource "talos_machine_configuration_apply" "worker" {
   ])
 
   lifecycle {
-    replace_triggered_by = [hcloud_server.worker[each.key].id]
+    replace_triggered_by = [hcloud_server.worker[each.key].id, terraform_data.disk_encryption_reinstall[each.key]]
   }
 }
 

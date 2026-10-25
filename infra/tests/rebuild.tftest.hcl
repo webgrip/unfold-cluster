@@ -31,7 +31,8 @@ mock_provider "hcloud" {
 
   mock_resource "hcloud_server" {
     defaults = {
-      id = "106"
+      id           = "106"
+      ipv4_address = "198.51.100.10"
     }
   }
 
@@ -122,8 +123,8 @@ run "the_live_server_is_replaced_once_to_match_a_fresh_rebuild" {
   command = plan
 
   assert {
-    condition     = terraform_data.headscale_generation.input == 3
-    error_message = "generation 3 replaces the server of 2026-10-25, whose program and sudoers rule refuse the apply's install, policy and gateway steps"
+    condition     = terraform_data.headscale_generation.input == 4
+    error_message = "generation 4 replaces the server once more, so the disk KMS its cloud-init installs runs on it (generation 3 replaced the server of 2026-10-25, whose program and sudoers rule refused the apply's install, policy and gateway steps)"
   }
 }
 

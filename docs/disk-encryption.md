@@ -1,10 +1,12 @@
-# Disk encryption for the cloud nodes
+# Disk encryption
 
-RFC 0001 decided on 2026-10-24 that the Talos STATE and EPHEMERAL volumes of every cloud node are LUKS2. The key is sealed by a KMS server on its own small VM. This page is the design for getting there from the running cluster. The configuration is in the repository and switched off: the key server does not exist yet, and it costs money, so it is a proposal for the owner.
+RFC 0001 decided that every node's Talos STATE and EPHEMERAL volumes are LUKS2. [ADR 0003](adr/0003-disk-encryption-key-source.md) decided where the key comes from: a KMS on `unfold-headscale`, for cloud and metal nodes alike. This page is how it is built, how a running node is moved onto it, and how to see where each node stands.
 
 ## What is built
 
-[infra/disk-encryption.tf](../infra/disk-encryption.tf) renders two `VolumeConfig` documents, STATE and EPHEMERAL. Each has:
+### The VolumeConfig
+
+[infra/disk-encryption.tf](../infra/disk-encryption.tf) renders two `VolumeConfig` documents, STATE and EPHEMERAL, for every node named in `disk_encryption_nodes`:
 
 ```yaml
 encryption:
@@ -12,94 +14,76 @@ encryption:
   cipher: aes-xts-plain64
   blockSize: 4096
   options: [no_read_workqueue, no_write_workqueue]
+  allowDiscards: false
   keys:
     - slot: 0
       kms:
-        endpoint: <disk_encryption_kms_endpoint>
+        endpoint: https://headscale.webgrip.dev:4050
 ```
 
-Discards stay off: a cloud disk gains nothing from TRIM, and TRIM leaks which blocks are in use. The documents reach only the nodes named in `disk_encryption_nodes`, through each node's own `talos_machine_configuration_apply`. Both variables are empty by default, so this change alters no machine config.
+Cloud disks keep discards off: they gain nothing from TRIM, and TRIM shows which blocks are in use. A metal node (`unfold-metal-*`) gets `allowDiscards: true` on its local NVMe, where TRIM keeps write speed and wear healthy (RFC 0001). `disk_encryption_kms_endpoint` names another KMS, and refuses `grpc://`.
 
-The variables refuse three mistakes:
+### The key server
 
-- a node list without a key server;
-- a `grpc://` or scheme-less endpoint, which would carry the keys in plain text;
-- a node the cluster does not have.
+`kms-server` from `siderolabs/kms-client`, the container image `ghcr.io/siderolabs/kms-server:v0.2.0` pinned by digest in [infra/disk-kms.tf](../infra/disk-kms.tf), runs under podman on `unfold-headscale`:
 
-[infra/tests/disk_encryption.tftest.hcl](../infra/tests/disk_encryption.tftest.hcl) pins all of it.
+- **Installed by cloud-init**, so a rebuilt Headscale server has it too. `headscale_generation` 4 replaces the live server once to get it.
+- **TLS from Headscale's own certificate.** Headscale keeps its Let's Encrypt certificate and key in one file in `/var/lib/headscale/cache`; `unfold-kms-cert` copies it to `/etc/unfold-kms/tls.pem` before the KMS starts, and a path unit restarts the KMS when Headscale renews it. Talos checks the certificate against its built-in public roots, because STATE opens before any custom CA from the config could be read.
+- **The master key** is in OpenBao `secret/unfold-cluster/disk-kms` (`master_key`, base64 of 32 bytes). `scripts/disk-kms-key.sh` reads it on every plan and, on an apply run that finds none, writes 32 random bytes there first; it never replaces a stored key, and the OpenBao policy of `ci-unfold-cluster` grants `create` and `read` on that path but not `update` (homelab-cluster 0a7dd339). Cloud-init writes it to `/etc/unfold-kms/master.key` (root, 0400). The container runs read-only, with every capability dropped.
+- **The firewall** `unfold-disk-kms`, attached to the Headscale server, opens TCP 4050 to the nodes' public IPv4 addresses and to `ADMIN_CIDRS`. Nothing else reaches it. This matters more than usual: the reference server unseals for anyone who sends it a sealed blob from a LUKS2 header (ADR 0003).
 
-## Why the KMS and not the other key types
+### What it costs at boot
 
-Hetzner Cloud servers have no TPM, so `tpm` is not available. `nodeID` derives the key from the node's UUID, which Hetzner's metadata and anyone holding a disk image can read, so it protects nothing. `static` stores the passphrase in the machine config, and for STATE that config sits on the volume it would unlock. `kms` is the only key type that keeps the key off the disk: Talos sends the node UUID and a sealed blob to the KMS, and only the KMS can unseal it.
-
-## The key server
-
-**Status: does not exist.** Nothing in this repository or the Hetzner project runs one.
-
-### Software
-Sidero's reference server, `kms-server` from `github.com/siderolabs/kms-client` (MPL-2.0, v0.2.0, last commit 2026-02-09). It is a single gRPC binary. It seals with AES-GCM under a master key read from `--key-path`, and it serves TLS itself (`--tls-enable`, `--tls-cert-path`, `--tls-key-path`).
-
-It authorises by node UUID alone. That is the RFC's accepted risk ("network isolation now; our own KMS server backed by OpenBao Transit later").
-
-### Where it runs
-The constraints, in order:
-
-1. **Not in this cluster.** A node needs the KMS before STATE opens, which is before Talos has its machine config, so long before kubelet or any pod exists. A KMS inside the cluster is a bootstrap loop: a full restart could never come back.
-2. **Not in this cluster's Hetzner project.** Every token in that project can boot any server of the project into rescue mode or image its disk (README, "Credentials and rotation"). A KMS VM in the same project falls to the same token as the disks it protects.
-3. **Reachable before the tailnet.** Tailscale is a Talos extension, so it starts after EPHEMERAL is open. The KMS must be reachable over the public internet, or the private network, which a different project cannot join.
-4. **A certificate from a public CA.** STATE is unlocked before the machine config is read, so a custom CA from the config cannot be trusted at that point (Talos's own `EncryptionKeyKMS` documentation).
-5. **Up whenever a node boots.** A running node never asks again, but a rebooting node waits until the KMS answers.
-
-The proposal, which **needs the owner's approval because it costs money**:
-
-- **One CX23 in a second Hetzner project, `unfold-kms`.** It runs Ubuntu with `kms-server` installed by cloud-init from a checksum-pinned release binary, the same pattern as `unfold-headscale`. It has its own API token, which none of the cluster's tokens can reach.
-- **The Hetzner Cloud Firewall of that project** opens the KMS port to the four nodes' public IPv4 addresses only, port 80 to the internet for the certificate's HTTP-01 challenge, and SSH to ADMIN_CIDRS.
-- **The DNS name `kms.webgrip.dev`**, an unproxied A record declared in homelab-cluster like Headscale's. A Let's Encrypt certificate is obtained and renewed by the HTTP-01 challenge on the VM.
-- **The master key** is generated once by OpenTofu and kept in that module's own encrypted state. It is also stored in OpenBao and in the owner's password manager. Losing it does not lose data: every node can be wiped and rejoined, and etcd survives on the other members and in the backups. Losing it during a full-cluster outage, though, means rebuilding from the etcd backup.
-- **Its own OpenTofu root**, `infra/kms/`, with its own state key and token, applied before any node lists encryption. It must not depend on anything in the cluster.
-
-The homelab was considered and rejected as the KMS host. A homelab outage would leave every rebooting Unfold node locked, and the cluster is designed to keep running when the homelab is down (Flux reads from the GitHub mirror for the same reason).
+A node asks the KMS only when it opens STATE and EPHEMERAL at boot. A running node never asks again. A rebooting node whose KMS does not answer waits and retries until it does, so `unfold-headscale` must be up for a node to finish booting. Headscale's unattended upgrade may reboot it at 04:30 for about a minute.
 
 ## Turning it on
 
-New nodes are the easy case. A node created after `disk_encryption_kms_endpoint` is set, and listed in `disk_encryption_nodes` from its first apply, formats its volumes encrypted at install. The CI node `unfold-ci-1` can start that way.
+### A new node
 
-Existing nodes are the hard case. Talos encrypts a volume only when it formats it, and it refuses to open a plain volume once encryption is configured: `block dev type mismatch: xfs != luks`, from `HandleEncryptionWithHandler` in Talos v1.14.4. So adding a running node to the list without wiping it leaves the node unable to mount STATE and EPHEMERAL at its next reboot. Each existing node goes through a wipe and rejoin, one at a time.
+A node created while it is in `disk_encryption_nodes` formats its volumes encrypted at install. The re-install step finds it in maintenance mode and leaves it alone.
 
-### The rolling path, one node per run
+### The AX41
 
-This is a new `infra` workflow mode, `encrypt-node`, with the node name as its input. It is not built yet. It needs the KMS to test against, and an untested destructive workflow is worse than none.
+`unfold-metal-1` is encrypted from its first install, so it never needs a wipe for encryption. `disk_encryption_nodes` defaults to `["unfold-metal-1"]`, and `disk_kms_metal_client_ipv4s` in [infra/disk-kms.tf](../infra/disk-kms.tf) opens the KMS firewall to every metal node's public address from Robot.
 
-1. **Preflight, read-only.**
-   - All nodes are Ready.
-   - etcd has three healthy members (`talosctl etcd status`).
-   - The node is listed in `disk_encryption_nodes` on `main` and still reports its volumes unencrypted (`talosctl get volumestatus`).
-   - No other node is mid-rotation.
-   - The run refuses on any failure.
-2. **Wipe.** A graceful Talos reset of that node only, wiping the system labels STATE and EPHEMERAL, with a reboot. Graceful means:
-   - the node is cordoned and drained;
-   - a control plane leaves etcd first, so the remaining two keep quorum (two of two);
-   - the node comes back in maintenance mode, without a config.
-3. **Rejoin.** A `tofu apply` replaces that node's `talos_machine_configuration_apply`, using a per-node `terraform_data` generation in `replace_triggered_by`, and sends the full config, now with the encrypted `VolumeConfig`, to the maintenance-mode node. Talos then:
-   - asks the KMS to seal fresh keys;
-   - formats both volumes as LUKS2;
-   - rejoins etcd as a new member;
-   - registers the kubelet again.
-4. **Postflight.** Wait until the node is Ready, etcd shows three healthy members again, and `volumestatus` shows `luks2` for STATE and EPHEMERAL. Only then may the next run start.
+A precondition on the KMS firewall refuses a listed metal node without its address, because its STATE would never open. The metal node's config takes `local.disk_encryption_patches` (`infra/metal.tf`). Talos needs the public DHCP address before STATE opens; the vSwitch VLAN comes from the machine config and is not up yet, which is why the KMS is reached over the public address. That the AX41's DHCP comes up before STATE opens is proven on its first install, not before.
 
-The order is `unfold-app-1` first, which has no etcd and proves the path, then `unfold-cp-3`, `unfold-cp-2` and `unfold-cp-1`. `talos_machine_bootstrap` targets `unfold-cp-1` but is already in the state, so it never runs again.
+A TPM key slot is a later, separate step (ADR 0003): one KVM session, a SecureBoot image, a reinstall through `install_generation`. Adding that slot needs no wipe.
 
-Two things are proven only on the first node:
+### A running cloud node
 
-- that the Talos provider applies to a node in maintenance mode within the same resource replacement;
-- that the private network's DHCP address is up before STATE unlocks, if the KMS is ever reached privately.
+Talos encrypts a volume only when it formats it, and refuses a plain volume once encryption is configured (`block dev type mismatch: xfs != luks`, `HandleEncryptionWithHandler` in Talos v1.14.4). So a running node is wiped and rejoined. The apply does it, one node per reviewed plan:
 
-What each run does to the running cluster: one node is drained and rebooted twice, a few minutes each. Its pods reschedule. On a control plane the API VIP moves if that node held it, and etcd runs on two members for the length of the run.
+1. **A commit adds one node to `disk_encryption_nodes`.** Its plan replaces three things for that node: `terraform_data.disk_encryption_reinstall`, its `talos_machine_configuration_apply` (now carrying the encrypted `VolumeConfig`) and `terraform_data.disk_encryption_rejoin`. A worker also gets a new tailnet key slot, because its single-use key was spent at its first boot and its tailnet state is wiped with EPHEMERAL.
+2. **The plan guard** ([scripts/guard-encryption-rollout.sh](../scripts/guard-encryption-rollout.sh)) runs on every plan, plan-only included. It names the node the plan re-installs and refuses a plan that re-installs two running nodes, which could take two control planes out of etcd at once.
+3. **Re-install** ([scripts/encrypt-node.sh](../scripts/encrypt-node.sh) `reinstall`):
+   - waits until the node answers on the Talos API;
+   - does nothing when its volumes already match, or when it waits in maintenance mode for its first config;
+   - **refuses** unless every Kubernetes node is Ready, etcd has one member per control plane and each answers its status, and the KMS answers TLS with a certificate that verifies; so a node left unhealthy by the previous run stops the next one;
+   - cordons and drains the node; a drain that does not finish in 10 minutes uncordons it and stops, with nothing wiped;
+   - for a control plane, `talosctl etcd leave`, then checks etcd has exactly one member fewer (two of two: quorum holds, with no margin until the node is back);
+   - `talosctl reset --graceful=false --reboot` with STATE and EPHEMERAL wiped, deletes the Node object, and waits until the node answers in maintenance mode.
+4. **The machine config apply** sends the full config to the node in maintenance mode. Talos asks the KMS to seal fresh keys, formats both volumes as LUKS2, and joins etcd as a new member and Kubernetes as a new kubelet.
+5. **Rejoin** (`encrypt-node.sh rejoin`) waits until the node reports `luks2` and `ready` for both volumes, its Node is Ready and, for a control plane, etcd has all three members answering; then it uncordons the node. It fails the apply after 30 minutes.
+
+The order is `unfold-app-1` first, which has no etcd and proves the path, then `unfold-cp-3`, `unfold-cp-2` and `unfold-cp-1`. Each is its own commit, plan and apply. `talos_machine_bootstrap` is in the state and never runs again, so re-installing `unfold-cp-1` is no different.
+
+Taking a node back to plain volumes is the same path with the node removed from the list. A worker taken back needs a `tailnet_key_generation` bump in the same commit, because its old key slot holds a spent key.
+
+### What a run does to the cluster
+
+One node is drained and rebooted twice, a few minutes each. Its pods reschedule. On a control plane the API address moves if that node held it, and etcd runs on two members for the length of the run: one more failure in that window loses quorum. The guard checks the cluster at the start of a run, not during it.
+
+## Seeing where each node stands
+
+The infra workflow's **diagnose** mode prints, for each node, `STATE=luks2:ready EPHEMERAL=luks2:ready` or `none`, and whether the KMS answers TLS with a certificate that verifies. By hand, with a talosconfig: `scripts/encrypt-node.sh status <node public IP>`.
 
 ## Risks that stay
 
 | Risk | Why | Mitigation |
 | --- | --- | --- |
-| KMS down when a node reboots | The node waits for the KMS | Running nodes are unaffected; alert on the KMS's reachability from the homelab; keep its VM boring |
-| The KMS authorises by UUID only | Sidero's reference server has no client auth | Firewall to the four node addresses; later our own server on OpenBao Transit (RFC 0001) |
+| A cluster Hetzner token reads every disk | It can image `unfold-headscale`, master key included, without a reboot | A KMS in a second Hetzner project turns that into a node outage (proposed, ADR 0003); later our own KMS that checks the caller |
+| The KMS unseals for anyone who reaches it | The reference server has no client authentication | The firewall: node addresses and `ADMIN_CIDRS` only |
+| Headscale down when a node reboots | The node waits for the KMS | Running nodes are unaffected; the diagnose run checks the KMS |
+| etcd on two members during a control plane's run | One member is out for the wipe | One node per plan; the guard refuses to start without three healthy members |
 | Hetzner reads memory | No confidential computing on cloud servers | Accepted in RFC 0001 |

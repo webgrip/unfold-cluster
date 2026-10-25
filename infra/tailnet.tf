@@ -46,7 +46,7 @@ resource "terraform_data" "control_plane_tailnet_key" {
 
 locals {
   worker_tailnet_key_slot = {
-    for name, server in hcloud_server.worker : name => "${server.id}${replace(var.tailnet_key_generation, "-", "")}"
+    for name, server in hcloud_server.worker : name => "${server.id}${replace(var.tailnet_key_generation, "-", "")}${contains(var.disk_encryption_nodes, name) ? "1" : ""}"
   }
 }
 
@@ -67,7 +67,7 @@ resource "terraform_data" "worker_tailnet_key" {
 
   lifecycle {
     ignore_changes       = [input]
-    replace_triggered_by = [hcloud_server.worker[each.key].id]
+    replace_triggered_by = [hcloud_server.worker[each.key].id, terraform_data.disk_encryption_reinstall[each.key]]
 
     postcondition {
       condition     = startswith(self.output, "hskey-auth-")

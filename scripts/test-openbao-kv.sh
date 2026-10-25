@@ -134,6 +134,13 @@ expect "the rendered bundle is stored whole" test "$(stored unfold-cluster_rende
 expect "the rendered bundle is never printed" bash -c '! grep -q canary "$1"' _ "${work}/out"
 expect "an empty sensitive output is refused" bash -c '! printf "" | "$1" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1' _ "$tool"
 
+kms_key="$(head -c 32 /dev/urandom | base64 -w0)"
+printf '%s\n' "$kms_key" | "$tool" put disk-kms-key unfold-cluster/disk-kms master_key >"${work}/kms-out" 2>&1
+expect "a disk KMS master key is stored" test "$(stored unfold-cluster_disk-kms master_key)" = "$kms_key"
+expect "a disk KMS master key is masked before anything else is printed" grep -qF "::add-mask::${kms_key}" "${work}/kms-out"
+expect "a 16-byte key is refused" bash -c '! head -c 16 /dev/urandom | base64 -w0 | "$1" put disk-kms-key unfold-cluster/disk-kms master_key >/dev/null 2>&1' _ "$tool"
+expect "a key that is not base64 is refused" bash -c '! printf "%044d\n" 0 | tr 0 - | "$1" put disk-kms-key unfold-cluster/disk-kms master_key >/dev/null 2>&1' _ "$tool"
+
 known_hosts_line="headscale.webgrip.dev,198.51.100.23 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDy5LGeG3jjYA5HxMiHteWkI9s1BdJPy8vVlMZBpZTnb"
 printf '%s\n' "$known_hosts_line" | "$tool" put known-hosts unfold/headscale-address ssh_known_hosts >/dev/null 2>&1
 expect "a known_hosts line is stored beside the address" test "$(stored unfold_headscale-address ssh_known_hosts)/$(stored unfold_headscale-address ipv4)" = "${known_hosts_line}/198.51.100.23"

@@ -94,3 +94,13 @@ So a worker gets a fresh key whenever it needs one:
 A running node never needs its key again: Talos joins once (`TS_AUTH_ONCE=true`) and tagged nodes do not expire, so a bump re-applies the machine configs without disturbing the tailnet.
 
 The first apply after this scheme landed made one unused key for `unfold-app-1`, in the slot of generation `2026-10-25`. It expires unused after 24 hours.
+
+## Disk-encryption runs
+
+Adding a running cloud node to `disk_encryption_nodes` makes the next apply wipe and re-install it with LUKS2 volumes ([disk encryption](../disk-encryption.md)). Every plan, plan-only included, runs `scripts/guard-encryption-rollout.sh` after the digest: it prints `this plan wipes and re-installs <node>` when the plan does, and fails the run when the plan would re-install two running nodes. Read that line next to the digest before you dispatch the apply.
+
+The apply run installs `talosctl` and `kubectl` and writes the cluster's talosconfig before applying, for `scripts/encrypt-node.sh`. Its output shows each step (`guard passed`, `drained`, `left etcd`, `reset`, `in maintenance mode`, `volumes unlocked`, `Node Ready`, `rejoined`). If it stops:
+
+- **at the guard**: a node is not Ready, etcd lacks a member, or the KMS does not answer. Nothing was touched. Run `diagnose`, fix the cause, dispatch again.
+- **at the drain**: the node is uncordoned and untouched; a PodDisruptionBudget or a stuck pod held it. Fix that and dispatch again.
+- **after the reset**: the node is wiped. Dispatch the apply again with the new digest; `terraform_data.disk_encryption_reinstall` was tainted, finds the node in maintenance mode, and the config apply and rejoin carry on. Do not start another node before `diagnose` shows this one `luks2` and Ready, and etcd with three members.

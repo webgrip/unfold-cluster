@@ -14,6 +14,7 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
       writes only when the stored value differs, so reruns leave the version
       history alone. KIND names what stdin must hold, and the value is refused
       otherwise:
+        disk-kms-key   the disk KMS master key, base64 of 32 bytes, masked in the log
         authkey        a Headscale pre-auth key (hskey-auth-...), masked in the log
         ipv4           a public IPv4 address, or an empty line to clear it
         talos-secrets  a talosctl secrets bundle
@@ -59,6 +60,11 @@ has_yaml_key() {
 checked_value() {
   local kind="$1" value
   case "$kind" in
+    disk-kms-key)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^[A-Za-z0-9+/]{43}=$ ]] || fail "stdin holds no base64 of 32 bytes"
+      echo "::add-mask::${value}" >&3
+      ;;
     authkey)
       value="$(tr -d '\r\n ')"
       [[ "$value" == hskey-auth-* ]] || fail "stdin holds no pre-auth key"
