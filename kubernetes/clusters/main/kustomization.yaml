@@ -28,3 +28,4 @@ resources:
   - ../../platform/observability
   - ../../platform/kyverno
   - ../../platform/trivy-operator
+  - ../../platform/runtime-security

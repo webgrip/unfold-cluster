@@ -1,0 +1,30 @@
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: runtime-outbound-connects
+spec:
+  options:
+    - name: policy-mode
+      value: monitor
+  podSelector: {}
+  kprobes:
+    - call: tcp_connect
+      syscall: false
+      message: "A pod opened a TCP connection to an address outside the cluster and the tailnet"
+      tags:
+        - runtime-security
+        - egress
+      args:
+        - index: 0
+          type: sock
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotDAddr
+              values:
+                - 127.0.0.0/8
+                - 10.64.0.0/14
+                - 100.64.0.0/10
+                - 169.254.0.0/16
+                - ::1/128
