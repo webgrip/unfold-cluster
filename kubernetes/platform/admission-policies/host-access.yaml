@@ -110,7 +110,7 @@ metadata:
   name: host-access
 spec:
   policyName: host-access
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
   matchResources:
     namespaceSelector:
       matchExpressions:
