@@ -8,10 +8,10 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 
 | Path | What it holds | Applied by |
 | --- | --- | --- |
-| `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, and the manifests Talos installs at bootstrap: Cilium, Hetzner's cloud controller, the Flux operator and the Flux instance | OpenTofu, from `.forgejo/workflows/infra.yml` |
+| `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, and the manifests Talos installs at bootstrap: Cilium and Hetzner's cloud controller (rendered from their `kubernetes/platform/` files), the Flux operator and the Flux instance | OpenTofu, from `.forgejo/workflows/infra.yml` |
 | `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: today the Hetzner CSI driver | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup | Flux in the cluster |
 
 ## From nothing to GitOps
 
@@ -23,11 +23,32 @@ In that one run:
 2. **Headscale.** OpenTofu creates `unfold-headscale`, a small server running Headscale, the self-hosted coordination server of the admin tailnet, on the primary IP `headscale_ipv4`. The A record for `headscale.webgrip.dev`, DNS only, is declared in homelab-cluster (`kubernetes/apps/network/cloudflare-dns/app/unfold-headscale.dnsendpoint.yaml`) and points at that address, which survives a rebuild of the server. cloud-init installs Headscale, creates the Headscale users `nodes` and the admin user, and installs `unfold-tailnet-key`, which makes the pre-auth keys.
 3. **The tailnet keys.** OpenTofu generates two ed25519 keys, kept only in the encrypted state: the server's SSH host key, which cloud-init installs as the only host key `unfold-headscale` presents, and a client key that cloud-init authorizes for the user `tofu`, restricted to running `unfold-tailnet-key` and nothing else. `scripts/read-tailnet-key.sh`, run by OpenTofu's `external` data source with the system OpenSSH client, trusts no host key but the pinned one (`StrictHostKeyChecking=yes`) and refuses to talk to a server presenting any other. In an apply run it asks for the control planes' reusable `tag:cp` key and, per worker server id, for a single-use `tag:node` key, making either when it does not exist and retrying for up to 25 minutes until Headscale's public `/health` passes with its Let's Encrypt certificate. In a plan-only run it only reads, once: it never makes a key, and an unreachable Headscale gives an empty answer instead of failing the plan, which changes nothing because every node keeps the key it was created with. SSH reaches the server only from `ADMIN_CIDRS`.
 4. **The cluster.** OpenTofu creates the four cluster nodes from the snapshot, generates the cluster's Talos secrets, applies the machine configs with the tailnet keys, and bootstraps etcd. Talos installs Cilium, Hetzner's cloud controller, the Flux operator, a Flux instance, and a GitRepository that reconciles `kubernetes/clusters/main` from the public GitHub mirror only when the newest commit carries a trusted signature.
-5. From then on Flux owns everything under `kubernetes/`. The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
+5. From then on Flux owns everything under `kubernetes/`, Cilium and the cloud controller included (see [After the first boot, Flux owns Cilium and the cloud controller](#after-the-first-boot-flux-owns-cilium-and-the-cloud-controller)). The recovery set (the Flux operator and controllers, and the storage driver's controller) tolerates and is pinned to the control planes, as on the homelab: the only worker is reserved for Unfold, and the AX41 joins later.
 
 The Kubernetes API sits on `10.64.0.10`, a Hetzner alias IP on the private network that Talos moves between control planes through the Hetzner API (`HCloudVIPConfig` on the link alias `private0`; each control plane's machine config points that alias at the MAC address Hetzner reports for the server's private NIC, so the VIP does not depend on how a server type names its interfaces). It costs nothing and is reachable only inside the network. The control planes advertise the cloud subnet `10.64.0.0/24` to the tailnet, and the tailnet policy approves that route automatically, but only from a `tag:cp` device, so the admin kubeconfig from `tofu output -raw kubeconfig` works from any admin device.
 
 Admins reach the nodes over the tailnet: install Tailscale and run `tailscale up --login-server=https://headscale.webgrip.dev`, then approve the device with `sudo headscale nodes register` on the Headscale server. The tailnet uses Headscale's own relay; no Tailscale-run service is in the path.
+
+## After the first boot, Flux owns Cilium and the cloud controller
+
+Talos applies its inline manifests when the cluster is bootstrapped and never again on its own: an `infra` apply that changes them updates the machine config, but not the cluster. So Cilium and Hetzner's cloud controller are also Flux HelmReleases, in `kubernetes/platform/cilium` and `kubernetes/platform/hcloud-cloud-controller-manager`, and a change to either reaches the cluster by merging it, like everything else under `kubernetes/`.
+
+Each has one set of files, read by both installers:
+
+| File | Flux reads it as | The Talos seed reads it as |
+| --- | --- | --- |
+| `values.yaml` | the only values, through the ConfigMap `kustomization.yaml` generates from it | the `values` of the `helm_template` in `infra/bootstrap-manifests.tf` |
+| `helmrelease.yaml` | the release, its name, and for the cloud controller the chart and version | the release name, and the cloud controller's chart and version |
+| `ocirepository.yaml` (Cilium) | the chart and version | the chart and version |
+| `kubernetes/platform/hetzner-charts/helmrepository.yaml` | the Hetzner chart repository | the same repository |
+
+So the seed a new cluster boots with is the release Flux then reconciles, and Flux's first install on a new cluster changes nothing. The OpenTofu test `the_talos_seed_installs_*_exactly_as_flux_reconciles_it`, run by `infra-check` on every pull request that touches these files, fails when the two could differ: a HelmRelease with inline values or a second `valuesFrom`, a `helm_template` with other values, `set` entries, another release name, namespace, chart, repository or version, or a component missing from `kubernetes/clusters/main`. The Cilium identity in `values.yaml` must stay `unfold-main` with ID 2; the plan refuses anything else.
+
+Flux adopts the objects Talos made without recreating them: helm-controller's install takes ownership of existing objects by default and applies server-side, so the running DaemonSets and Deployments keep their pods unless their pod template changes. Both HelmReleases use the `RetryOnFailure` strategy, so a failed install or upgrade is retried and never answered with an uninstall or a rollback of the network, and both carry `kustomize.toolkit.fluxcd.io/prune: disabled`, so deleting a file does not uninstall Cilium. The CSI driver waits for the cloud controller (`dependsOn`).
+
+A merge that changes these files deploys through Flux on its own. The `infra` workflow plans on the same merge, because the Talos machine config embeds the same files; apply that plan when convenient so a rebuilt cluster boots with the new seed. Never run `talosctl upgrade-k8s` with machine configs older than `main`: it re-applies the inline manifests and would roll Cilium back to the seed until the next Flux upgrade.
+
+The Talos seed still installs, and Flux does not yet own, the `hcloud` secret, the Flux operator and instance, the `trusted-signers` secret, the GitRepository and Kustomization `flux-system`, and the etcd backup's namespace and secret. A change to those still needs a `talosctl upgrade-k8s` after the apply, or a new cluster.
 
 ## Only signed commits deploy
 
@@ -40,7 +61,7 @@ Flux applies whatever is on the GitHub mirror's `main`, so a push made straight 
 
 A refused commit leaves the cluster on the last verified one and marks the GitRepository not ready. Pull requests, Renovate's included, are merged with Forgejo's merge button; Forgejo signs the merge commit with its instance key, which Flux trusts. Only the owner may push or merge on `main` (branch protection in homelab-cluster's `repo-config`), and Renovate never pushes straight to `main`.
 
-Trusting the instance key is a deliberate trade-off (owner decision, 2026-10-25). The key signs merges and web edits in every repository on the instance, so someone who can create a repository there can get an arbitrary tree signed. That commit still has to reach the GitHub mirror's `main`, which only Forgejo's mirror push and the protected Forgejo `main` feed; the mirror's own branch protection, below, closes the direct route. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest.
+Trusting the instance key is a deliberate trade-off (owner decision, 2026-10-25). The key signs merges and web edits in every repository on the instance, so someone who can create a repository there can get an arbitrary tree signed. That commit still has to reach the GitHub mirror's `main`, which only Forgejo's mirror push and the protected Forgejo `main` feed; the mirror's own branch protection, below, closes the direct route. Adding a person or bot means adding their public key file and running an apply, because the keys reach the cluster through a Talos inline manifest; on a running cluster that manifest only lands with `talosctl upgrade-k8s` (see [After the first boot](#after-the-first-boot-flux-owns-cilium-and-the-cloud-controller)).
 
 Verification checks only the newest commit, so it does not stop a rollback: a force-push of an older signed commit to the mirror would deploy. The GitHub mirror's `main` therefore needs branch protection that refuses force-pushes and deletion and allows pushes only from the mirror's token. That setting lives in GitHub, not here.
 

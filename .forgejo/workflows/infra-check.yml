@@ -7,6 +7,10 @@ on:
       - infra/**
       - .forgejo/workflows/infra.yml
       - .forgejo/workflows/infra-check.yml
+      - kubernetes/clusters/main/**
+      - kubernetes/platform/cilium/**
+      - kubernetes/platform/hcloud-cloud-controller-manager/**
+      - kubernetes/platform/hetzner-charts/**
 
 env:
   TF_IN_AUTOMATION: "1"

@@ -5,6 +5,8 @@ metadata:
   name: hcloud-csi
 spec:
   interval: 1h
+  dependsOn:
+    - name: hcloud-cloud-controller-manager
   chart:
     spec:
       chart: hcloud-csi

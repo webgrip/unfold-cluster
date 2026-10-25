@@ -18,7 +18,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the bootstrap charts, their image digests, Flux and Headscale in infra/, chart image digests in kubernetes/, hcloud-upload-image in scripts/build-talos-snapshot.sh. A value written as tag@sha256:digest has both parts updated. One manager reads them all, so a version without the line is the only way to freeze silently.",
+      "description": "Every version Renovate cannot find by itself carries a `# renovate:` line directly above it: Talos and Kubernetes in talos/talenv.yaml, the Flux operator charts, their image digests, Flux and Headscale in infra/, chart image digests in kubernetes/, hcloud-upload-image in scripts/build-talos-snapshot.sh. A value written as tag@sha256:digest has both parts updated. One manager reads them all, so a version without the line is the only way to freeze silently.",
       "managerFilePatterns": [
         "/^infra/.+\\.tf$/",
         "/^kubernetes/.+\\.ya?ml$/",
@@ -73,7 +73,10 @@
         "hcloud-cloud-controller-manager",
         "docker.io/hetznercloud/hcloud-cloud-controller-manager"
       ],
-      "groupName": "hcloud cloud controller manager"
+      "groupName": "hcloud cloud controller manager",
+      "prBodyNotes": [
+        "Flux upgrades the running cloud controller on merge. The Talos seed reads the same files and moves with the next `infra` apply."
+      ]
     },
     {
       "description": "The CSI driver and its sidecars are pinned by digest beside the chart, so they move in one PR.",
@@ -96,7 +99,10 @@
         "minor",
         "major"
       ],
-      "dependencyDashboardApproval": true
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Flux upgrades the running Cilium on merge. The Talos seed reads the same files and moves with the next `infra` apply."
+      ]
     },
     {
       "description": "Headscale is installed once by cloud-init, which ignores later changes; a bump records the version and its checksum must be updated with it. Upgrade the server by hand from the release notes.",
