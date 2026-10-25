@@ -54,11 +54,21 @@ spec:
           : request.namespace + '/' + variables.controllingOwners[0].kind + '/' + variables.controllingOwners[0].name)
     - name: unboundedEmptyDirGrants
       expression: "{'flux-system/Deployment/flux-operator': ['temp']}"
+    - name: podLabels
+      expression: >-
+        object.kind == 'Pod' ? object.metadata.?labels.orValue({}) :
+        (object.kind == 'CronJob'
+          ? object.spec.jobTemplate.spec.template.?metadata.?labels.orValue({})
+          : object.spec.template.?metadata.?labels.orValue({}))
+    - name: cloudnativePgPluginSocketVolumes
+      expression: >-
+        'cnpg.io/cluster' in variables.podLabels ? ['plugins'] : []
     - name: unboundedEmptyDirs
       expression: >-
         variables.spec.?volumes.orValue([]).filter(v,
           has(v.emptyDir) && !v.emptyDir.?sizeLimit.hasValue()
-          && !(v.name in variables.unboundedEmptyDirGrants[?variables.workload].orValue([]))).map(v, v.name)
+          && !(v.name in variables.unboundedEmptyDirGrants[?variables.workload].orValue([]))
+          && !(v.name in variables.cloudnativePgPluginSocketVolumes && v.emptyDir.?medium.orValue('') == '')).map(v, v.name)
   validations:
     - expression: variables.withoutRequests.size() == 0
       messageExpression: >-

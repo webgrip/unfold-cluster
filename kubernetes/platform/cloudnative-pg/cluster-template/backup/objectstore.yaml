@@ -1,0 +1,54 @@
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: ${CNPG_CLUSTER}-backup
+spec:
+  configuration:
+    destinationPath: s3://${CNPG_BACKUP_BUCKET:=unfold-cnpg}/${CNPG_NAMESPACE}
+    endpointURL: https://${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+    s3Credentials:
+      accessKeyId:
+        name: ${CNPG_CLUSTER}-backup-s3
+        key: access-key-id
+      secretAccessKey:
+        name: ${CNPG_CLUSTER}-backup-s3
+        key: secret-access-key
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+  instanceSidecarConfiguration:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+        ephemeral-storage: 512Mi
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: ${CNPG_CLUSTER}-backup-reader
+spec:
+  configuration:
+    destinationPath: s3://${CNPG_BACKUP_BUCKET:=unfold-cnpg}/${CNPG_NAMESPACE}
+    endpointURL: https://${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+    s3Credentials:
+      accessKeyId:
+        name: ${CNPG_CLUSTER}-backup-s3-reader
+        key: access-key-id
+      secretAccessKey:
+        name: ${CNPG_CLUSTER}-backup-s3-reader
+        key: secret-access-key
+  instanceSidecarConfiguration:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+        ephemeral-storage: 512Mi

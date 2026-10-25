@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trivy-report-shipper
+  labels:
+    app.kubernetes.io/name: trivy-report-shipper
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trivy-report-shipper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trivy-report-shipper
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        node.webgrip.io/pool: unfold
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+      containers:
+        - name: vector
+          # renovate: datasource=docker depName=docker.io/timberio/vector
+          image: docker.io/timberio/vector:0.60.0-distroless-libc@sha256:a9ed9a4710bdc2efa66e94c1e8edc7b439709e6e50079f1e1b2b1bf479d387da
+          args:
+            - --config-dir
+            - /etc/vector/
+          ports:
+            - name: reports
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9598
+          readinessProbe:
+            tcpSocket:
+              port: reports
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 256Mi
+              ephemeral-storage: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/vector
+      volumes:
+        - name: config
+          configMap:
+            name: trivy-report-shipper
+        - name: data
+          emptyDir:
+            sizeLimit: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trivy-report-shipper
+  labels:
+    app.kubernetes.io/name: trivy-report-shipper
+spec:
+  selector:
+    app.kubernetes.io/name: trivy-report-shipper
+  ports:
+    - name: reports
+      port: 8080
+      targetPort: reports

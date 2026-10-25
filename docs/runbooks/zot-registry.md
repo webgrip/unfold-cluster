@@ -29,7 +29,7 @@ Only the parts a client asks for are stored. Pulling a multi-arch image on an am
 | `ci` with its password | everything | `webgrip/**`: create and update tags; no delete |
 | `ci` on a mirror path or the top level | yes | refused (403) |
 
-Reads are anonymous because the nodes' containerd pulls without credentials and everything outside `webgrip/` is public anyway. Who can reach Zot at all is the network policy's job: only the nodes (`host`, `remote-node`, that is containerd and the kubelet's probes) and pods in the `ci` namespace. Agent Run pods and every other namespace are refused by the default-deny policy before they reach Zot.
+Reads are anonymous because the nodes' containerd pulls without credentials and everything outside `webgrip/` is public anyway. Who can reach Zot at all is the network policy's job: only the nodes (`host`, `remote-node`, that is containerd and the kubelet's probes), pods in the `ci` namespace, the Trivy scanner in `trivy-system` (the vulnerability database, the check bundle and the images it scans, [vulnerability-scanning](vulnerability-scanning.md)) and Kyverno's admission controller (webgrip image signatures, [image-signatures](image-signatures.md)). Agent Run pods and every other namespace are refused by the default-deny policy before they reach Zot.
 
 ### The push credential
 

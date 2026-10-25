@@ -1,5 +1,7 @@
 locals {
-  cluster_secrets = {
+  cluster_secrets = merge(local.seeded_cluster_secrets, local.autoscaler_cluster_secrets)
+
+  seeded_cluster_secrets = {
     hcloud = {
       name      = "hcloud"
       namespace = "kube-system"

@@ -1,0 +1,40 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: encrypted-volumes
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["persistentvolumeclaims"]
+  variables:
+    - name: storageClass
+      expression: object.spec.?storageClassName.orValue('')
+    - name: claim
+      expression: request.namespace + '/' + object.metadata.name
+    - name: unencryptedClaimGrants
+      expression: "{'zot/zot-data': 'hcloud-volumes'}"
+    - name: restoreDrillCluster
+      expression: object.metadata.?labels[?'cnpg.io/cluster'].orValue('').endsWith('-drill')
+  validations:
+    - expression: >-
+        variables.storageClass == 'hcloud-luks'
+        || (variables.storageClass == 'hcloud-luks-drill' && variables.restoreDrillCluster)
+        || (variables.claim in variables.unencryptedClaimGrants
+          && variables.unencryptedClaimGrants[variables.claim] == variables.storageClass)
+      messageExpression: >-
+        'PersistentVolumeClaims use the LUKS-encrypted StorageClass hcloud-luks; hcloud-luks-drill, which deletes its volume, is only for a CloudNativePG cluster named *-drill. '
+        + variables.claim + ' asks for ' + (variables.storageClass == '' ? 'no StorageClass' : variables.storageClass)
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: encrypted-volumes
+spec:
+  policyName: encrypted-volumes
+  validationActions: ["Deny"]

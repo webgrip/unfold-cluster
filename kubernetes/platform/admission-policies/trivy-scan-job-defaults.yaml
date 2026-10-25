@@ -1,0 +1,59 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: trivy-scan-job-defaults
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+  matchConditions:
+    - name: made-by-trivy-operator
+      expression: >-
+        object.metadata.?labels[?'app.kubernetes.io/managed-by'].orValue('') == 'trivy-operator'
+  variables:
+    - name: scratchSizeLimit
+      expression: "'2Gi'"
+    - name: unboundedEmptyDirNames
+      expression: >-
+        object.spec.template.spec.?volumes.orValue([]).filter(v,
+          has(v.emptyDir) && !v.emptyDir.?sizeLimit.hasValue()).map(v, v.name)
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{
+            spec: Object.spec{
+              template: Object.spec.template{
+                spec: Object.spec.template.spec{
+                  shareProcessNamespace: true,
+                  volumes: variables.unboundedEmptyDirNames.map(name,
+                    Object.spec.template.spec.volumes{
+                      name: name,
+                      emptyDir: Object.spec.template.spec.volumes.emptyDir{
+                        sizeLimit: variables.scratchSizeLimit
+                      }
+                    })
+                }
+              }
+            }
+          }
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: trivy-scan-job-defaults
+spec:
+  policyName: trivy-scan-job-defaults
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - trivy-system

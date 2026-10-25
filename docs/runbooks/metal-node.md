@@ -1,10 +1,53 @@
 # Metal node: ordering, installing and proving `unfold-metal-1`
 
-`unfold-metal-1` is a Hetzner Robot AX41 in FSN1. It runs agent Runs of the `isolated` class under
-Kata Containers 4.3.1 and CI under gVisor on the KVM platform
-([ADR 0001](../adr/0001-kata-4-on-the-metal-node.md), [ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md)).
-Git declares it in `metal_servers` (`infra/variables.tf`); the `infra` workflow orders, wires and
-installs it. The one hand step is the Robot webservice user, which Robot creates only in its UI.
+**State on 2026-10-25: no metal server is declared.** `metal_servers` in `infra/variables.tf` is
+empty, so a plan makes no Robot call and creates no metal resource. The AX41 is not in Robot's order
+API, the EX44 and AX41 are sold out on the website, and the owner declined the AX42 and the server
+market for now. Kata waits for an EX44 or AX41 at about 59 EUR a month; CI runs on an on-demand
+cloud node meanwhile. homelab-cluster's `hetzner-stock-watch` alerts once when one of them can be
+ordered again (below).
+
+The metal node runs agent Runs of the `isolated` class under Kata Containers 4.3.1 and CI under
+gVisor on the KVM platform ([ADR 0001](../adr/0001-kata-4-on-the-metal-node.md),
+[ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md)). Git declares it in `metal_servers`;
+the `infra` workflow buys or takes over, wires and installs it. The one hand step is the Robot
+webservice user, which Robot creates only in its UI.
+
+## Three ways to get the server
+
+| Mode | When | What the apply does |
+| --- | --- | --- |
+| `adopt` | A person ordered the server on Hetzner's website, which is the only way to buy an EX44 or AX41 | Never calls the order API. Checks with `GET /server/<server_number>` that the server is on this account, its product starts with `product_prefix`, it is in `location` and not cancelled; refuses anything else; names it in Robot and records it. While `server_number` is null the node is skipped and nothing calls Robot. |
+| `auction` | A server market offer is acceptable | The plan picks the cheapest offer that meets the criteria (CPU allowlist with core counts, memory, disk type, eu-central datacenters, a monthly ceiling with the IPv4 address, no setup fee) and shows its id, CPU, memory, disks, datacenter and price; the apply re-checks and orders exactly that id, test order first, and fails without ordering when it was sold in between. |
+| `order` | Robot's order API sells the product | Orders it once within `max_monthly_eur` and `max_setup_eur`. |
+
+All three refuse more servers than are declared, keep the order in OpenBao so nothing is bought
+twice, and never order when a server with the node's name exists. Every declared metal node is
+disk-encrypted from its first install. The CPU vendor (declared for `adopt` and `order`, taken from
+the bought CPU for `auction`) picks the KVM module; the metal image carries both `intel-ucode` and
+`amd-ucode`.
+
+### Bringing the EX44 or AX41 in when it is back
+
+1. Order it on the website: *Dedicated* → EX44 (or AX41) → location FSN1, NBG1 or HEL1, no
+   operating system needed, primary IPv4 included. Note the server number Robot shows.
+2. One pull request declares it:
+
+   ```hcl
+   metal_servers = {
+     "unfold-metal-1" = {
+       mode           = "adopt"
+       server_number  = 2345678
+       product_prefix = "EX44"
+       cpu_vendor     = "intel"
+       location       = "FSN1"
+       private_host   = 31
+     }
+   }
+   ```
+
+   (`product_prefix = "AX41"` and `cpu_vendor = "amd"` for an AX41.) Merge it, then plan and apply
+   with the digest.
 
 ## Once: the Robot webservice user
 
@@ -103,6 +146,19 @@ nothing else; Forgejo has no narrower scope for packages (ADR 0001).
 | A CI build fails with `operation not permitted` under gVisor | `gvisor_oci_seccomp = false` |
 | Kata misbehaves | remove `runtime.webgrip.io/kata` from `local.metal_labels`; new Kata pods stay away |
 | An order Hetzner cancelled | read the order in Robot, then remove its `transaction_id` from `secret/unfold-cluster/metal/unfold-metal-1` before the next apply |
+
+## The stock watcher
+
+homelab-cluster's CronJob `hetzner-stock-watch` reads, once an hour, the same public data Hetzner's
+own configurator uses: `getServerConfig/` of the EX44 and AX41 configurator pages for their product
+ids, and `live_data_upfront.json` for the datacenters each product id can be ordered in right now.
+It never orders and needs no credential. It publishes
+`hetzner_dedicated_orderable{product, datacenter}` to VictoriaMetrics, and the alert
+`HetznerMetalServerOrderable` fires once while one of them is orderable in FSN1, NBG1 or HEL1.
+
+Its limits: the data is an undocumented feed of Hetzner's website, not an API, so a site change can
+break it; the alert `HetznerStockWatchBroken` fires when the watcher cannot read it. An offer seen
+can be gone again by the time someone orders.
 
 ## Cancelling a server
 

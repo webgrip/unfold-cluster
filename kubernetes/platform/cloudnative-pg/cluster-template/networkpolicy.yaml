@@ -1,0 +1,47 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${CNPG_CLUSTER}-instances
+spec:
+  description: Each Postgres instance answers the operator's status calls on 8000, its peers on 5432 and 8000 for streaming replication and failover, and on 5432 only the pods that carry the client label for this cluster. It talks to the Kubernetes API and to its peers, and to nothing else unless the backup component adds the object store.
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: ${CNPG_CLUSTER}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            cnpg.webgrip.io/client: ${CNPG_CLUSTER}
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP

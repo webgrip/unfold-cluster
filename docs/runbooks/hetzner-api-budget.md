@@ -18,6 +18,7 @@ This repository's job logs are readable without signing in, so that quote is a l
 | Building the Talos snapshot when none exists | not measured: `hcloud-upload-image` runs a temporary server for about 8 minutes (run 58) and polls on its own schedule | run 58's log |
 | `diagnose` | 1: `GET /v1/locations?per_page=1` for the headers | `scripts/diagnose-cluster.sh` |
 | Talos's HCloud VIP controller, per control plane | 2 per reconcile: `Server.GetByID` and `Network.GetByID` in `GetNetworkAndDeviceIDs`. The controller reconciles on every `LinkStatus` change on the node, not only on config changes | Talos v1.13.0, `internal/app/machined/pkg/controllers/network/operator_vip_config.go` and `operator/vip/hcloud.go` |
+| The cluster-autoscaler | about 70 an hour while idle: a server list about once a minute and the server types every ten minutes; a few dozen more per node it creates or deletes | cluster-autoscaler v1.36.1, `cloudprovider/hetzner/hetzner_servers_cache.go` (1-minute TTL) and `hetzner_server_type_cache.go` (10 minutes) |
 | The cloud controller and CSI driver | steady and small once nodes are initialised; more while the cloud controller keeps failing to initialise nodes (see `4e8d6c4`) | not measured |
 
 The CI workflows cannot use the budget up on their own. `infra` runs one job at a time (`concurrency: infra-state`), so even a plan on every push stays near 1% of an hour's budget. The pull-request check (`infra-check`) runs with no token and makes no Hetzner calls.

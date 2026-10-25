@@ -35,6 +35,12 @@ sources:
       - /var/log/hubble/egress-flows.log
     fingerprint:
       strategy: device_and_inode
+  tetragon_events:
+    type: file
+    include:
+      - /var/log/tetragon/tetragon.log
+    fingerprint:
+      strategy: device_and_inode
   vector_metrics:
     type: internal_metrics
 transforms:
@@ -110,6 +116,83 @@ transforms:
       .denied_by = denied_by
       .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
       .message = source_namespace + "/" + source_workload + " -> " + destination + ":" + port + " " + verdict
+  tetragon_records:
+    type: remap
+    inputs:
+      - tetragon_events
+    drop_on_error: true
+    source: |
+      event = object!(parse_json!(string!(.message)))
+      del(event.node_labels)
+      kind = if exists(event.process_exec) {
+        "process_exec"
+      } else if exists(event.process_kprobe) {
+        "process_kprobe"
+      } else if exists(event.process_lsm) {
+        "process_lsm"
+      } else if exists(event.process_tracepoint) {
+        "process_tracepoint"
+      } else if exists(event.rate_limit_info) {
+        "rate_limit_info"
+      } else {
+        "other"
+      }
+      body = object(get(event, [kind]) ?? {}) ?? {}
+      process = object(body.process) ?? {}
+      parent = object(body.parent) ?? {}
+      pod = object(process.pod) ?? {}
+      path = ""
+      daddr = ""
+      dport = ""
+      string_args = []
+      for_each(array(body.args) ?? []) -> |_index, argument| {
+        if path == "" {
+          path = string(argument.file_arg.path) ?? string(argument.path_arg.path) ?? ""
+        }
+        if daddr == "" {
+          daddr = string(argument.sock_arg.daddr) ?? ""
+          dport = if is_integer(argument.sock_arg.dport) { to_string!(argument.sock_arg.dport) } else { "" }
+        }
+        if is_string(argument.string_arg) {
+          string_args = push(string_args, string!(argument.string_arg))
+        }
+      }
+      privileges = array(process.binary_properties.privileges_changed) ?? []
+      namespace = string(pod.namespace) ?? ""
+      pod_name = string(pod.name) ?? ""
+      binary = string(process.binary) ?? ""
+      policy = string(body.policy_name) ?? ""
+      target = if path != "" { path } else if daddr != "" { daddr + ":" + dport } else { join(string_args, " ") }
+      . = {
+        "timestamp": event.time,
+        "source": "tetragon",
+        "event": kind,
+        "node": string(event.node_name) ?? get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown",
+        "namespace": namespace,
+        "pod": pod_name,
+        "container": string(pod.container.name) ?? "",
+        "workload": string(pod.workload) ?? "",
+        "workload_kind": string(pod.workload_kind) ?? "",
+        "image": string(pod.container.image.name) ?? "",
+        "isolation_class": string(get(pod, ["pod_labels", "ploeg.webgrip.dev/isolation-class"]) ?? "") ?? "",
+        "binary": binary,
+        "arguments": string(process.arguments) ?? "",
+        "uid": process.uid,
+        "in_init_tree": bool(process.in_init_tree) ?? false,
+        "parent_binary": string(parent.binary) ?? "",
+        "privileges_changed": join(map_values(privileges) -> |reason| { string(reason) ?? "" }, ",") ?? "",
+        "policy": policy,
+        "function": string(body.function_name) ?? "",
+        "action": string(body.action) ?? "",
+        "path": path,
+        "daddr": daddr,
+        "dport": dport,
+        "string_args": join(string_args, " "),
+        "tetragon": event
+      }
+      location = if namespace == "" { "host" } else { namespace + "/" + pod_name }
+      detail = if policy == "" { "" } else { " " + policy + " " + target }
+      .message = kind + " " + location + " " + binary + detail
   audit_kept:
     type: filter
     inputs:
@@ -154,6 +237,7 @@ sinks:
       - pod_records
       - talos_records
       - egress_flow_records
+      - tetragon_records
     uri: http://unfold-gateway.webgrip.dev:8427/insert/jsonline
     method: post
     compression: gzip

@@ -134,6 +134,17 @@
       "groupName": "zot"
     },
     {
+      "description": "The cluster-autoscaler chart and its image, pinned by digest, move in one PR. The image's minor version follows the cluster's Kubernetes minor (talos/talenv.yaml), never ahead of it.",
+      "matchDepNames": [
+        "cluster-autoscaler",
+        "registry.k8s.io/autoscaling/cluster-autoscaler"
+      ],
+      "groupName": "cluster autoscaler",
+      "prBodyNotes": [
+        "Check that the image's minor version is not newer than the Kubernetes version in `talos/talenv.yaml`. Flux restarts the autoscaler on merge; a new or removed provider setting belongs in `infra/ci-autoscaler.tf` and reaches the cluster with the next `infra` apply."
+      ]
+    },
+    {
       "description": "A Cilium minor or major release changes the network every pod depends on. Approve it on the dashboard and apply it in a maintenance window.",
       "matchDepNames": [
         "quay.io/cilium/charts/cilium"
@@ -184,7 +195,8 @@
     {
       "description": "kube-apiserver, kubectl and etcd for the admission-policy fixtures are installed from pinned checksums in scripts/test-admission-policies.sh, which Renovate cannot update. Kubernetes should match the cluster's version, so both wait for approval.",
       "matchFileNames": [
-        "scripts/test-admission-policies.sh"
+        "scripts/test-admission-policies.sh",
+        "scripts/test-runtime-security.sh"
       ],
       "matchDepNames": [
         "kubernetes/kubernetes",
@@ -192,7 +204,7 @@
       ],
       "dependencyDashboardApproval": true,
       "prBodyNotes": [
-        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`."
+        "Update `kube_apiserver_sha256_linux_amd64` and `kubectl_sha256_linux_amd64` from `https://dl.k8s.io/<version>/bin/linux/amd64/<binary>.sha256`, or `etcd_sha256_linux_amd64` from the etcd release's `SHA256SUMS`. scripts/test-runtime-security.sh pins the same binaries and needs the same checksums."
       ]
     },
     {
@@ -213,6 +225,69 @@
       ],
       "groupName": "unfold metal image",
       "pinDigests": true
+    },
+    {
+      "description": "Kyverno's chart and its images are released together and move in one PR. The Kyverno CLI in scripts/test-image-signatures.sh runs the same verification engine and must move with them.",
+      "matchDepNames": [
+        "ghcr.io/kyverno/charts/kyverno",
+        "/^ghcr\\.io/kyverno//",
+        "kyverno/kyverno"
+      ],
+      "groupName": "kyverno",
+      "prBodyNotes": [
+        "Update `kyverno_sha256_linux_amd64` in `scripts/test-image-signatures.sh` from the release's `checksums.txt`, and run `./scripts/test-image-signatures.sh --mutation-test`."
+      ]
+    },
+    {
+      "description": "The Trivy Operator chart and its operator image move together; Trivy itself is pinned on its own because it is released on its own.",
+      "matchDepNames": [
+        "trivy-operator",
+        "docker.io/aquasec/trivy-operator"
+      ],
+      "groupName": "trivy operator",
+      "prBodyNotes": [
+        "Check the new images' signatures before merging (runbook `docs/runbooks/vulnerability-scanning.md`, Changing it)."
+      ]
+    },
+    {
+      "description": "cosign, crane and Vector for the supply-chain tests are installed from pinned checksums, which Renovate cannot update. Approve on the dashboard and update the checksums in the same PR.",
+      "matchFileNames": [
+        "scripts/test-image-signatures.sh",
+        "scripts/test-trivy-report-shipper.sh"
+      ],
+      "matchDepNames": [
+        "sigstore/cosign",
+        "google/go-containerregistry",
+        "vectordotdev/vector"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update the matching `*_sha256_linux_amd64*` value in the script from the release's checksums file."
+      ]
+    },
+    {
+      "description": "Tetragon's chart and image are released together and move in one PR. The chart comes from the HTTP repository helm.cilium.io, which Flux cannot pin by digest, so scripts/test-runtime-security.sh pins the chart archive's SHA-256 and fails until a person has read the new chart.",
+      "matchDepNames": [
+        "tetragon",
+        "quay.io/cilium/tetragon"
+      ],
+      "groupName": "tetragon",
+      "prBodyNotes": [
+        "Read the chart's diff and the release's upgrade notes (TracingPolicy fields have changed between minors), then set `tetragon_chart_version` and `tetragon_chart_sha256` in `scripts/test-runtime-security.sh` from `https://helm.cilium.io/index.yaml`. `runtime-security-check` fails until both match."
+      ]
+    },
+    {
+      "description": "Vector for the runtime-security unit tests is installed from a pinned checksum in scripts/test-runtime-security.sh, which Renovate cannot update. It should match the image the DaemonSet runs.",
+      "matchFileNames": [
+        "scripts/test-runtime-security.sh"
+      ],
+      "matchDepNames": [
+        "vectordotdev/vector"
+      ],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Update `vector_sha256_linux_amd64_musl` from the release's `vector-<version>-SHA256SUMS`, and keep the version equal to the `docker.io/timberio/vector` image in `kubernetes/platform/observability/vector/daemonset.yaml`."
+      ]
     }
   ]
 }

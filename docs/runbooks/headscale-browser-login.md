@@ -2,7 +2,7 @@
 
 A device joins the Unfold tailnet with `tailscale up` and a browser login through the homelab's
 Authentik, confirmed with a passkey. Nobody runs `headscale nodes register` on the server any more.
-The servers (`tag:cp`, `tag:node`, `tag:homelab-gateway`, `tag:headscale`) keep joining with
+The servers (`tag:cp`, a worker role tag such as `tag:hub`, `tag:homelab-gateway`, `tag:headscale`) keep joining with
 pre-auth keys the apply mints, and never expire.
 
 ## Joining a device

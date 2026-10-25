@@ -1,0 +1,100 @@
+data_dir: /var/lib/vector
+api:
+  enabled: false
+sources:
+  reports:
+    type: http_server
+    address: 0.0.0.0:8080
+    path: /reports
+    strict_path: true
+    method: POST
+    decoding:
+      codec: json
+  shipper_metrics:
+    type: internal_metrics
+transforms:
+  report_records:
+    type: remap
+    inputs:
+      - reports
+    drop_on_error: true
+    source: |
+      report_object = object!(.operatorObject)
+      metadata = object(report_object.metadata) ?? {}
+      labels = object(metadata.labels) ?? {}
+      report = object(report_object.report) ?? {}
+      summary = object(report.summary) ?? {}
+      artifact = object(report.artifact) ?? {}
+      registry = object(report.registry) ?? {}
+      vulnerabilities = array(report.vulnerabilities) ?? []
+      secrets = array(report.secrets) ?? []
+      checks = array(report.checks) ?? []
+      components = object(report.components) ?? {}
+      critical_fixable = filter(vulnerabilities) -> |_index, finding| {
+        severity = string(finding.severity) ?? ""
+        fixed_version = string(finding.fixedVersion) ?? ""
+        severity == "CRITICAL" && fixed_version != ""
+      }
+      critical_count = int(summary.criticalCount) ?? 0
+      high_count = int(summary.highCount) ?? 0
+      kind = string(report_object.kind) ?? "unknown"
+      namespace = string(metadata.namespace) ?? ""
+      workload = (string(labels."trivy-operator.resource.kind") ?? "") + "/" + (string(labels."trivy-operator.resource.name") ?? "")
+      image = (string(registry.server) ?? "") + "/" + (string(artifact.repository) ?? "") + "@" + (string(artifact.digest) ?? "")
+      . = {
+        "timestamp": now(),
+        "source": "trivy",
+        "verb": string(.verb) ?? "update",
+        "kind": kind,
+        "namespace": namespace,
+        "report": string(metadata.name) ?? "",
+        "workload": workload,
+        "container": string(labels."trivy-operator.container.name") ?? "",
+        "image": image,
+        "critical": critical_count,
+        "high": high_count,
+        "medium": summary.mediumCount,
+        "low": summary.lowCount,
+        "critical_fixable": map_values(critical_fixable) -> |finding| {
+          (string(finding.vulnerabilityID) ?? "") + " " + (string(finding.resource) ?? "") + " " + (string(finding.installedVersion) ?? "") + " -> " + (string(finding.fixedVersion) ?? "")
+        },
+        "secrets": map_values(secrets) -> |finding| {
+          (string(finding.severity) ?? "") + " " + (string(finding.ruleID) ?? "") + " " + (string(finding.target) ?? "")
+        },
+        "failed_checks": map_values(filter(checks) -> |_index, check| {
+          passed = bool(check.success) ?? true
+          !passed
+        }) -> |check| {
+          (string(check.severity) ?? "") + " " + (string(check.checkID) ?? "") + " " + (string(check.title) ?? "")
+        },
+        "sbom_components": length(array(components.components) ?? [])
+      }
+      .message = kind + " " + namespace + " " + workload + " critical=" + to_string(critical_count) + " high=" + to_string(high_count) + " critical_fixable=" + to_string(length(critical_fixable))
+sinks:
+  homelab:
+    type: http
+    inputs:
+      - report_records
+    uri: http://unfold-gateway.webgrip.dev:8427/insert/jsonline
+    method: post
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    batch:
+      max_bytes: 4000000
+      timeout_secs: 5
+    request:
+      timeout_secs: 60
+      headers:
+        Content-Type: application/x-ndjson
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block
+  metrics:
+    type: prometheus_exporter
+    inputs:
+      - shipper_metrics
+    address: 0.0.0.0:9598

@@ -4,7 +4,9 @@
   },
   "tagOwners": {
     "tag:cp": ["group:admin"],
-    "tag:node": ["group:admin"],
+%{ for tag in worker_tags ~}
+    "${tag}": ["group:admin"],
+%{ endfor ~}
     "tag:homelab-gateway": ["group:admin"],
     "tag:headscale": ["group:admin"]
   },
@@ -15,7 +17,9 @@
       "dst": [
         "autogroup:member:*",
         "tag:cp:*",
-        "tag:node:*",
+%{ for tag in worker_tags ~}
+        "${tag}:*",
+%{ endfor ~}
         "tag:headscale:*",
         "tag:homelab-gateway:8200,8427,9150",
         "${node_route}:*"
@@ -23,12 +27,17 @@
     },
     {
       "action": "accept",
-      "src": ["tag:cp", "tag:node"],
-      "dst": ["tag:homelab-gateway:8200,8427"]
+      "src": ["tag:cp"],
+      "dst": ["tag:homelab-gateway:8200"]
     },
     {
       "action": "accept",
-      "src": ["tag:node"],
+      "src": ${jsonencode(concat(["tag:cp"], worker_tags))},
+      "dst": ["tag:homelab-gateway:8427"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:cp"],
       "dst": ["tag:homelab-gateway:9150"]
     },
     {

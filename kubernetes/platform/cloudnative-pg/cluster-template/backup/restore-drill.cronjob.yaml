@@ -1,0 +1,285 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${CNPG_CLUSTER}-restore-drill
+spec:
+  schedule: "${CNPG_RESTORE_DRILL_SCHEDULE:=0 4 * * 0}"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: ${CNPG_CLUSTER}-restore-drill
+        spec:
+          restartPolicy: Never
+          serviceAccountName: ${CNPG_CLUSTER}-restore-drill
+          automountServiceAccountToken: true
+          nodeSelector:
+            node.webgrip.io/pool: unfold
+          tolerations:
+            - key: node.webgrip.io/pool
+              operator: Equal
+              value: unfold
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: write-canary
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:0675340b02be838319b9b6f323c206693e519dcd62ec729d539be9f46bb7a2f9
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  token="$(cat /proc/sys/kernel/random/uuid)"
+                  wal_file="$(psql -v ON_ERROR_STOP=1 -qAt -v token="$token" <<'SQL'
+                  INSERT INTO restore_canary.marks (token) VALUES (:'token');
+                  SELECT pg_walfile_name(pg_current_wal_lsn());
+                  SQL
+                  )"
+                  echo "wrote canary $token in WAL segment $wal_file; waiting for it to be archived"
+                  deadline=$(( $(date +%s) + 1800 ))
+                  until [ "$(psql -v ON_ERROR_STOP=1 -qAt -v wal="$wal_file" <<'SQL'
+                  SELECT coalesce(last_archived_wal ~ '^[0-9A-F]{24}$' AND last_archived_wal >= :'wal', false) FROM pg_stat_archiver;
+                  SQL
+                  )" = t ]; do
+                    if [ "$(date +%s)" -ge "$deadline" ]; then
+                      echo "WAL segment $wal_file was not archived within 30 minutes; WAL archiving is broken" >&2
+                      exit 1
+                    fi
+                    sleep 15
+                  done
+                  printf '%s' "$token" > /drill/token
+                  echo "WAL segment $wal_file is archived"
+              env:
+                - name: HOME
+                  value: /drill
+                - name: PGHOST
+                  value: ${CNPG_CLUSTER}-rw
+                - name: PGSSLMODE
+                  value: verify-full
+                - name: PGSSLROOTCERT
+                  value: /source-ca/ca.crt
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: dbname
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: password
+              securityContext:
+                runAsUser: 26
+                runAsGroup: 26
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+                  ephemeral-storage: 64Mi
+              volumeMounts:
+                - name: drill
+                  mountPath: /drill
+                - name: source-ca
+                  mountPath: /source-ca
+                  readOnly: true
+            - name: recover
+              image: docker.io/alpine/kubectl:1.37.1@sha256:a5d0fbecab3f7b6c2ab7398f1daa73a3e0ed6ece18556d21698233e9e3759cc7
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  kubectl delete cluster.postgresql.cnpg.io ${CNPG_CLUSTER}-drill --ignore-not-found --wait=true --timeout=15m
+                  kubectl create -f - <<'MANIFEST'
+                  apiVersion: postgresql.cnpg.io/v1
+                  kind: Cluster
+                  metadata:
+                    name: ${CNPG_CLUSTER}-drill
+                  spec:
+                    instances: 1
+                    enablePDB: false
+                    imageName: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:0675340b02be838319b9b6f323c206693e519dcd62ec729d539be9f46bb7a2f9
+                    enableSuperuserAccess: false
+                    bootstrap:
+                      recovery:
+                        source: origin
+                    externalClusters:
+                      - name: origin
+                        plugin:
+                          name: barman-cloud.cloudnative-pg.io
+                          parameters:
+                            barmanObjectName: ${CNPG_CLUSTER}-backup-reader
+                            serverName: ${CNPG_CLUSTER}
+                    postgresql:
+                      pg_hba:
+                        - hostssl all all all scram-sha-256
+                        - host all all all reject
+                    storage:
+                      storageClass: hcloud-luks-drill
+                      size: ${CNPG_STORAGE_SIZE:=10Gi}
+                    walStorage:
+                      storageClass: hcloud-luks-drill
+                      size: ${CNPG_WAL_SIZE:=10Gi}
+                    ephemeralVolumesSizeLimit:
+                      shm: 256Mi
+                      temporaryData: 1Gi
+                    resources:
+                      requests:
+                        cpu: ${CNPG_CPU_REQUEST:=100m}
+                        memory: ${CNPG_MEMORY_REQUEST:=256Mi}
+                      limits:
+                        memory: ${CNPG_MEMORY_LIMIT:=1Gi}
+                        ephemeral-storage: 2Gi
+                    affinity:
+                      nodeSelector:
+                        node.webgrip.io/pool: unfold
+                      tolerations:
+                        - key: node.webgrip.io/pool
+                          operator: Equal
+                          value: unfold
+                          effect: NoSchedule
+                  MANIFEST
+                  kubectl wait cluster.postgresql.cnpg.io/${CNPG_CLUSTER}-drill --for=condition=Ready --timeout=60m
+              env:
+                - name: HOME
+                  value: /drill
+              securityContext:
+                runAsUser: 65534
+                runAsGroup: 65534
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+                  ephemeral-storage: 64Mi
+              volumeMounts:
+                - name: drill
+                  mountPath: /drill
+            - name: read-canary
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:0675340b02be838319b9b6f323c206693e519dcd62ec729d539be9f46bb7a2f9
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  token="$(cat /drill/token)"
+                  found="$(psql -v ON_ERROR_STOP=1 -qAt -v token="$token" <<'SQL'
+                  SELECT count(*) FROM restore_canary.marks WHERE token = :'token';
+                  SQL
+                  )"
+                  if [ "$found" != 1 ]; then
+                    echo "the recovered cluster does not hold canary $token; the backup does not restore to the latest archived WAL" >&2
+                    exit 1
+                  fi
+                  echo "restore drill passed: canary $token came back from the object store"
+              env:
+                - name: HOME
+                  value: /drill
+                - name: PGHOST
+                  value: ${CNPG_CLUSTER}-drill-rw
+                - name: PGSSLMODE
+                  value: require
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: dbname
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${CNPG_CLUSTER}-app
+                      key: password
+              securityContext:
+                runAsUser: 26
+                runAsGroup: 26
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+                  ephemeral-storage: 64Mi
+              volumeMounts:
+                - name: drill
+                  mountPath: /drill
+          containers:
+            - name: discard
+              image: docker.io/alpine/kubectl:1.37.1@sha256:a5d0fbecab3f7b6c2ab7398f1daa73a3e0ed6ece18556d21698233e9e3759cc7
+              command:
+                - kubectl
+                - delete
+                - cluster.postgresql.cnpg.io
+                - ${CNPG_CLUSTER}-drill
+                - --wait=true
+                - --timeout=15m
+              env:
+                - name: HOME
+                  value: /drill
+              securityContext:
+                runAsUser: 65534
+                runAsGroup: 65534
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+                  ephemeral-storage: 64Mi
+              volumeMounts:
+                - name: drill
+                  mountPath: /drill
+          volumes:
+            - name: drill
+              emptyDir:
+                medium: Memory
+                sizeLimit: 8Mi
+            - name: source-ca
+              secret:
+                secretName: ${CNPG_CLUSTER}-ca
+                items:
+                  - key: ca.crt
+                    path: ca.crt

@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsigned-webgrip-init-container
+  namespace: image-signature-test
+spec:
+  initContainers:
+    - name: migrate
+      image: ghcr.io/webgrip/unfold:0.4.0-rc.114@sha256:39e39f6b5289a57bc1780a324789a603e1ac06fe4f054bf9ec7454a07b075839
+  containers:
+    - name: unfold
+      image: ghcr.io/webgrip/unfold:0.4.0-rc.114@sha256:139d0a0fb8bf1bb1b2753416ef8d9a8d9fe6383e3f33b46f29beb9ae722c7796

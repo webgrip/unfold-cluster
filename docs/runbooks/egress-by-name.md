@@ -27,6 +27,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 | source-controller, kustomize-controller, helm-controller | notification-controller | 9090 | their Kubernetes events, through the `notification-controller` Service |
 | source-controller | `github.com` | 443 | the GitRepository `flux-system` (this repository) |
 | source-controller | `charts.hetzner.cloud` | 443 | the `hetzner` HelmRepository index and its chart archives, served from the same host |
+| source-controller | `helm.cilium.io` | 443 | the `cilium` HelmRepository index and the Tetragon chart archive ([runtime security](runtime-security.md)) |
 | source-controller | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | OCI charts on ghcr.io (Zot, External Secrets, Flux operator charts); blob downloads redirect to the second host |
 | source-controller | `quay.io`, `*.quay.io` | 443 | the Cilium chart; blob downloads redirect to `cdn*.quay.io` |
 | flux-operator | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | the `flux-operator-manifests` distribution artifact |
@@ -52,6 +53,14 @@ Forgejo is not on the list: Flux reads this repository from GitHub. A new Flux s
 | hubble-generate-certs job, kube-proxy-removal job | kube-dns, `kube-apiserver` | 53, any | their only work is through the API |
 
 The Cilium agent, operator and envoy, kube-proxy (while it still exists) and the control-plane static pods run on the host network. Pod policies do not select them; Talos's host firewall covers the nodes ([host firewall](host-firewall.md)).
+
+### cluster-autoscaler
+
+| Pods | Destination | Port | Why |
+| --- | --- | --- | --- |
+| cluster-autoscaler | kube-dns | 53 | lookups of `api.hetzner.cloud` and cluster names, through the DNS proxy |
+| cluster-autoscaler | `kube-apiserver` | any | pending pods, nodes, its status ConfigMap and leader lease |
+| cluster-autoscaler | `api.hetzner.cloud` | 443 | lists, creates and deletes the CI overflow servers ([ci-autoscaler](ci-autoscaler.md)) |
 
 ## Flow evidence
 

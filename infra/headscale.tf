@@ -10,9 +10,17 @@ locals {
   tailnet_key_tool    = file("${path.module}/templates/unfold-tailnet-key.sh")
   tailnet_key_sudoers = file("${path.module}/templates/unfold-tailnet-key.sudoers")
 
+  tailnet_tag_by_pool = {
+    unfold = "tag:hub"
+    ci     = "tag:ci"
+    runs   = "tag:runs"
+    metal  = "tag:metal"
+  }
+
   headscale_policy = templatefile("${path.module}/templates/headscale-acl.hujson", {
-    admin_user = var.headscale_admin_user
-    node_route = local.cloud_subnet_range
+    admin_user  = var.headscale_admin_user
+    node_route  = local.cloud_subnet_range
+    worker_tags = sort(distinct(values(local.tailnet_tag_by_pool)))
   })
 }
 

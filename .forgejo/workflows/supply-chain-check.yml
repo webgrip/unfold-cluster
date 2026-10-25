@@ -1,0 +1,46 @@
+---
+name: supply-chain-check
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/platform/kyverno/policies/**
+      - kubernetes/platform/trivy-operator/app/report-shipper/**
+      - tests/image-signatures/**
+      - tests/trivy-report-shipper/**
+      - scripts/test-image-signatures.sh
+      - scripts/test-trivy-report-shipper.sh
+      - .forgejo/workflows/supply-chain-check.yml
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/platform/kyverno/policies/**
+      - kubernetes/platform/trivy-operator/app/report-shipper/**
+      - tests/image-signatures/**
+      - tests/trivy-report-shipper/**
+      - scripts/test-image-signatures.sh
+      - scripts/test-trivy-report-shipper.sh
+      - .forgejo/workflows/supply-chain-check.yml
+  workflow_dispatch:
+
+jobs:
+  image-signatures:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Admit signed webgrip images, refuse unsigned and wrongly signed ones, and prove each gate is what refuses
+        run: ./scripts/test-image-signatures.sh --mutation-test
+
+  trivy-report-shipper:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Turn every kind of Trivy report into the record VictoriaLogs receives
+        run: ./scripts/test-trivy-report-shipper.sh

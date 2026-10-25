@@ -1,0 +1,137 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${CNPG_CLUSTER}-object-store
+spec:
+  description: The barman-cloud sidecar of each instance, and the backup and recovery jobs of this cluster, write WAL and base backups to the object store over HTTPS. Their lookups go through Cilium's DNS proxy, which is how this rule learns the store's address, and they may open nothing else outside the cluster. The restore drill reads the canary on 5432.
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: ${CNPG_CLUSTER}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: ${CNPG_CLUSTER}-restore-drill
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: ${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+              - matchPattern: "*.${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}"
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: ${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+        - matchPattern: "*.${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${CNPG_CLUSTER}-drill-instances
+spec:
+  description: The throwaway cluster the restore drill recovers into. It answers the operator on 8000, its own pods on 5432 and 8000, and the drill job on 5432; it reads the object store over HTTPS and talks to the Kubernetes API. It never archives, so it never writes to the store.
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: ${CNPG_CLUSTER}-drill
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}-drill
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: ${CNPG_CLUSTER}-restore-drill
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}-drill
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: ${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+              - matchPattern: "*.${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}"
+              - matchPattern: "*.cluster.local"
+    - toFQDNs:
+        - matchName: ${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}
+        - matchPattern: "*.${CNPG_BACKUP_HOST:=nbg1.your-objectstorage.com}"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${CNPG_CLUSTER}-restore-drill
+spec:
+  description: The restore drill writes a canary row to the cluster, creates and deletes the throwaway recovery cluster through the Kubernetes API, and reads the canary back from it. Nothing reaches the drill pod.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: ${CNPG_CLUSTER}-restore-drill
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: ${CNPG_CLUSTER}-drill
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

@@ -1,0 +1,133 @@
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: runtime-privilege-escalation
+spec:
+  options:
+    - name: policy-mode
+      value: monitor
+  podSelector: {}
+  kprobes:
+    - call: create_user_ns
+      syscall: false
+      message: "A pod without CAP_SYS_ADMIN created a user namespace in which it is root"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: nop
+      selectors:
+        - matchCapabilities:
+            - type: Effective
+              operator: NotIn
+              values:
+                - CAP_SYS_ADMIN
+          matchActions:
+            - action: Post
+              rateLimit: 1m
+    - call: security_capset
+      syscall: false
+      message: "A pod changed its capability sets"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: nop
+        - index: 1
+          type: cred
+        - index: 2
+          type: cap_effective
+        - index: 3
+          type: cap_inheritable
+        - index: 4
+          type: cap_permitted
+      selectors:
+        - matchArgs:
+            - index: 2
+              operator: NotEqual
+              values:
+                - "0"
+          matchActions:
+            - action: Post
+              rateLimit: 1m
+    - call: __sys_setuid
+      syscall: false
+      message: "A pod called setuid to root"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Equal
+              values:
+                - "0"
+          matchActions:
+            - action: Post
+              rateLimit: 1m
+    - call: __sys_setreuid
+      syscall: false
+      message: "A pod called setreuid to root"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: int
+        - index: 1
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 1
+              operator: Equal
+              values:
+                - "0"
+          matchActions:
+            - action: Post
+              rateLimit: 1m
+    - call: __sys_setresuid
+      syscall: false
+      message: "A pod called setresuid to root"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: int
+        - index: 1
+          type: int
+        - index: 2
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 1
+              operator: Equal
+              values:
+                - "0"
+          matchActions:
+            - action: Post
+              rateLimit: 1m
+    - call: __sys_setgid
+      syscall: false
+      message: "A pod called setgid to root"
+      tags:
+        - runtime-security
+        - privilege-escalation
+      args:
+        - index: 0
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Equal
+              values:
+                - "0"
+          matchActions:
+            - action: Post
+              rateLimit: 1m

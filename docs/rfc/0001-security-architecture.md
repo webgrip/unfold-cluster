@@ -156,12 +156,12 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 
 | Control | How | State |
 | --- | --- | --- |
-| Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | design (built: Retain) |
-| Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Three instances across the hub pool with required anti-affinity, continuous WAL archiving and a daily base backup | design |
+| Default StorageClass | `hcloud-luks`: hcloud-csi LUKS through a node-publish Secret holding `encryption-passphrase`, synced from OpenBao by External Secrets. `reclaimPolicy: Retain`. The unencrypted class is not offered, and admission refuses PVCs on any other class | built ([encrypted volumes](../runbooks/encrypted-volumes.md)); `zot-data` keeps its unencrypted claim until it moves |
+| Databases | CloudNativePG 1.30 with `plugin-barman-cloud` (the in-tree backup path is removed in 1.31). Three instances across the hub pool with required anti-affinity, continuous WAL archiving and a daily base backup | built: operator, plugin and a cluster template ([Postgres databases](../runbooks/postgres-databases.md)); backups wait for the object storage of delivery step 3 |
 | Backup targets | Object storage at two providers ([object storage](#object-storage)). Garage is not used for this cluster's data: it has no object lock or versioning, encrypts only with SSE-C, which barman-cloud cannot send, and filled up once. It holds only the state and etcd snapshots until delivery step 3 | decided 2026-10-24 |
 | Other state | Not allowed by default. A workload that needs a PVC outside CNPG brings its own backup and restore test. Velero's file-system backup needs a privileged node agent, so it is not installed | design |
 | Run scratch space | The AX41's EPHEMERAL partition is LUKS, TPM-bound, wiped on reinstall. Every Run pod has ephemeral-storage and `emptyDir` size limits | design |
-| Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built, CNPG design |
+| Restore drills | etcd daily (#16); CNPG weekly into a throwaway cluster, with an alert on failure | etcd built; CNPG built with a WAL canary, runs once backups do |
 | Database disk | Encrypted Talos user volumes (LUKS2) on each hub node's local disk, provisioned by local-path or TopoLVM. Durability comes from the three replicas and the WAL archive, not from the disk. A benchmark gate (fio with `--fsync=1` and an etcd-style WAL test) confirms the flush-latency target before the first database goes live | design |
 | In-cluster object storage | SeaweedFS on the hub pool: our own S3 with replication across nodes, object lock, and SSE-KMS keys from OpenBao. It is the first target for backups, registry images and caches; copies go off-site from there | decided 2026-10-24 |
 
@@ -180,7 +180,7 @@ Hetzner volumes have no snapshots and no encryption at rest that Hetzner documen
 | Control | How | State |
 | --- | --- | --- |
 | Untrusted code | Kata micro-VMs on the AX41 for `isolated`, gVisor on cloud nodes for `hardened` | design |
-| Detection and enforcement | Tetragon 1.7.1. The Talos kernel lacks `BPF_KPROBE_OVERRIDE`, so enforcement uses BPF LSM hooks, which Talos builds in. Policies: <ul><li>kill a process that writes to `/proc/sys`, loads a kernel module, or calls `ptrace` or `mount` from a workload</li><li>record every exec and outbound connection from Run pods</li><li>kill shells in pods outside the debug namespace</li></ul> Talos 1.14 no longer forces the lockdown mode that blocked BPF loading; `tetra probe` on a real node confirms it before any enforcing policy | spike |
+| Detection and enforcement | Tetragon 1.7.1. The Talos kernel lacks `BPF_KPROBE_OVERRIDE`, so enforcement uses BPF LSM hooks, which Talos builds in. Policies: <ul><li>kill a process that writes to `/proc/sys`, loads a kernel module, or calls `ptrace` or `mount` from a workload</li><li>record every exec and outbound connection from Run pods</li><li>kill shells in pods outside the debug namespace</li></ul> Talos 1.14 no longer forces the lockdown mode that blocked BPF loading; `tetra probe` on a real node confirms it before any enforcing policy. Tetragon alone, Falco not: [ADR 0012](../adr/0012-runtime-detection-with-tetragon-alone.md); six policies in monitor mode with the enforcement order in [runtime security](../runbooks/runtime-security.md#from-monitor-to-enforce) | monitor, decided 2026-10-25 |
 | Seccomp | RuntimeDefault by default (Talos kubelet default and section 3). A Localhost profile for the agent harness once its syscalls are known | design |
 
 ### 10. Observability

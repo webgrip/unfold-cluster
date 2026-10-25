@@ -38,7 +38,7 @@ No longer by hand:
 | Item | Now |
 | --- | --- |
 | The Cloudflare record for `headscale.webgrip.dev` | The apply writes the Headscale primary IP to OpenBao `secret/unfold/headscale-address`; the homelab CronJob `network/unfold-headscale-address` publishes it through external-dns, DNS only. A new project's new IP needs no commit. |
-| The Headscale users and pre-auth keys | cloud-init creates the users `nodes` and the admin user; `unfold-tailnet-key` on the server makes the control planes' reusable `tag:cp` key, renews it by timer, and makes a single-use `tag:node` key for each new worker. OpenTofu reads them over SSH during the apply. |
+| The Headscale users and pre-auth keys | cloud-init creates the users `nodes` and the admin user; `unfold-tailnet-key` on the server makes the control planes' reusable `tag:cp` key, renews it by timer, and makes a single-use key for each new worker, tagged with its pool's role ([node roles](runbooks/infra-workflow.md#node-roles-on-the-tailnet)). The apply sets each node's role tag on Headscale after pushing the policy. OpenTofu reads them over SSH during the apply. |
 | The homelab gateway's tailnet key and the Headscale policy | cloud-init installs the policy; the apply pushes later policy changes, mints a single-use `tag:homelab-gateway` key and writes it to OpenBao `secret/unfold/tailnet-homelab-gateway` ([observability](observability.md)). A rebuilt Headscale gets a new key the same way; the gateway's old identity is refused and it logs in with the new key on its own (`TS_AUTH_ONCE`). |
 | The Talos secrets escrow | Every apply writes the bundle to OpenBao `secret/unfold-cluster/talos-secrets`; an apply into an empty state imports it, so a rebuild keeps the cluster's CAs and service-account key (and with them the homelab OpenBao's trust and `access/unfold-oidc.kubeconfig.yaml`). |
 | The etcd bucket's 30-day expiry rule | Every apply puts it with the etcd write key (`scripts/set-etcd-backup-lifecycle.sh`). |
@@ -51,13 +51,14 @@ No longer by hand:
 ## A. Hetzner project and tokens
 
 - [ ] **A1. Create the project.** In the [Hetzner Console](https://console.hetzner.com), create a Cloud project named `unfold-cluster`. Use nothing else in this project: a token can reach everything in its project, so a separate project is the boundary.
-- [ ] **A2. Create three API tokens.** In the project: **Security → API tokens → Generate API token**. Hetzner tokens have only two levels, Read or Read & Write, and always cover the whole project. All three need **Read & Write**:
+- [ ] **A2. Create four API tokens.** In the project: **Security → API tokens → Generate API token**. Hetzner tokens have only two levels, Read or Read & Write, and always cover the whole project. All four need **Read & Write**:
 
   | Token name in Hetzner | Used by | Why it needs write | OpenBao path and key |
   | --- | --- | --- | --- |
   | `unfold-ci` | OpenTofu in the `infra` workflow | creates and changes every server, network and firewall | `secret/hetzner/unfold-tofu` `HCLOUD_TOKEN` |
   | `unfold-cluster` | Hetzner's cloud controller and CSI driver in `kube-system` | sets node addresses and load balancers, creates and attaches volumes | `secret/hetzner/unfold-cluster` `HCLOUD_TOKEN_CLUSTER` |
   | `unfold-vip` | the control planes | moves the API address `10.64.0.10` between them | `secret/hetzner/unfold-vip` `HCLOUD_TOKEN_VIP` |
+  | `unfold-autoscaler` | the cluster-autoscaler on the control planes | creates and deletes the CI overflow servers | `secret/hetzner/unfold-autoscaler` `HCLOUD_TOKEN_AUTOSCALER` |
 
   Hetzner shows a token once, so put each into OpenBao straight away. From a homelab-cluster checkout:
 
@@ -67,12 +68,13 @@ No longer by hand:
   read -r -s -p 'unfold-ci token: ' v; echo; bao kv put secret/hetzner/unfold-tofu HCLOUD_TOKEN="$v"
   read -r -s -p 'unfold-cluster token: ' v; echo; bao kv put secret/hetzner/unfold-cluster HCLOUD_TOKEN_CLUSTER="$v"
   read -r -s -p 'unfold-vip token: ' v; echo; bao kv put secret/hetzner/unfold-vip HCLOUD_TOKEN_VIP="$v"
+  read -r -s -p 'unfold-autoscaler token: ' v; echo; bao kv put secret/hetzner/unfold-autoscaler HCLOUD_TOKEN_AUTOSCALER="$v"
   unset v
   ```
 
   `read -s` keeps the value off the screen and out of shell history. Run `bao` as `mise exec -- bao` if it is not on the path.
 
-  Three tokens instead of one means each can be revoked alone: a leaked machine config exposes only `unfold-vip`. Rotate all three every six months: generate the new token, `bao kv put` it at the same path, run an apply (the cluster and VIP tokens reach the nodes only through an apply), then delete the old token in Hetzner.
+  Four tokens instead of one means each can be revoked alone: a leaked machine config exposes only `unfold-vip`, and the token that may create and delete servers on its own lives only in the autoscaler's Secret. `just hetzner-token hetzner/unfold-autoscaler HCLOUD_TOKEN_AUTOSCALER` seeds or rotates the autoscaler's token after checking it against the Hetzner API. Rotate all four every six months: generate the new token, `bao kv put` it at the same path, run an apply (the cluster, VIP and autoscaler tokens reach the cluster only through an apply), then delete the old token in Hetzner.
 
 Every server, the network and the Headscale address carry Hetzner's delete protection, so even a stolen token cannot remove them in one call.
 
@@ -176,6 +178,7 @@ What each value is:
 | `secret/hetzner/unfold-tofu` | `HCLOUD_TOKEN` | Hetzner token, 64 characters | A2 |
 | `secret/hetzner/unfold-cluster` | `HCLOUD_TOKEN_CLUSTER` | Hetzner token | A2 |
 | `secret/hetzner/unfold-vip` | `HCLOUD_TOKEN_VIP` | Hetzner token | A2 |
+| `secret/hetzner/unfold-autoscaler` | `HCLOUD_TOKEN_AUTOSCALER` | Hetzner token | A2 |
 | `secret/hetzner/unfold-robot` | `ROBOT_USER`, `ROBOT_PASSWORD` | Robot webservice user and password | Robot, *Settings* → *Web service and app settings*; `just secret-set hetzner/unfold-robot ROBOT_USER` and `... ROBOT_PASSWORD` |
 | `secret/unfold-cluster/tofu-state` | `STATE_S3_ACCESS_KEY`, `STATE_S3_SECRET_KEY` | Garage Key ID (`GK…`) and Secret key | B3 |
 | `secret/unfold-cluster/tofu-state` | `STATE_PASSPHRASE` | at least 32 characters | B1 |

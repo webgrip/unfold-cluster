@@ -17,6 +17,8 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 | `cluster-admin-bindings` | a ClusterRoleBinding or RoleBinding to `cluster-admin` for anyone but Flux's `kustomize-controller`, `helm-controller` and `flux-operator` | every namespace; the API server's own bootstrap is exempt | Deny |
 | `service-account-token-secrets` | Secrets of type `kubernetes.io/service-account-token` | every namespace | Deny |
 | `pod-security-floor` | a namespace whose `pod-security.kubernetes.io/enforce` label is anything but `restricted` | every namespace but `kube-system` | Deny |
+| `encrypted-volumes` | a PersistentVolumeClaim on any StorageClass but the LUKS-encrypted `hcloud-luks`; `hcloud-luks-drill`, which deletes its volume, only for a CloudNativePG cluster named `*-drill` | every namespace | Deny |
+| `trivy-scan-job-defaults` (MutatingAdmissionPolicy) | nothing: it sets a 2 GiB `sizeLimit` on every unbounded `emptyDir` and `shareProcessNamespace` in the Trivy Operator's scan Jobs ([vulnerability-scanning](vulnerability-scanning.md)) | Jobs labelled `app.kubernetes.io/managed-by: trivy-operator` in `trivy-system` | mutates |
 
 The policies match Pods and the pod templates in Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs, so Flux's apply sees the warning before a controller creates the Pod.
 
@@ -45,6 +47,8 @@ Every exception is written into the policy that grants it, names one workload or
 | `pod-security-restricted` | container `buildkitd` of a `gvisor` pod in `ci`, image `docker.io/moby/buildkit:*-rootless@sha256:*` | `allowPrivilegeEscalation`, the default capability set (it may still add nothing) | rootless BuildKit maps its user namespace through the setuid `newuidmap`; gVisor is the boundary |
 | `pod-security-floor` | namespace `observability` | PodSecurity `enforce: privileged` | PodSecurity cannot exempt one workload, so the namespace allows what the two DaemonSets need and `host-access` and `pod-security-restricted` hold every other pod there to `restricted` |
 | `pod-security-floor` | namespace `ci` | PodSecurity `enforce: baseline` | rootless BuildKit, as above; `pod-security-restricted` holds every other container in `ci` to `restricted` |
+| `resource-limits` | pods labelled `cnpg.io/cluster` (CloudNativePG instances and jobs), volume `plugins` only, disk-backed | an `emptyDir` without `sizeLimit` | the barman-cloud plugin injects it to hold its unix socket and gives it no size; the containers' ephemeral-storage limits still bound it. A memory-backed `plugins` volume, or the name on any other pod, is refused |
+| `encrypted-volumes` | PVC `zot/zot-data` | StorageClass `hcloud-volumes` (unencrypted) | it was bound before `hcloud-luks` existed and a StorageClass cannot be changed on a bound claim; it holds only mirrored public images. Moving it to `hcloud-luks` removes the grant |
 | `service-exposure` | Service `zot/zot`, nodePort 30500 only | type `NodePort` | the nodes' containerd pulls through Zot on `127.0.0.1:30500` ([talos-registry-mirrors](talos-registry-mirrors.md)) |
 | `immutable-image-references` | namespace `kube-system` | stays Audit, Warn | Talos runs the control-plane static pods and CoreDNS from `registry.k8s.io` tags without a digest. Pinning them is a Talos machine-config change (`cluster.apiServer.image` and its siblings, `cluster.coreDNS.image`) in `infra/` |
 
@@ -67,7 +71,9 @@ The violators were fixed in their manifests, the rest became the grants above, a
 
 A Deny policy also refuses an UPDATE of an object that already violates it. Flux replaces each fixed workload in the same reconcile that lands the policies, so this matters only for a HelmRelease whose upgrade fails: its old pods keep running, but a replacement pod is refused until the release goes through. On a rebuild, Talos installs the Flux operator from its chart without the `emptyDir` size the HelmRelease adds as a post-renderer; the operator's pod is compliant once its HelmRelease first reconciles.
 
-### Why there is no MutatingAdmissionPolicy yet
+### Why there is no defaulting MutatingAdmissionPolicy yet
+
+The one MutatingAdmissionPolicy, `trivy-scan-job-defaults`, sets nothing a workload chooses: it bounds the scratch volumes of Jobs the Trivy Operator generates, which no chart value reaches ([ADR 0010](../adr/0010-trivy-operator-scans-in-the-cluster.md)). Its fixtures are under `resource-limits`: the operator's Job is admitted only because of it, and the same Job without the operator's label stays refused.
 
 RFC 0001 tier 3 sets safe defaults with `MutatingAdmissionPolicy` (GA, served at `admissionregistration.k8s.io/v1` on 1.37). A mutation has no Audit mode: it changes every matching pod the moment it lands. The defaults it would set (`hostUsers: false`, seccomp, the token opt-out, the RuntimeClass) are exactly what the validating set above now reports on, so the mutating set follows once that audit is clean, with the same fixtures.
 
