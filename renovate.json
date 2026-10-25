@@ -3,7 +3,8 @@
   "extends": [
     "local>webgrip/renovate-config#v1.15.0",
     "local>webgrip/renovate-config:gitops#v1.15.0",
-    "local>webgrip/renovate-config:forgejo#v1.15.0"
+    "local>webgrip/renovate-config:forgejo#v1.15.0",
+    "local>webgrip/renovate-config:apm#v1.15.0"
   ],
   "flux": {
     "managerFilePatterns": [
