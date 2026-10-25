@@ -39,4 +39,4 @@ metadata:
   name: service-exposure
 spec:
   policyName: service-exposure
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
