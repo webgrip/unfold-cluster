@@ -14,7 +14,7 @@ spec:
   variables:
     - name: allowedPrefixes
       expression: >-
-        ['ghcr.io/siderolabs/']
+        ['ghcr.io/siderolabs/', 'ghcr.io/project-zot/zot:', 'docker.io/alpine/kubectl:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)
