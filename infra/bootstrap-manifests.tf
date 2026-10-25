@@ -64,6 +64,11 @@ data "helm_template" "cilium" {
       relay = {
         enabled = true
       }
+      tls = {
+        auto = {
+          method = "cronJob"
+        }
+      }
     }
   })]
 }
