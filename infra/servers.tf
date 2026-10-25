@@ -48,7 +48,7 @@ resource "hcloud_server" "control_plane" {
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes  = [image]
+    ignore_changes  = [image, network]
 
     precondition {
       condition     = !var.talos_snapshot_required || local.talos_snapshot_id != ""
