@@ -45,11 +45,6 @@ locals {
       kind       = "KubeFlannelCNIConfig"
       "$patch"   = "delete"
     }),
-    yamlencode({
-      apiVersion = "v1alpha1"
-      kind       = "KubeProxyConfig"
-      "$patch"   = "delete"
-    }),
   ]
 
   control_plane_patches = [
@@ -63,7 +58,14 @@ locals {
     }),
     local.pod_security_patch,
     local.etcd_backup_access_patch,
+    local.kube_proxy_disabled_patch,
   ]
+
+  kube_proxy_disabled_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "KubeProxyConfig"
+    enabled    = false
+  })
 
   etcd_backup_access_patch = yamlencode({
     machine = {
@@ -135,7 +137,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = concat(local.common_patches, local.control_plane_patches, [local.api_vip_patch])
+  config_patches     = concat(local.common_patches, local.control_plane_patches, [local.api_vip_patch], local.host_firewall_patches.control_plane)
 }
 
 data "talos_machine_configuration" "worker" {
@@ -147,7 +149,7 @@ data "talos_machine_configuration" "worker" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = local.common_patches
+  config_patches     = concat(local.common_patches, local.host_firewall_patches.worker)
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {
