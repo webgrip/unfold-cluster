@@ -18,10 +18,18 @@ spec:
     - name: enforcedLevel
       expression: >-
         object.metadata.?labels.orValue({})[?'pod-security.kubernetes.io/enforce'].orValue('restricted')
+    - name: strictness
+      expression: "{'privileged': 0, 'baseline': 1, 'restricted': 2}"
+    - name: loweredLevelGrants
+      expression: "{'observability': 'privileged', 'ci': 'baseline'}"
+    - name: floor
+      expression: variables.loweredLevelGrants[?object.metadata.name].orValue('restricted')
   validations:
-    - expression: variables.enforcedLevel == 'restricted'
+    - expression: >-
+        variables.strictness[?variables.enforcedLevel].orValue(-1) >= variables.strictness[variables.floor]
       messageExpression: >-
-        'the PodSecurity enforce level stays restricted; this namespace asks for ' + variables.enforcedLevel
+        'the PodSecurity enforce level of ' + object.metadata.name + ' stays at ' + variables.floor
+        + ' or stricter; it asks for ' + variables.enforcedLevel
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1

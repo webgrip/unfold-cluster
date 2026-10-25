@@ -11,11 +11,23 @@ spec:
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
         resources: ["services"]
+  variables:
+    - name: grantedNodePorts
+      expression: "{'zot/zot': [30500]}"
+    - name: service
+      expression: request.namespace + '/' + object.metadata.name
+    - name: isGrantedNodePort
+      expression: >-
+        object.spec.?type.orValue('ClusterIP') == 'NodePort'
+        && variables.service in variables.grantedNodePorts
+        && object.spec.ports.all(p, p.?nodePort.orValue(0) in variables.grantedNodePorts[variables.service])
   validations:
     - expression: >-
-        !(object.spec.?type.orValue('ClusterIP') in ['NodePort', 'LoadBalancer', 'ExternalName'])
+        variables.isGrantedNodePort
+        || !(object.spec.?type.orValue('ClusterIP') in ['NodePort', 'LoadBalancer', 'ExternalName'])
       messageExpression: >-
-        'Services of type ' + object.spec.type + ' are refused; traffic enters through the tunnel and the gateway.'
+        'Services of type ' + object.spec.type + ' are refused; traffic enters through the tunnel and the gateway. '
+        + 'Granted NodePorts: ' + variables.grantedNodePorts.map(k, k).join(', ')
       reason: Forbidden
     - expression: object.spec.?externalIPs.orValue([]).size() == 0
       message: Services must not set externalIPs.

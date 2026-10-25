@@ -39,27 +39,68 @@ spec:
         'net.ipv4.tcp_keepalive_probes', 'net.ipv4.tcp_rmem', 'net.ipv4.tcp_wmem']
     - name: containerSELinuxTypes
       expression: "['', 'container_t', 'container_init_t', 'container_kvm_t', 'container_engine_t']"
+    - name: controllingOwners
+      expression: >-
+        object.metadata.?ownerReferences.orValue([]).filter(o, o.?controller.orValue(false))
+    - name: podTemplateHash
+      expression: object.metadata.?labels[?'pod-template-hash'].orValue('')
+    - name: workload
+      expression: >-
+        variables.controllingOwners.size() != 1
+        ? request.namespace + '/' + object.kind + '/' + object.metadata.name
+        : (variables.controllingOwners[0].kind == 'ReplicaSet' && variables.podTemplateHash != ''
+            && variables.controllingOwners[0].name.endsWith('-' + variables.podTemplateHash)
+          ? request.namespace + '/Deployment/' + variables.controllingOwners[0].name.substring(0,
+              variables.controllingOwners[0].name.size() - variables.podTemplateHash.size() - 1)
+          : request.namespace + '/' + variables.controllingOwners[0].kind + '/' + variables.controllingOwners[0].name)
+    - name: workloadGrants
+      expression: >-
+        {
+          'observability/DaemonSet/node-exporter': ['hostPathVolumes'],
+          'observability/DaemonSet/vector': ['hostPathVolumes', 'runAsRoot']
+        }
+    - name: granted
+      expression: variables.workloadGrants[?variables.workload].orValue([])
+    - name: rootlessBuildKitContainers
+      expression: >-
+        request.namespace == 'ci' && variables.spec.?runtimeClassName.orValue('') == 'gvisor'
+        ? variables.containers.filter(c,
+            c.name == 'buildkitd'
+            && c.image.startsWith('docker.io/moby/buildkit:')
+            && c.image.split('@')[0].endsWith('-rootless')
+            && c.image.contains('@sha256:')).map(c, c.name)
+        : []
+    - name: containersOtherThanRootlessBuildKit
+      expression: >-
+        variables.containers.filter(c, !(c.name in variables.rootlessBuildKitContainers))
   validations:
     - expression: >-
-        variables.spec.?securityContext.?runAsNonRoot.orValue(false)
+        'runAsRoot' in variables.granted
+        || variables.spec.?securityContext.?runAsNonRoot.orValue(false)
         ? variables.containers.all(c, c.?securityContext.?runAsNonRoot.orValue(true))
         : variables.containers.all(c, c.?securityContext.?runAsNonRoot.orValue(false))
       message: runAsNonRoot must be true for the pod or for every container.
       reason: Forbidden
     - expression: >-
-        variables.spec.?securityContext.?runAsUser.orValue(1) != 0
+        'runAsRoot' in variables.granted
+        || variables.spec.?securityContext.?runAsUser.orValue(1) != 0
         && variables.containers.all(c, c.?securityContext.?runAsUser.orValue(1) != 0)
       message: runAsUser must not be 0.
       reason: Forbidden
     - expression: >-
-        variables.containers.all(c, c.?securityContext.?allowPrivilegeEscalation.orValue(true) == false)
-      message: every container must set allowPrivilegeEscalation to false.
+        variables.containersOtherThanRootlessBuildKit.all(c, c.?securityContext.?allowPrivilegeEscalation.orValue(true) == false)
+      message: >-
+        every container must set allowPrivilegeEscalation to false; only the rootless BuildKit container
+        of a gvisor pod in ci is exempt.
       reason: Forbidden
     - expression: >-
-        variables.containers.all(c,
+        variables.containersOtherThanRootlessBuildKit.all(c,
           c.?securityContext.?capabilities.?drop.orValue([]).exists(d, d == 'ALL')
           && c.?securityContext.?capabilities.?add.orValue([]).all(a, a == 'NET_BIND_SERVICE'))
-      message: every container must drop ALL capabilities and may add back only NET_BIND_SERVICE.
+        && variables.containers.all(c, c.?securityContext.?capabilities.?add.orValue([]).all(a, a == 'NET_BIND_SERVICE'))
+      message: >-
+        every container must drop ALL capabilities and may add back only NET_BIND_SERVICE; the rootless
+        BuildKit container of a gvisor pod in ci keeps the default set and adds nothing.
       reason: Forbidden
     - expression: >-
         variables.spec.?securityContext.?seccompProfile.?type.orValue('') in variables.confinedSeccompTypes
@@ -71,7 +112,8 @@ spec:
       reason: Forbidden
     - expression: >-
         variables.spec.?volumes.orValue([]).all(v,
-          has(v.configMap) || has(v.csi) || has(v.downwardAPI) || has(v.emptyDir) || has(v.ephemeral)
+          (has(v.hostPath) && 'hostPathVolumes' in variables.granted)
+          || has(v.configMap) || has(v.csi) || has(v.downwardAPI) || has(v.emptyDir) || has(v.ephemeral)
           || has(v.persistentVolumeClaim) || has(v.projected) || has(v.secret) || has(v.image))
       message: >-
         volumes are limited to configMap, csi, downwardAPI, emptyDir, ephemeral, persistentVolumeClaim,

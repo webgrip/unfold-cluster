@@ -29,24 +29,73 @@ spec:
         variables.spec.?containers.orValue([])
         + variables.spec.?initContainers.orValue([])
         + variables.spec.?ephemeralContainers.orValue([])
+    - name: controllingOwners
+      expression: >-
+        object.metadata.?ownerReferences.orValue([]).filter(o, o.?controller.orValue(false))
+    - name: podTemplateHash
+      expression: object.metadata.?labels[?'pod-template-hash'].orValue('')
+    - name: workload
+      expression: >-
+        variables.controllingOwners.size() != 1
+        ? request.namespace + '/' + object.kind + '/' + object.metadata.name
+        : (variables.controllingOwners[0].kind == 'ReplicaSet' && variables.podTemplateHash != ''
+            && variables.controllingOwners[0].name.endsWith('-' + variables.podTemplateHash)
+          ? request.namespace + '/Deployment/' + variables.controllingOwners[0].name.substring(0,
+              variables.controllingOwners[0].name.size() - variables.podTemplateHash.size() - 1)
+          : request.namespace + '/' + variables.controllingOwners[0].kind + '/' + variables.controllingOwners[0].name)
+    - name: hostAccessGrants
+      expression: >-
+        {
+          'observability/DaemonSet/node-exporter': [
+            'hostNetwork', 'hostPID', 'hostPort:9100',
+            'readOnlyHostPath:/', 'readOnlyHostPath:/proc', 'readOnlyHostPath:/sys'],
+          'observability/DaemonSet/vector': [
+            'hostNetwork', 'hostPort:9598',
+            'readOnlyHostPath:/var/log', 'writableHostPath:/var/lib/vector']
+        }
+    - name: granted
+      expression: variables.hostAccessGrants[?variables.workload].orValue([])
+    - name: hostPathVolumes
+      expression: variables.spec.?volumes.orValue([]).filter(v, has(v.hostPath))
+    - name: writableHostPathMounts
+      expression: >-
+        variables.containers.map(c, c.?volumeMounts.orValue([])
+          .filter(m, !m.?readOnly.orValue(false))
+          .map(m, variables.hostPathVolumes.filter(v, v.name == m.name).map(v, v.hostPath.path)))
   validations:
     - expression: >-
         variables.containers.all(c, !c.?securityContext.?privileged.orValue(false))
       message: privileged containers run only in the system namespaces.
       reason: Forbidden
     - expression: >-
-        !variables.spec.?hostNetwork.orValue(false)
-        && !variables.spec.?hostPID.orValue(false)
+        (!variables.spec.?hostNetwork.orValue(false) || 'hostNetwork' in variables.granted)
+        && (!variables.spec.?hostPID.orValue(false) || 'hostPID' in variables.granted)
         && !variables.spec.?hostIPC.orValue(false)
-      message: hostNetwork, hostPID and hostIPC are allowed only in the system namespaces.
+      messageExpression: >-
+        'hostNetwork, hostPID and hostIPC are allowed only in the system namespaces and for the workloads granted them; '
+        + variables.workload + ' is granted: [' + variables.granted.join(', ') + ']'
       reason: Forbidden
     - expression: >-
-        variables.spec.?volumes.orValue([]).all(v, !has(v.hostPath))
-      message: hostPath volumes are allowed only in the system namespaces.
+        variables.hostPathVolumes.all(v,
+          ('readOnlyHostPath:' + v.hostPath.path) in variables.granted
+          || ('writableHostPath:' + v.hostPath.path) in variables.granted)
+      messageExpression: >-
+        'hostPath volumes are allowed only in the system namespaces and for the paths a workload is granted; '
+        + variables.workload + ' is granted: [' + variables.granted.join(', ') + ']'
       reason: Forbidden
     - expression: >-
-        variables.containers.all(c, c.?ports.orValue([]).all(p, p.?hostPort.orValue(0) == 0))
-      message: hostPort is allowed only in the system namespaces.
+        variables.writableHostPathMounts.all(perContainer, perContainer.all(paths,
+          paths.all(path, ('writableHostPath:' + path) in variables.granted)))
+      messageExpression: >-
+        'a hostPath must be mounted readOnly unless the workload is granted it writable; '
+        + variables.workload + ' is granted: [' + variables.granted.join(', ') + ']'
+      reason: Forbidden
+    - expression: >-
+        variables.containers.all(c, c.?ports.orValue([]).all(p,
+          p.?hostPort.orValue(0) == 0 || ('hostPort:' + string(p.hostPort)) in variables.granted))
+      messageExpression: >-
+        'hostPort is allowed only in the system namespaces and for the ports a workload is granted; '
+        + variables.workload + ' is granted: [' + variables.granted.join(', ') + ']'
       reason: Forbidden
     - expression: >-
         variables.containers.all(c,
