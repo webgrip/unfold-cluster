@@ -70,8 +70,9 @@ run "the_tailnet_policy_lets_the_nodes_reach_the_homelab_gateway_and_nothing_mor
   assert {
     condition = [for rule in jsondecode(local.headscale_policy).acls : rule if !contains(rule.src, "group:admin")] == [
       { action = "accept", src = ["tag:cp", "tag:node"], dst = ["tag:homelab-gateway:8200,8427"] },
+      { action = "accept", src = ["tag:node"], dst = ["tag:homelab-gateway:9150"] },
     ]
-    error_message = "besides the admins, only the nodes may open connections, and only to the gateway's metrics and log ingest (8427) and OpenBao (8200)"
+    error_message = "besides the admins, only the nodes may open connections, and only to the gateway's metrics and log ingest (8427), OpenBao (8200) and, from the workers that run KEDA, the CI job count (9150)"
   }
 
   assert {
