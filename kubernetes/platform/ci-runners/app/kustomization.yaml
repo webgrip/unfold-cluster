@@ -5,7 +5,6 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - registration.externalsecret.yaml
-  - scaler.yaml
   - runner-config.configmap.yaml
   - buildkitd-config.configmap.yaml
   - scaledjob.yaml
