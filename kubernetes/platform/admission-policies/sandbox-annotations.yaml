@@ -1,0 +1,46 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: sandbox-annotations
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: podAnnotations
+      expression: >-
+        object.kind == 'Pod' ? object.metadata.?annotations.orValue({}) :
+        (object.kind == 'CronJob'
+          ? object.spec.jobTemplate.spec.template.?metadata.?annotations.orValue({})
+          : object.spec.template.?metadata.?annotations.orValue({}))
+    - name: sandboxConfigPrefixes
+      expression: "['io.katacontainers.', 'dev.gvisor.']"
+  validations:
+    - expression: >-
+        !variables.podAnnotations.exists(k, variables.sandboxConfigPrefixes.exists(p, k.startsWith(p)))
+      messageExpression: >-
+        'pod annotations under ' + variables.sandboxConfigPrefixes.join(', ')
+        + ' are refused; sandbox runtime configuration comes only from the node. Refused: '
+        + variables.podAnnotations.filter(k, variables.sandboxConfigPrefixes.exists(p, k.startsWith(p))).join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: sandbox-annotations
+spec:
+  policyName: sandbox-annotations
+  validationActions: ["Audit", "Warn"]
