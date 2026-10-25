@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 20
     env:
       IMAGE: zot.zot.svc.cluster.local:5000/webgrip/ci/unfold-cluster-smoke
+      SBOM_GENERATOR: docker.io/docker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
     steps:
       - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -22,13 +23,15 @@ jobs:
       - name: Show the BuildKit worker
         run: buildctl debug workers --verbose
 
-      - name: Build, push and export the layer cache
+      - name: Build, push with an SBOM and provenance attestation, and export the layer cache
         run: |
           buildctl build \
             --progress plain \
             --frontend dockerfile.v0 \
             --local context=tests/ci-smoke \
             --local dockerfile=tests/ci-smoke \
+            --opt "attest:sbom=generator=${SBOM_GENERATOR}" \
+            --opt attest:provenance=mode=max \
             --output "type=image,name=${IMAGE}:${GITHUB_SHA},push=true,registry.insecure=true" \
             --export-cache "type=registry,ref=${IMAGE}:buildcache,mode=max,registry.insecure=true"
 
@@ -48,3 +51,23 @@ jobs:
         run: |
           curl -fsS "http://${IMAGE%%/*}/v2/${IMAGE#*/}/tags/list" | tee tags.json
           grep -q "${GITHUB_SHA}" tags.json
+
+      - name: Read the SBOM and provenance attestations back from Zot
+        run: |
+          registry="http://${IMAGE%%/*}/v2/${IMAGE#*/}/manifests"
+          index_accept="application/vnd.oci.image.index.v1+json"
+          manifest_accept="application/vnd.oci.image.manifest.v1+json"
+          attestation_digest="$(curl -fsS -H "Accept: ${index_accept}" "${registry}/${GITHUB_SHA}" | node -e '
+            const index = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const attestation = (index.manifests || []).find((m) => (m.annotations || {})["vnd.docker.reference.type"] === "attestation-manifest");
+            if (!attestation) { console.error("the pushed index carries no attestation manifest"); process.exit(1); }
+            console.log(attestation.digest);
+          ')"
+          curl -fsS -H "Accept: ${manifest_accept}" "${registry}/${attestation_digest}" | node -e '
+            const manifest = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const types = manifest.layers.map((l) => (l.annotations || {})["in-toto.io/predicate-type"]);
+            console.log(types.join("\n"));
+            for (const wanted of ["https://spdx.dev/Document", "https://slsa.dev/provenance/v1"]) {
+              if (!types.includes(wanted)) { console.error("missing attestation " + wanted); process.exit(1); }
+            }
+          '
