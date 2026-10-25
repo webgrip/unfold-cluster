@@ -2,7 +2,7 @@
 
 Every image we build must carry a cosign signature from the estate's signing key before it runs on
 Unfold. The native admission policies cannot read a registry, so Kyverno does this one job. Why
-Kyverno and not policy-controller, Ratify or Connaisseur: [ADR 0005](../adr/0005-kyverno-checks-webgrip-image-signatures.md).
+Kyverno and not policy-controller, Ratify or Connaisseur: [ADR 0011](../adr/0011-kyverno-checks-webgrip-image-signatures.md).
 Everything is in `kubernetes/platform/kyverno`, reconciled by the Flux Kustomizations `kyverno`
 (the chart) and `kyverno-policies` (the policies, after the chart's CRDs exist).
 

@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-25
 ---
 
-# ADR 0005: Kyverno, and nothing else of it, checks the cosign signature of webgrip images at admission
+# ADR 0011: Kyverno, and nothing else of it, checks the cosign signature of webgrip images at admission
 
 ## Context and problem statement
 

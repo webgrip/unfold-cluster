@@ -73,7 +73,7 @@ A Deny policy also refuses an UPDATE of an object that already violates it. Flux
 
 ### Why there is no defaulting MutatingAdmissionPolicy yet
 
-The one MutatingAdmissionPolicy, `trivy-scan-job-defaults`, sets nothing a workload chooses: it bounds the scratch volumes of Jobs the Trivy Operator generates, which no chart value reaches ([ADR 0004](../adr/0004-trivy-operator-scans-in-the-cluster.md)). Its fixtures are under `resource-limits`: the operator's Job is admitted only because of it, and the same Job without the operator's label stays refused.
+The one MutatingAdmissionPolicy, `trivy-scan-job-defaults`, sets nothing a workload chooses: it bounds the scratch volumes of Jobs the Trivy Operator generates, which no chart value reaches ([ADR 0010](../adr/0010-trivy-operator-scans-in-the-cluster.md)). Its fixtures are under `resource-limits`: the operator's Job is admitted only because of it, and the same Job without the operator's label stays refused.
 
 RFC 0001 tier 3 sets safe defaults with `MutatingAdmissionPolicy` (GA, served at `admissionregistration.k8s.io/v1` on 1.37). A mutation has no Audit mode: it changes every matching pod the moment it lands. The defaults it would set (`hostUsers: false`, seccomp, the token opt-out, the RuntimeClass) are exactly what the validating set above now reports on, so the mutating set follows once that audit is clean, with the same fixtures.
 

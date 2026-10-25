@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-25
 ---
 
-# ADR 0004: Trivy Operator scans every running image in the cluster, with its database from Zot
+# ADR 0010: Trivy Operator scans every running image in the cluster, with its database from Zot
 
 ## Context and problem statement
 
