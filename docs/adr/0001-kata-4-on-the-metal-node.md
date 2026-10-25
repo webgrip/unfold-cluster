@@ -34,7 +34,10 @@ Two facts constrain the choice:
    installer to its container registry, the disk image as a generic package. Both are pinned in
    [talos/metal-image.yaml](../../talos/metal-image.yaml), the installer by digest and the disk
    image by sha256. OpenTofu refuses an installer whose tag does not start with the Talos version
-   in `talos/talenv.yaml`.
+   in `talos/talenv.yaml`. The packages are public, as every package of the public `webgrip`
+   organisation is, so the node and the rescue system pull them without credentials; the
+   extension's source repository stays private, and the image's metadata names only Kata 4.3.1.
+   Merging a version bump there releases it and opens the pin pull request here.
 4. **Installed from the rescue system with `dd`.** `scripts/robot.sh install` arms the rescue
    system with a one-time SSH key, resets the server, checks the rescue host key against the one
    Robot announced, downloads the disk image, checks its sha256, wipes the NVMe disks and writes the
@@ -62,8 +65,8 @@ Two facts constrain the choice:
   seeded (`docs/runbooks/metal-node.md`).
 * While `talos/metal-image.yaml` holds empty values, an apply orders the server and puts it on the
   vSwitch behind its firewall, and installs nothing.
-* A Talos upgrade of the metal node needs a new release of `talos-kata-extension` for that Talos
-  version first, then a new pin.
+* A Talos upgrade of the metal node needs a release of `talos-kata-extension` for that Talos
+  version first; merging it there opens the pin pull request here.
 * If our Kata build misbehaves, removing the `runtime.webgrip.io/kata` label keeps new Kata pods off
   the node; the installer of the previous release is the rollback.
 
