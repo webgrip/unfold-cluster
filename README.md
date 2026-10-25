@@ -70,6 +70,7 @@ Verification checks only the newest commit, so it does not stop a rollback: a fo
 * **Pod Security `restricted`** is the API server's default for every namespace; Talos exempts `kube-system`, where Cilium and the storage node plugin need host access.
 * **Default-deny networking**: a Cilium clusterwide policy denies all ingress and egress for every pod outside `kube-system` and `flux-system`, except DNS. A workload's namespace adds its own allow policy.
 * **Pinned, approved images**: a native ValidatingAdmissionPolicy refuses any pod outside `kube-system` and `flux-system` whose images, debug containers or image volumes are not pinned by digest or do not come from a repository on its `allowedPrefixes` list (today only `ghcr.io/siderolabs/`); a new workload adds its own prefix. The components in the two exempt namespaces (Cilium, the cloud controller, the CSI driver, the Flux operator and controllers) are pinned by digest in their chart values instead, and Flux at an exact version.
+* **Host firewall**: every node blocks inbound connections except the ports the cluster uses, each from named sources only ([docs/runbooks/host-firewall.md](docs/runbooks/host-firewall.md)). The Talos API and the API server take ADMIN_CIDRS, the tailnet and the private network.
 * **Pod traffic between nodes is encrypted** with Cilium's WireGuard. Traffic between the nodes themselves and from host-network pods is not (`nodeEncryption` is off), so it relies on each protocol's own TLS: etcd, the API server and the kubelet all use it.
 * **Hubble relay** runs, so `hubble observe --verdict DROPPED` shows what default-deny refused.
 
@@ -148,7 +149,7 @@ No job installs anything. The steps run in `infra-runner`, a toolchain image bui
 When nobody can reach Kubernetes, run Actions → `infra` → **Run workflow** on `main` with `diagnose` in the `apply` dropdown; `plan_digest` stays empty. The `diagnose` job reads the same OpenBao credentials as a plan, runs `tofu init` against the state, and stops there: no plan, no apply, and no Hetzner call except one. `scripts/diagnose-cluster.sh` then prints:
 
 * the Hetzner project's API budget, from the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers of one `GET /v1/locations?per_page=1` (the limit is per project, so every token in it shares the budget);
-* per node, through `talosctl` against the public address: `version`, `get members`, `service`, the last 50 lines of `ext-tailscale` and `get addresses`, then `etcd members`;
+* per node, through `talosctl` against the public address: `version`, `get members`, `service`, the last 50 lines of `ext-tailscale`, `get addresses` and the host firewall's `get nftableschains`, then `etcd members`;
 * per node, the Kubernetes containers (`talosctl containers -k`) and the last 100 log lines of every `kube-system` container of the cloud controller and Cilium;
 * through `kubectl`: nodes, pods, `kube-system` events, the cloud controller's log and Flux's sources. The kubeconfig points at the private VIP, so the script asks the first control plane's public address on 6443, which the firewall opens to `ADMIN_CIDRS`, and checks the certificate against the VIP's address, a name the API server's certificate is issued for.
 
