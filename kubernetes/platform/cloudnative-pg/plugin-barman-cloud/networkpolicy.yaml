@@ -1,0 +1,21 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plugin-barman-cloud
+spec:
+  description: The barman-cloud plugin answers the operator over mutual TLS on 9090 and reads ObjectStores, Secrets and Clusters through the Kubernetes API. The object store itself is reached by each instance's sidecar, not by this pod.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: plugin-barman-cloud
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver

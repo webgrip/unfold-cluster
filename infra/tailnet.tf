@@ -45,6 +45,10 @@ resource "terraform_data" "control_plane_tailnet_key" {
 }
 
 locals {
+  worker_tailnet_tag = {
+    for name, worker in local.workers : name => lookup(local.tailnet_tag_by_pool, worker.pool, "")
+  }
+
   worker_tailnet_key_slot = {
     for name, server in hcloud_server.worker : name => "${server.id}${replace(var.tailnet_key_generation, "-", "")}${contains(var.disk_encryption_nodes, name) ? "1" : ""}"
   }
@@ -54,9 +58,16 @@ data "external" "worker_tailnet_key" {
   for_each = local.workers
 
   program = ["${path.module}/../scripts/read-tailnet-key.sh"]
-  query   = merge(local.tailnet_key_query, { request = "worker ${local.worker_tailnet_key_slot[each.key]}" })
+  query   = merge(local.tailnet_key_query, { request = "worker ${local.worker_tailnet_key_slot[each.key]} ${local.worker_tailnet_tag[each.key]}" })
 
-  depends_on = [hcloud_server.headscale]
+  depends_on = [hcloud_server.headscale, terraform_data.tailnet_key_tool]
+
+  lifecycle {
+    precondition {
+      condition     = local.worker_tailnet_tag[each.key] != ""
+      error_message = "Every worker pool needs a tailnet role tag in local.tailnet_tag_by_pool (infra/headscale.tf); the Headscale policy grants a tag only the homelab gateway ports its role needs."
+    }
+  }
 }
 
 resource "terraform_data" "worker_tailnet_key" {
@@ -106,4 +117,25 @@ locals {
       ]
     }))
   }
+}
+
+locals {
+  tailnet_node_tag = merge(
+    { for name in keys(local.control_planes) : name => "tag:cp" },
+    local.worker_tailnet_tag,
+    { for name in keys(local.metal_installable) : name => local.tailnet_tag_by_pool["metal"] },
+  )
+}
+
+resource "terraform_data" "tailnet_node_tag" {
+  for_each = local.tailnet_node_tag
+
+  triggers_replace = [each.value, hcloud_server.headscale.id]
+
+  provisioner "local-exec" {
+    command     = "${path.module}/../scripts/push-to-headscale.sh tag"
+    environment = merge(local.headscale_ssh, { NODE_NAME = each.key, NODE_TAG = each.value })
+  }
+
+  depends_on = [terraform_data.headscale_policy]
 }

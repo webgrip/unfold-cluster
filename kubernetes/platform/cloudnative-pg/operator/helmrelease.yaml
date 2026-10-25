@@ -1,0 +1,53 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cloudnative-pg
+spec:
+  interval: 1h
+  releaseName: cloudnative-pg
+  chartRef:
+    kind: OCIRepository
+    name: cloudnative-pg
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    additionalArgs:
+      - --leader-elect=false
+    image:
+      repository: ghcr.io/cloudnative-pg/cloudnative-pg
+      # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/cloudnative-pg
+      tag: 1.30.1@sha256:923c267ec29636db3bee20f993d0ec4973fa22998e1adad37da79e4d32b5bc07
+    config:
+      clusterWide: true
+      data:
+        POSTGRES_IMAGE_NAME: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:0675340b02be838319b9b6f323c206693e519dcd62ec729d539be9f46bb7a2f9
+    priorityClassName: system-cluster-critical
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 25m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+        ephemeral-storage: 256Mi
+    scratchData:
+      emptyDir:
+        sizeLimit: 64Mi
+    monitoring:
+      podMonitorEnabled: false
+      grafanaDashboard:
+        create: false

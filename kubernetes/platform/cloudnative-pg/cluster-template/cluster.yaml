@@ -1,0 +1,54 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: ${CNPG_CLUSTER}
+spec:
+  instances: ${CNPG_INSTANCES:=1}
+  enablePDB: ${CNPG_ENABLE_PDB:=false}
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:0675340b02be838319b9b6f323c206693e519dcd62ec729d539be9f46bb7a2f9
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: false
+  bootstrap:
+    initdb:
+      database: ${CNPG_DATABASE}
+      owner: ${CNPG_OWNER}
+      dataChecksums: true
+      postInitApplicationSQL:
+        - CREATE SCHEMA restore_canary AUTHORIZATION ${CNPG_OWNER}
+        - CREATE TABLE restore_canary.marks (token text PRIMARY KEY, written_at timestamptz NOT NULL DEFAULT now())
+        - ALTER TABLE restore_canary.marks OWNER TO ${CNPG_OWNER}
+  postgresql:
+    parameters:
+      password_encryption: scram-sha-256
+      ssl_min_protocol_version: TLSv1.3
+    pg_hba:
+      - hostssl all all all scram-sha-256
+      - host all all all reject
+  storage:
+    storageClass: hcloud-luks
+    size: ${CNPG_STORAGE_SIZE:=10Gi}
+  walStorage:
+    storageClass: hcloud-luks
+    size: ${CNPG_WAL_SIZE:=10Gi}
+  ephemeralVolumesSizeLimit:
+    shm: 256Mi
+    temporaryData: 1Gi
+  resources:
+    requests:
+      cpu: ${CNPG_CPU_REQUEST:=100m}
+      memory: ${CNPG_MEMORY_REQUEST:=256Mi}
+    limits:
+      memory: ${CNPG_MEMORY_LIMIT:=1Gi}
+      ephemeral-storage: 2Gi
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+    nodeSelector:
+      node.webgrip.io/pool: unfold
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
+        effect: NoSchedule

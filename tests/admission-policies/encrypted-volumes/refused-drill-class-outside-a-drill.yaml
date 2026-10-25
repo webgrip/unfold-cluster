@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: example-db-1
+  namespace: tenant
+  labels:
+    cnpg.io/cluster: example-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: hcloud-luks-drill
+  resources:
+    requests:
+      storage: 10Gi

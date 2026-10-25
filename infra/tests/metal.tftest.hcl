@@ -417,6 +417,11 @@ run "the_metal_node_is_a_tainted_kata_and_gvisor_pool_named_by_its_robot_number"
     condition     = local.metal_kubelet_reservations.systemReserved.memory == "2Gi" && local.metal_kubelet_reservations.kubeReserved.cpu == "500m"
     error_message = "the kubelet reserves room for the system and for the sandboxes' VMMs outside pod requests"
   }
+
+  assert {
+    condition     = endswith(data.external.metal_tailnet_key["unfold-metal-1"].query.request, " tag:metal") && local.tailnet_node_tag["unfold-metal-1"] == "tag:metal"
+    error_message = "the metal node joins as tag:metal and the apply keeps it there, so it reaches only the gateway's log and metrics ingest"
+  }
 }
 
 run "gvisor_runs_on_kvm_on_metal_and_systrap_in_the_cloud_with_seccomp_inside" {
