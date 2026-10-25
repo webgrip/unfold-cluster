@@ -20,6 +20,7 @@ on:
       - scripts/lift-headscale-protection.sh
       - scripts/set-etcd-backup-lifecycle.sh
       - scripts/plan-digest.sh
+      - scripts/tofu-plan.sh
   workflow_dispatch:
     inputs:
       apply:
@@ -143,7 +144,7 @@ jobs:
             && github.ref == 'refs/heads/main'
             && inputs.apply == 'apply'
             && 'allowed' || 'read-only' }}
-        run: tofu plan -lock-timeout=5m -out=infra.tfplan
+        run: ../scripts/tofu-plan.sh -lock-timeout=5m -out=infra.tfplan
 
       - name: Print the plan digest to quote when applying
         run: |

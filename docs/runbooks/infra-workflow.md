@@ -39,6 +39,14 @@ Letting plan-only runs mint was the other option. It was not taken: a push-trigg
 
 Anything else that changes between two runs, such as a Renovate merge, another pull request, or a resource changed outside OpenTofu, also changes the digest; that is what the gate is for.
 
+## A Hetzner 5xx during the plan
+
+Hetzner's API sometimes answers a read with `internal server error (server_error)`, `Status code: 500` (run 171, refreshing `hcloud_primary_ip.headscale`). The Plan step runs `scripts/tofu-plan.sh`, which plans again when every error of a failed plan is a Hetzner 5xx: at most three attempts, 30 and 60 seconds apart, each announced as a `::warning::`. A rate limit (429), a configuration error, a failed postcondition, or a 5xx together with any of those ends the run at once.
+
+Only the plan is retried. A plan changes nothing at Hetzner; the one thing an apply run's plan may write is a tailnet key on `unfold-headscale`, minted once per slot and read back on the next attempt. `tofu apply` of the saved plan is never retried: if it fails, read what it changed and dispatch a new apply. `scripts/test-tofu-plan.sh` checks the cases against a stubbed tofu.
+
+The same script replaces every `hskey-auth-…` in the printed plan with `hskey-auth-<redacted>`. A plan that replaces a tailnet key resource shows its stored `output`, the key itself, in plain text, because `sensitive()` on `input` does not mark `output`; runs 165 and 166 printed the keys of the Headscale server they then replaced.
+
 ## Worker pools
 
 `var.worker_pools` in `infra/variables.tf` lists the fixed worker pools OpenTofu creates. Each pool has:
