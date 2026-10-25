@@ -1,5 +1,5 @@
 locals {
-  cluster_nodes = merge(local.control_planes, local.unfold_worker)
+  cluster_nodes = merge(local.control_planes, { for name, worker in local.workers : name => worker.private_ip })
 
   disk_encryption = {
     provider  = "luks2"
