@@ -164,7 +164,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
   machine_configuration_input = data.talos_machine_configuration.control_plane.machine_configuration
   node                        = each.value.ipv4_address
   endpoint                    = each.value.ipv4_address
-  config_patches = [
+  config_patches = concat(local.disk_encryption_patches[each.key], [
     local.tailscale_patch[each.key],
     yamlencode({
       apiVersion = "v1alpha1"
@@ -180,7 +180,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
         match = "mac(link.permanent_addr) == \"${lower(each.value.private_mac)}\""
       }
     }),
-  ]
+  ])
 }
 
 resource "talos_machine_configuration_apply" "unfold_worker" {
@@ -190,7 +190,7 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = each.value
   endpoint                    = each.value
-  config_patches = [
+  config_patches = concat(local.disk_encryption_patches[each.key], [
     local.unfold_worker_patch,
     local.tailscale_patch[each.key],
     yamlencode({
@@ -199,7 +199,7 @@ resource "talos_machine_configuration_apply" "unfold_worker" {
       auto       = "off"
       hostname   = each.key
     }),
-  ]
+  ])
 }
 
 resource "talos_machine_bootstrap" "cluster" {
