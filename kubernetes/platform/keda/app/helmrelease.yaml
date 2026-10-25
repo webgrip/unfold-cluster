@@ -25,6 +25,13 @@ spec:
   values:
     crds:
       install: true
+    nodeSelector:
+      node.webgrip.io/pool: ci
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: ci
+        effect: NoSchedule
     http:
       timeout: 30000
     image:
