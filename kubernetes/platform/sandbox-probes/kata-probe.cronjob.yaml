@@ -1,0 +1,63 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kata-probe
+  namespace: sandbox-probes
+spec:
+  schedule: "*/30 * * * *"
+  timeZone: Europe/Amsterdam
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: kata-probe
+            app.kubernetes.io/part-of: sandbox-probes
+            ploeg.webgrip.dev/isolation-class: isolated
+        spec:
+          restartPolicy: Never
+          runtimeClassName: kata
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: probe
+              image: docker.io/alpine/kubectl:1.37.1@sha256:a5d0fbecab3f7b6c2ab7398f1daa73a3e0ed6ece18556d21698233e9e3759cc7
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  seccomp="$(sed -n 's/^Seccomp:[[:space:]]*//p' /proc/self/status)"
+                  echo "sandbox=kata guest-kernel=$(uname -r) seccomp=${seccomp}"
+                  if grep -q agent.debug_console /proc/cmdline; then
+                    echo "the guest kernel was started with a debug console"
+                    exit 1
+                  fi
+                  [ "$seccomp" = 2 ] || { echo "the pod's seccomp profile is not applied inside the guest"; exit 1; }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                  ephemeral-storage: 1Mi
+                limits:
+                  memory: 64Mi
+                  ephemeral-storage: 16Mi
