@@ -7,7 +7,7 @@ locals {
   cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
 
-  common_patches = [
+  common_patches = concat([
     yamlencode({
       cluster = {
         externalCloudProvider = {
@@ -45,7 +45,7 @@ locals {
       kind       = "KubeFlannelCNIConfig"
       "$patch"   = "delete"
     }),
-  ]
+  ], local.registry_mirror_patches)
 
   control_plane_patches = [
     yamlencode({
@@ -59,6 +59,8 @@ locals {
     local.pod_security_patch,
     local.etcd_backup_access_patch,
     local.kube_proxy_disabled_patch,
+    local.kube_authentication_patch,
+    local.kube_audit_policy_patch,
   ]
 
   kube_proxy_disabled_patch = yamlencode({
@@ -162,7 +164,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
   machine_configuration_input = data.talos_machine_configuration.control_plane.machine_configuration
   node                        = each.value.ipv4_address
   endpoint                    = each.value.ipv4_address
-  config_patches = [
+  config_patches = concat(local.disk_encryption_patches[each.key], [
     local.tailscale_patch[each.key],
     yamlencode({
       apiVersion = "v1alpha1"
@@ -178,7 +180,7 @@ resource "talos_machine_configuration_apply" "control_plane" {
         match = "mac(link.permanent_addr) == \"${lower(each.value.private_mac)}\""
       }
     }),
-  ]
+  ])
 }
 
 resource "talos_machine_configuration_apply" "worker" {
@@ -188,7 +190,7 @@ resource "talos_machine_configuration_apply" "worker" {
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = each.value
   endpoint                    = each.value
-  config_patches = [
+  config_patches = concat(local.disk_encryption_patches[each.key], [
     local.worker_pool_patch[local.workers[each.key].pool],
     local.tailscale_patch[each.key],
     yamlencode({
@@ -197,7 +199,7 @@ resource "talos_machine_configuration_apply" "worker" {
       auto       = "off"
       hostname   = each.key
     }),
-  ]
+  ])
 }
 
 moved {

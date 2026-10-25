@@ -1,0 +1,40 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cluster-admin-bindings
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["clusterrolebindings", "rolebindings"]
+  matchConditions:
+    - name: not-the-api-server-bootstrapping-its-own-roles
+      expression: request.userInfo.username != 'system:apiserver'
+    - name: binds-cluster-admin
+      expression: object.roleRef.kind == 'ClusterRole' && object.roleRef.name == 'cluster-admin'
+  variables:
+    - name: fluxServiceAccounts
+      expression: "['kustomize-controller', 'helm-controller', 'flux-operator']"
+    - name: unexpectedSubjects
+      expression: >-
+        object.?subjects.orValue([]).filter(s,
+          !(s.kind == 'ServiceAccount' && s.?namespace.orValue('') == 'flux-system'
+            && s.name in variables.fluxServiceAccounts))
+  validations:
+    - expression: variables.unexpectedSubjects.size() == 0
+      messageExpression: >-
+        "cluster-admin is bound only to Flux's own service accounts; refused subjects: "
+        + variables.unexpectedSubjects.map(s, s.kind + '/' + s.name).join(', ')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cluster-admin-bindings
+spec:
+  policyName: cluster-admin-bindings
+  validationActions: ["Audit", "Warn"]
