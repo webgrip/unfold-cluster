@@ -11,7 +11,7 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | `infra/` | Hetzner Cloud resources, the Talos machine configs, the cluster bootstrap, and the manifests Talos installs at bootstrap: Cilium and Hetzner's cloud controller (rendered from their `kubernetes/platform/` files), the Flux operator and the Flux instance | OpenTofu, from `.forgejo/workflows/infra.yml` |
 | `talos/` | Version pins and the Image Factory schematics for the cloud and metal nodes | read by people building snapshots and by Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster | Flux in the cluster |
-| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup | Flux in the cluster |
+| `kubernetes/platform/` | Platform components Flux owns: Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first | Flux in the cluster |
 
 ## From nothing to GitOps
 
@@ -47,6 +47,14 @@ So the seed a new cluster boots with is the release Flux then reconciles, and Fl
 Flux adopts the objects Talos made without recreating them: helm-controller's install takes ownership of existing objects by default and applies server-side, so the running DaemonSets and Deployments keep their pods unless their pod template changes. Both HelmReleases use the `RetryOnFailure` strategy, so a failed install or upgrade is retried and never answered with an uninstall or a rollback of the network, and both carry `kustomize.toolkit.fluxcd.io/prune: disabled`, so deleting a file does not uninstall Cilium. The CSI driver waits for the cloud controller (`dependsOn`).
 
 A merge that changes these files deploys through Flux on its own. The `infra` workflow plans on the same merge, because the Talos machine config embeds the same files; apply that plan when convenient so a rebuilt cluster boots with the new seed. Never run `talosctl upgrade-k8s` with machine configs older than `main`: it re-applies the inline manifests and would roll Cilium back to the seed until the next Flux upgrade.
+
+## No kube-proxy
+
+Cilium replaces kube-proxy (`kubeProxyReplacement: true`) and reaches the API server through KubePrism on `localhost:7445`, Talos's local load balancer, so nothing needs a Service before Cilium is up. The control planes' machine config therefore carries `KubeProxyConfig` with `enabled: false`. Deleting that document with `$patch: delete`, as the first configs did, does not work: Talos then falls back to the v1alpha1 default and deploys kube-proxy, which is why the first cluster came up with both. The OpenTofu test in `infra/tests/kube_proxy.tftest.hcl` fails on a `$patch: delete`, on a missing `enabled: false`, and on Cilium values that would need kube-proxy.
+
+Talos installs its bootstrap manifests once and never deletes them: an object in its `talos-bootstrap-manifests-inventory` is skipped from then on, even after the config stops rendering it. So turning kube-proxy off in the config does not remove the DaemonSet that already runs. Flux does that: the Job in [kubernetes/platform/kube-proxy-removal](kubernetes/platform/kube-proxy-removal) deletes the `kube-proxy` DaemonSet, ServiceAccount and ClusterRoleBinding, with a ServiceAccount allowed to get and delete those three names and nothing else. It is idempotent (`--ignore-not-found`) and stays completed, so Flux leaves it alone. Flux cannot take the DaemonSet over instead: Talos owns its fields under the `talos` field manager, and a server-side apply by Flux keeps the `kube-proxy` container beside anything Flux adds.
+
+The `kube-proxy` nftables tables the old pods wrote stay on each node until it reboots, at the next Talos upgrade. They match nothing: Cilium's socket load balancer (coverage `Full`) translates every Service address in `connect()`, before a packet reaches netfilter, and NodePorts are answered by Cilium's BPF program on the interface, also before netfilter.
 
 The Talos seed still installs, and Flux does not yet own, the `hcloud` secret, the Flux operator and instance, the `trusted-signers` secret, the GitRepository and Kustomization `flux-system`, and the etcd backup's namespace and secret. A change to those still needs a `talosctl upgrade-k8s` after the apply, or a new cluster.
 

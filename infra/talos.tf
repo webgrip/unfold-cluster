@@ -45,11 +45,6 @@ locals {
       kind       = "KubeFlannelCNIConfig"
       "$patch"   = "delete"
     }),
-    yamlencode({
-      apiVersion = "v1alpha1"
-      kind       = "KubeProxyConfig"
-      "$patch"   = "delete"
-    }),
   ]
 
   control_plane_patches = [
@@ -63,7 +58,14 @@ locals {
     }),
     local.pod_security_patch,
     local.etcd_backup_access_patch,
+    local.kube_proxy_disabled_patch,
   ]
+
+  kube_proxy_disabled_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "KubeProxyConfig"
+    enabled    = false
+  })
 
   etcd_backup_access_patch = yamlencode({
     machine = {
