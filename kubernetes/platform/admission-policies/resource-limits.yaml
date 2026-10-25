@@ -85,7 +85,7 @@ metadata:
   name: resource-limits
 spec:
   policyName: resource-limits
-  validationActions: ["Audit", "Warn"]
+  validationActions: ["Deny"]
   matchResources:
     namespaceSelector:
       matchExpressions:
