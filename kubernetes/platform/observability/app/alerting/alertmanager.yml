@@ -1,0 +1,62 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: ntfy-warning
+  group_by:
+    - alertname
+    - namespace
+    - severity
+    - service
+    - node
+    - job_name
+    - instance
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - receiver: deadman
+      matchers:
+        - alertname="Watchdog"
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 2m
+    - receiver: critical
+      matchers:
+        - severity="critical"
+    - receiver: ntfy-warning
+      matchers:
+        - severity="warning"
+    - receiver: "null"
+      matchers:
+        - severity=~"info|none"
+receivers:
+  - name: "null"
+  - name: critical
+    webhook_configs:
+      - url: https://ntfy.webgrip.dev/alerts-critical?template=alertmanager&priority=urgent
+        max_alerts: 20
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/token
+  - name: ntfy-warning
+    webhook_configs:
+      - url: https://ntfy.webgrip.dev/alerts-warning?template=alertmanager
+        max_alerts: 20
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/token
+  - name: deadman
+    webhook_configs:
+      - url_file: /etc/alertmanager/deadman/ping_url
+        send_resolved: false
+        max_alerts: 1
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal:
+      - namespace
+      - alertname

@@ -1,0 +1,35 @@
+loki.write "logs" {
+	endpoint {
+		url = sys.env("LOGS_URL") + "/insert/loki/api/v1/push?_stream_fields=cluster,source,node,namespace,pod,container,talos_service&_msg_field=message"
+	}
+	external_labels = {
+		cluster = "unfold",
+	}
+}
+
+loki.write "audit" {
+	endpoint {
+		url = sys.env("AUDIT_URL") + "/insert/loki/api/v1/push?_stream_fields=cluster,job,node&_msg_field=requestURI"
+	}
+	external_labels = {
+		cluster = "unfold",
+	}
+}
+
+loki.write "homelab_logs" {
+	endpoint {
+		url = sys.env("HOMELAB_URL") + "/insert/loki/api/v1/push?_stream_fields=cluster,source,node,namespace,pod,container,talos_service&_msg_field=message"
+	}
+	external_labels = {
+		cluster = "unfold",
+	}
+}
+
+loki.write "homelab_audit" {
+	endpoint {
+		url = sys.env("HOMELAB_URL") + "/insert/loki/api/v1/push?_stream_fields=cluster,job,node&_msg_field=requestURI"
+	}
+	external_labels = {
+		cluster = "unfold",
+	}
+}

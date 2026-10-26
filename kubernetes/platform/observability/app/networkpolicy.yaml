@@ -1,0 +1,702 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alloy-metrics
+spec:
+  description: alloy-metrics scrapes the API server, the kubelets, etcd and the host ports (node-exporter, alloy-logs, Cilium, Hubble, Tetragon), kube-state-metrics, CoreDNS, Flux, KEDA, the cluster-autoscaler, cert-manager, Trivy, Kyverno and the observability pods, and writes to vmsingle. Until the homelab stops receiving Unfold, it also writes a copy to the homelab gateway on the tailnet; its DNS lookups go through Cilium's DNS proxy, which is how the policy learns that address.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-metrics
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: unfold-gateway.webgrip.dev
+              - matchPattern: '*.cluster.local'
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+            - port: "2383"
+              protocol: TCP
+            - port: "9100"
+              protocol: TCP
+            - port: "9598"
+              protocol: TCP
+            - port: "9962"
+              protocol: TCP
+            - port: "9963"
+              protocol: TCP
+            - port: "9965"
+              protocol: TCP
+            - port: "2112"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: kube-state-metrics
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s-app: kube-dns
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "9153"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-operator
+            k8s:io.kubernetes.pod.namespace: trivy-system
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-report-shipper
+            k8s:io.kubernetes.pod.namespace: trivy-system
+      toPorts:
+        - ports:
+            - port: "9598"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kyverno
+            app.kubernetes.io/part-of: kyverno
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: keda-operator
+            k8s:io.kubernetes.pod.namespace: keda
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: hetzner-cluster-autoscaler
+            k8s:io.kubernetes.pod.namespace: cluster-autoscaler
+      toPorts:
+        - ports:
+            - port: "8085"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cert-manager
+            app.kubernetes.io/component: controller
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-logs
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-audit
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert-metrics
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert-logs
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert-audit
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alertmanager
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmauth-query
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: grafana-operator
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: unfold-gateway.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-state-metrics
+spec:
+  description: kube-state-metrics reads the API server and answers alloy-metrics, nothing else.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmsingle
+spec:
+  description: VictoriaMetrics takes samples from alloy-metrics and vmalert and answers vmalert, Grafana and the query endpoint. It reaches nothing.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmsingle
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-metrics
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-logs
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-audit
+        - matchLabels:
+            app.kubernetes.io/name: vmauth-query
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vlsingle-logs
+spec:
+  description: The log store takes lines from alloy-logs, which runs on each node's host network and so arrives as host or remote-node, and from the Trivy report shipper. vmalert-logs, Grafana, the query endpoint and alloy-metrics read it. It reaches nothing.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vlsingle-logs
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: trivy-report-shipper
+            k8s:io.kubernetes.pod.namespace: trivy-system
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-logs
+        - matchLabels:
+            app.kubernetes.io/name: vmauth-query
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vlsingle-audit
+spec:
+  description: The audit store takes the API audit log from alloy-logs on the control planes (host network, so host or remote-node). vmalert-audit, Grafana and alloy-metrics read it; the query endpoint does not, so the homelab never sees Unfold's audit trail. It reaches nothing.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vlsingle-audit
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-audit
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert-metrics
+spec:
+  description: vmalert-metrics reads vmsingle, writes its alert state to vmsingle and sends alerts to Alertmanager. alloy-metrics scrapes it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert-metrics
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alertmanager
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert-logs
+spec:
+  description: vmalert-logs reads vlsingle-logs, writes its alert state to vmsingle and sends alerts to Alertmanager. alloy-metrics scrapes it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert-logs
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-logs
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alertmanager
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert-audit
+spec:
+  description: vmalert-audit reads vlsingle-audit, writes its alert state to vmsingle and sends alerts to Alertmanager. alloy-metrics scrapes it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert-audit
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-audit
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alertmanager
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alertmanager
+spec:
+  description: Alertmanager takes alerts from the three vmalerts and sends them to ntfy and the dead-man's switch over HTTPS by name; its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses. Grafana and alloy-metrics read it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-metrics
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-logs
+        - matchLabels:
+            app.kubernetes.io/name: vmalert-audit
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: ntfy.webgrip.dev
+              - matchName: uptime.webgrip.dev
+              - matchPattern: '*.cluster.local'
+    - toFQDNs:
+        - matchName: ntfy.webgrip.dev
+        - matchName: uptime.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmauth-query
+spec:
+  description: The query endpoint answers the ops Gateway's Envoy (the Cilium ingress identity), which routes query.ops.unfoldhq.dev to it; vmauth admits only the homelab's bearer token, and only read paths. It reads vmsingle and the log store, never the audit store.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmauth-query
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-logs
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: grafana
+spec:
+  description: Grafana answers the ops Gateway's Envoy (the Cilium ingress identity, grafana.ops.unfoldhq.dev), alloy-metrics and its operator. It reads vmsingle, both log stores and Alertmanager, reaches Authentik only through ops-auth/authentik-relay (HTTPS_PROXY), and downloads its one plugin (the VictoriaLogs data source) from grafana.com, which redirects to storage.googleapis.com.
+  endpointSelector:
+    matchLabels:
+      app: grafana
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+        - matchLabels:
+            app.kubernetes.io/name: grafana-operator
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: grafana.com
+              - matchName: storage.googleapis.com
+              - matchPattern: '*.cluster.local'
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vmsingle
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-logs
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vlsingle-audit
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alertmanager
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: grafana.com
+        - matchName: storage.googleapis.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ops-auth
+            app.kubernetes.io/name: authentik-relay
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: grafana-operator
+spec:
+  description: The Grafana operator talks to the API server and to Grafana's API; alloy-metrics scrapes it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana-operator
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP

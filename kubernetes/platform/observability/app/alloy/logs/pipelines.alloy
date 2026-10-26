@@ -1,0 +1,291 @@
+loki.process "pod" {
+	forward_to = [loki.write.logs.receiver, loki.write.homelab_logs.receiver]
+
+	stage.cri { }
+
+	stage.structured_metadata {
+		values = {
+			app    = "",
+			stream = "",
+		}
+	}
+
+	stage.static_labels {
+		values = {
+			source = "pod",
+		}
+	}
+
+	stage.label_drop {
+		values = ["app", "filename", "stream"]
+	}
+}
+
+loki.process "talos" {
+	forward_to = [loki.write.logs.receiver, loki.write.homelab_logs.receiver]
+
+	stage.json {
+		expressions = {
+			body = "body",
+		}
+		drop_malformed = true
+	}
+
+	stage.json {
+		source      = "body"
+		expressions = {
+			message       = "msg",
+			level         = "\"talos-level\"",
+			talos_service = "\"talos-service\" || 'kernel'",
+			talos_time    = "\"talos-time\"",
+		}
+		drop_malformed = true
+	}
+
+	stage.timestamp {
+		source            = "talos_time"
+		format            = "RFC3339Nano"
+		action_on_failure = "skip"
+	}
+
+	stage.structured_metadata {
+		values = {
+			level = "",
+		}
+	}
+
+	stage.labels {
+		values = {
+			talos_service = "",
+		}
+	}
+
+	stage.static_labels {
+		values = {
+			source = "talos",
+			node   = sys.env("NODE_NAME"),
+		}
+	}
+
+	stage.label_drop {
+		values = ["exporter"]
+	}
+
+	stage.output {
+		source = "message"
+	}
+}
+
+loki.process "audit" {
+	forward_to = [loki.write.audit.receiver, loki.write.homelab_audit.receiver]
+
+	stage.json {
+		expressions = {
+			user        = "user.username || ''",
+			verb        = "verb || ''",
+			resource    = "objectRef.resource || ''",
+			subresource = "objectRef.subresource || ''",
+			received    = "requestReceivedTimestamp",
+		}
+		drop_malformed = true
+	}
+
+	stage.template {
+		source   = "audit_decision"
+		template = "{{ if and (hasPrefix \"system:\" .user) (has .verb (list \"get\" \"list\" \"watch\")) (not (regexMatch \"^(secrets|serviceaccounts|.*roles|.*rolebindings|certificatesigningrequests)$\" .resource)) (not (has .subresource (list \"exec\" \"attach\" \"portforward\"))) }}routine-read{{ else if and (eq .subresource \"status\") (has .verb (list \"update\" \"patch\")) }}status-write{{ else }}kept{{ end }}"
+	}
+
+	stage.drop {
+		source = "audit_decision"
+		value  = "routine-read"
+	}
+
+	stage.drop {
+		source = "audit_decision"
+		value  = "status-write"
+	}
+
+	stage.timestamp {
+		source            = "received"
+		format            = "RFC3339Nano"
+		action_on_failure = "skip"
+	}
+
+	stage.static_labels {
+		values = {
+			job  = "kube-audit",
+			node = sys.env("NODE_NAME"),
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+}
+
+loki.process "hubble_egress" {
+	forward_to = [loki.write.logs.receiver, loki.write.homelab_logs.receiver]
+
+	stage.json {
+		expressions = {
+			flow = "flow",
+			time = "time",
+		}
+		drop_malformed = true
+	}
+
+	stage.json {
+		source      = "flow"
+		expressions = {
+			verdict          = "verdict || 'UNKNOWN'",
+			source_namespace = "source.namespace || ''",
+			source_workload  = "source.workloads[0].name || source.pod_name || 'host'",
+			destination_name = "join(',', destination_names || `[]`) || IP.destination || 'unknown'",
+			destination_port = "to_string(l4.TCP.destination_port || l4.UDP.destination_port || '')",
+			allowed_by       = "join(',', (egress_allowed_by || `[]`)[].join('/', [kind || '', namespace || '', name || '']))",
+			denied_by        = "join(',', (egress_denied_by || `[]`)[].join('/', [kind || '', namespace || '', name || '']))",
+		}
+	}
+
+	stage.template {
+		source   = "message"
+		template = "{{ .source_namespace }}/{{ .source_workload }} -> {{ .destination_name }}:{{ .destination_port }} {{ .verdict }}"
+	}
+
+	stage.timestamp {
+		source            = "time"
+		format            = "RFC3339Nano"
+		action_on_failure = "skip"
+	}
+
+	stage.structured_metadata {
+		values = {
+			source_namespace = "",
+			source_workload  = "",
+			destination_name = "",
+			destination_port = "",
+			allowed_by       = "",
+			denied_by        = "",
+			message          = "",
+		}
+	}
+
+	stage.static_labels {
+		values = {
+			source = "hubble-egress",
+			node   = sys.env("NODE_NAME"),
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+
+	stage.output {
+		source = "flow"
+	}
+}
+
+loki.process "tetragon" {
+	forward_to = [loki.write.logs.receiver, loki.write.homelab_logs.receiver]
+
+	stage.replace {
+		expression = "(,\"node_labels\":\\{[^{}]*\\}|\"node_labels\":\\{[^{}]*\\},?)"
+		replace    = ""
+	}
+
+	stage.json {
+		expressions = {
+			event      = "keys(@)[?@ == 'process_exec' || @ == 'process_kprobe' || @ == 'process_lsm' || @ == 'process_tracepoint' || @ == 'rate_limit_info'] | [0] || 'other'",
+			event_body = "process_exec || process_kprobe || process_lsm || process_tracepoint || `{}`",
+			node_name  = "node_name || ''",
+			time       = "time",
+		}
+		drop_malformed = true
+	}
+
+	stage.json {
+		source      = "event_body"
+		expressions = {
+			namespace          = "process.pod.namespace || ''",
+			pod                = "process.pod.name || ''",
+			container          = "process.pod.container.name || ''",
+			workload           = "process.pod.workload || ''",
+			workload_kind      = "process.pod.workload_kind || ''",
+			image              = "process.pod.container.image.name || ''",
+			isolation_class    = "process.pod.pod_labels.\"ploeg.webgrip.dev/isolation-class\" || ''",
+			binary             = "process.binary || ''",
+			arguments          = "process.arguments || ''",
+			uid                = "to_string(process.uid || `0`)",
+			in_init_tree       = "to_string(process.in_init_tree || `false`)",
+			parent_binary      = "parent.binary || ''",
+			privileges_changed = "join(',', process.binary_properties.privileges_changed || `[]`)",
+			policy             = "policy_name || ''",
+			function           = "function_name || ''",
+			action             = "action || ''",
+			path               = "(args || `[]`)[?file_arg || path_arg] | [0] | (file_arg.path || path_arg.path) || ''",
+			daddr              = "(args || `[]`)[?sock_arg] | [0].sock_arg.daddr || ''",
+			dport              = "to_string((args || `[]`)[?sock_arg] | [0].sock_arg.dport || '')",
+			string_args        = "join(' ', (args || `[]`)[?type(string_arg) == 'string'].string_arg)",
+		}
+	}
+
+	stage.template {
+		source   = "node"
+		template = "{{ if .node_name }}{{ .node_name }}{{ else }}{{ env \"NODE_NAME\" }}{{ end }}"
+	}
+
+	stage.template {
+		source   = "message"
+		template = "{{ .event }} {{ if .namespace }}{{ .namespace }}/{{ .pod }}{{ else }}host{{ end }} {{ .binary }}{{ if .policy }} {{ .policy }} {{ if .path }}{{ .path }}{{ else if .daddr }}{{ .daddr }}:{{ .dport }}{{ else }}{{ .string_args }}{{ end }}{{ end }}"
+	}
+
+	stage.timestamp {
+		source            = "time"
+		format            = "RFC3339Nano"
+		action_on_failure = "skip"
+	}
+
+	stage.structured_metadata {
+		values = {
+			event              = "",
+			namespace          = "",
+			pod                = "",
+			container          = "",
+			workload           = "",
+			workload_kind      = "",
+			image              = "",
+			isolation_class    = "",
+			binary             = "",
+			arguments          = "",
+			uid                = "",
+			in_init_tree       = "",
+			parent_binary      = "",
+			privileges_changed = "",
+			policy             = "",
+			function           = "",
+			action             = "",
+			path               = "",
+			daddr              = "",
+			dport              = "",
+			string_args        = "",
+			message            = "",
+		}
+	}
+
+	stage.labels {
+		values = {
+			node = "",
+		}
+	}
+
+	stage.static_labels {
+		values = {
+			source = "tetragon",
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+}

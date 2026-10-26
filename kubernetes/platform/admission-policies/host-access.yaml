@@ -19,6 +19,13 @@ spec:
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
         resources: ["jobs", "cronjobs"]
+  matchConditions:
+    - name: creates-or-changes-the-pod-template
+      expression: >-
+        request.operation != 'UPDATE' || object.kind == 'Pod'
+        || (object.kind == 'CronJob'
+          ? object.spec.jobTemplate != oldObject.spec.jobTemplate
+          : object.spec.template != oldObject.spec.template)
   variables:
     - name: spec
       expression: >-
@@ -49,9 +56,9 @@ spec:
           'observability/DaemonSet/node-exporter': [
             'hostNetwork', 'hostPID', 'hostPort:9100',
             'readOnlyHostPath:/', 'readOnlyHostPath:/proc', 'readOnlyHostPath:/sys'],
-          'observability/DaemonSet/vector': [
+          'observability/DaemonSet/alloy-logs': [
             'hostNetwork', 'hostPort:9598',
-            'readOnlyHostPath:/var/log', 'writableHostPath:/var/lib/vector']
+            'readOnlyHostPath:/var/log', 'writableHostPath:/var/lib/alloy']
         }
     - name: granted
       expression: variables.hostAccessGrants[?variables.workload].orValue([])

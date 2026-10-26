@@ -8,9 +8,9 @@ Tetragon watches every node's kernel and records process starts, credential read
 | --- | --- | --- |
 | Tetragon agent | `kube-system`, DaemonSet `tetragon`, every node | eBPF in the host kernel. 384 MiB reserved (request equals limit), 50m CPU request, 1 CPU limit, no PriorityClass. Writes JSON lines to `/var/log/tetragon/tetragon.log` on the node, at most 3000 events per minute; past that it writes one `rate_limit_info` event and drops the rest. Arguments matching the redaction filters (`--password=…`, `*_TOKEN=…`, `Authorization:` headers, `sk-…` keys) are replaced by `*****` before they are written |
 | TracingPolicies | cluster-scoped, `kubernetes/platform/runtime-security/policies/` | Six policies, below. Flux Kustomization `tetragon-policies`, after the `tetragon` HelmRelease is Ready |
-| Vector | `observability`, DaemonSet `vector` | The `tetragon_events` source tails the file, `tetragon_records` flattens each event, and the `homelab` sink sends it to the gateway with the pod logs |
+| alloy-logs | `observability`, DaemonSet `alloy-logs` | `loki.source.file "tetragon"` tails the file, `loki.process "tetragon"` (`alloy/logs/pipelines.alloy`) drops `node_labels`, keeps the event as the record's fields and adds the flat fields the rules read (`event`, `namespace`, `workload`, `binary`, `policy`, `path`, `daddr`, `dport`, ...), and writes it to the cluster's `vlsingle-logs` |
 | Canary | `runtime-security-canary`, CronJob every 30 minutes on the hub node | Proves the path end to end, below |
-| vmalert-unfold-runtime | homelab, `observability` | Evaluates the LogsQL rules in the homelab VMRule `unfold-runtime` against `vlsingle-victorialogs` every minute and sends to the homelab Alertmanager. `vmalert-unfold` evaluates the two PromQL health rules in `unfold-cluster` |
+| vmalert-logs | `observability`, Deployment | Evaluates the LogsQL rules in `kubernetes/platform/observability/app/alerting/rules/runtime.yaml` against `vlsingle-logs` every minute and sends to the cluster's own Alertmanager ([observability](../observability.md#alerts)) |
 
 ## The policies
 
@@ -101,7 +101,7 @@ All detection alerts start at `severity: warning` with `stage: observe` and `det
 1. `kubectl -n runtime-security-canary get jobs` and the last Job's log: did it run, did it print its four lines?
 2. `kubectl -n kube-system get ds tetragon -o wide`: a ready pod on the node the Job ran on? `kubectl -n kube-system logs ds/tetragon | grep -i -E "error|fail"`.
 3. `kubectl get tracingpolicies`: all six present? A policy that failed to load is in the agent's log.
-4. `{cluster="unfold", source="tetragon"} | stats by (node) count()` in VictoriaLogs: does any node send? If no node sends, Vector or the gateway is the problem ([observability](../observability.md)); `UnfoldLogShipperBacklog` or `UnfoldMetricsAbsent` fire too.
+4. `{cluster="unfold", source="tetragon"} | stats by (node) count()` in VictoriaLogs: does any node send? If no node sends, alloy-logs or vlsingle-logs is the problem ([observability](../observability.md)); `UnfoldLogShipperDropping` and `UnfoldLogsNotArriving` or `UnfoldMetricsAbsent` fire too.
 
 ### Canary overreach
 
@@ -162,7 +162,8 @@ The admission policies went Audit, Warn, then Deny, one policy per pull request,
 
 | Test | Runs | Proves |
 | --- | --- | --- |
-| `scripts/test-runtime-security.sh --mutation-test` | `runtime-security-check` on every PR and push touching these files | the chart digest; every policy through the CRD schema on a throwaway API server at the cluster's version; `policy-mode` on every policy; Vector's unit tests of the Tetragon transform (`tests/runtime-security/vector-tetragon.test.yaml`) and the sink wiring; and that each check fails when what it checks is broken |
+| `scripts/test-runtime-security.sh --mutation-test` | `runtime-security-check` on every PR and push touching these files | the chart digest; every policy through the CRD schema on a throwaway API server at the cluster's version; `policy-mode` on every policy; and that each check fails when what it checks is broken |
+| `scripts/test-observability-logs.sh --mutation-test` | `observability-check` | the Tetragon records the real Alloy pipeline writes to a real VictoriaLogs, field by field, and every runtime rule firing on its fixture with its labels; each rule and pipeline mutation must break a check |
 | homelab `scripts/test-vlogs-rules.sh --mutation-test` | homelab `e2e` | each alert fires on its case and stays quiet on its counter-case, in a pinned VictoriaLogs with a real vmalert; each rule neutralised or edited must change the result |
 | The canary CronJob | the cluster, every 30 minutes, declared in git | the whole path from kernel to alert, both ways |
 
@@ -170,4 +171,4 @@ Rendered manifests were also sent as server-side dry runs to the live API server
 
 ## Rollback
 
-Revert the pull request. Flux prunes the `tetragon`, `tetragon-policies` and `runtime-security-canary` Kustomizations; Helm removes the DaemonSet and its CRDs, and the BPF programs detach when the agent exits. Vector keeps tailing a file that no longer grows.
+Revert the pull request. Flux prunes the `tetragon`, `tetragon-policies` and `runtime-security-canary` Kustomizations; Helm removes the DaemonSet and its CRDs, and the BPF programs detach when the agent exits. alloy-logs keeps tailing a file that no longer grows.

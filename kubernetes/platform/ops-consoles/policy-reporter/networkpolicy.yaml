@@ -1,0 +1,60 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: policy-reporter-apiserver
+spec:
+  description: Policy Reporter, its UI and the Trivy adapter read and write reports through the Kubernetes API and nothing outside the cluster.
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: policy-reporter-core
+spec:
+  description: The core serves its REST API to the UI only.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: policy-reporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: policy-reporter-ui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: policy-reporter-ui
+spec:
+  description: The UI is reached only through its oauth2-proxy front door and reads the core's REST API.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: policy-reporter-ui
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ops-auth
+            app.kubernetes.io/name: oauth2-proxy-policy-reporter
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: policy-reporter
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

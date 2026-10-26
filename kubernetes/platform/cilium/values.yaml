@@ -31,12 +31,62 @@ securityContext:
       - NET_ADMIN
       - SYS_ADMIN
       - SYS_RESOURCE
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+envoy:
+  rollOutPods: true
+  securityContext:
+    capabilities:
+      keepCapNetBindService: true
+      envoy:
+        - NET_ADMIN
+        - SYS_ADMIN
+        - NET_BIND_SERVICE
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 operator:
   replicas: 1
+  rollOutPods: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+rollOutCiliumPods: true
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+gatewayAPI:
+  enabled: true
+  gatewayClass:
+    create: "true"
+  hostNetwork:
+    enabled: true
+    nodes:
+      matchLabels:
+        node-role.kubernetes.io/control-plane: ""
 encryption:
   enabled: true
   type: wireguard
   nodeEncryption: false
+  strictMode:
+    egress:
+      enabled: true
+      cidr: 10.65.0.0/16
+      allowRemoteNodeIdentities: true
+    ingress:
+      enabled: true
 prometheus:
   enabled: true
 hubble:
@@ -56,7 +106,10 @@ hubble:
       enabled: true
       filePath: /var/log/hubble/egress-flows.log
       allowList:
-        - '{"traffic_direction":["EGRESS"],"reply":[false]}'
+        - '{"event_type":[{"type":5}],"traffic_direction":["EGRESS"]}'
+        - '{"event_type":[{"type":1}]}'
+      denyList:
+        - '{"source_label":["reserved:host"]}'
       fieldMask:
         - time
         - node_name
@@ -78,9 +131,70 @@ hubble:
         - egress_allowed_by
         - egress_denied_by
       fileMaxSizeMb: 10
-      fileMaxBackups: 2
+      fileMaxBackups: 5
+  ui:
+    enabled: true
+    replicas: 1
+    rollOutPods: true
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
+        effect: NoSchedule
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+          - weight: 50
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - unfold
+    backend:
+      resources:
+        requests:
+          cpu: 5m
+          memory: 24Mi
+        limits:
+          memory: 96Mi
+          ephemeral-storage: 32Mi
+    frontend:
+      resources:
+        requests:
+          cpu: 5m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+          ephemeral-storage: 32Mi
+      server:
+        ipv6:
+          enabled: false
+    tmpVolume:
+      emptyDir:
+        sizeLimit: 16Mi
   relay:
     enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists

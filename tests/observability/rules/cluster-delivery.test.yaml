@@ -1,0 +1,162 @@
+rule_files:
+  - cluster.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="apiserver"}'
+        values: "1x30 _x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels: {severity: none, cluster: unfold, team: platform}
+      - eval_time: 60m
+        alertname: UnfoldMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, job: apiserver}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="apiserver"}'
+        values: "1x90"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: UnfoldMetricsAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="kubelet"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldEtcdMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="kubelet"}'
+        values: "1x60"
+      - series: 'etcd_server_has_leader{cluster="unfold",node="unfold-cp-1"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldEtcdMetricsAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'loki_write_dropped_entries_total{cluster="unfold",node="unfold-app-1",component_id="loki.write.logs"}'
+        values: "0x10 5x20"
+      - series: 'loki_write_dropped_entries_total{cluster="unfold",node="unfold-app-1",component_id="loki.write.homelab_logs"}'
+        values: "0x10 500x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UnfoldLogShipperDropping
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, node: unfold-app-1, component_id: loki.write.logs}
+
+  - interval: 1m
+    input_series:
+      - series: 'loki_write_dropped_entries_total{cluster="unfold",node="unfold-app-1",component_id="loki.write.logs"}'
+        values: "0x30"
+      - series: 'loki_write_dropped_entries_total{cluster="unfold",node="unfold-app-1",component_id="loki.write.homelab_logs"}'
+        values: "0x10 500x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UnfoldLogShipperDropping
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="vlsingle-logs"}'
+        values: "1x60"
+      - series: 'vl_rows_ingested_total{cluster="unfold",job="vlsingle-logs",type="loki"}'
+        values: "100x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldLogsNotArriving
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="vlsingle-logs"}'
+        values: "1x60"
+      - series: 'vl_rows_ingested_total{cluster="unfold",job="vlsingle-logs",type="loki"}'
+        values: "100+50x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldLogsNotArriving
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_remote_storage_samples_pending{cluster="unfold",job="alloy-metrics",url="http://vmsingle.observability.svc.cluster.local:8428/api/v1/write"}'
+        values: "900000x30"
+      - series: 'prometheus_remote_storage_samples_pending{cluster="unfold",job="alloy-metrics",url="http://unfold-gateway.webgrip.dev:8427/api/v1/write"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldRemoteWriteBacklog
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_remote_storage_samples_pending{cluster="unfold",job="alloy-metrics",url="http://vmsingle.observability.svc.cluster.local:8428/api/v1/write"}'
+        values: "10x30"
+      - series: 'prometheus_remote_storage_samples_pending{cluster="unfold",job="alloy-metrics",url="http://unfold-gateway.webgrip.dev:8427/api/v1/write"}'
+        values: "9000000x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldRemoteWriteBacklog
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_used_bytes{cluster="unfold",namespace="observability",persistentvolumeclaim="storage-vmsingle-0"}'
+        values: "90x60"
+      - series: 'kubelet_volume_stats_capacity_bytes{cluster="unfold",namespace="observability",persistentvolumeclaim="storage-vmsingle-0"}'
+        values: "100x60"
+      - series: 'kubelet_volume_stats_used_bytes{cluster="unfold",namespace="zot",persistentvolumeclaim="zot-data"}'
+        values: "99x60"
+      - series: 'kubelet_volume_stats_capacity_bytes{cluster="unfold",namespace="zot",persistentvolumeclaim="zot-data"}'
+        values: "100x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldObservabilityVolumeFilling
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, persistentvolumeclaim: storage-vmsingle-0}
+
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_used_bytes{cluster="unfold",namespace="observability",persistentvolumeclaim="storage-vmsingle-0"}'
+        values: "50x60"
+      - series: 'kubelet_volume_stats_capacity_bytes{cluster="unfold",namespace="observability",persistentvolumeclaim="storage-vmsingle-0"}'
+        values: "100x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldObservabilityVolumeFilling
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{cluster="unfold",integration="webhook",receiver="critical"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldAlertNotificationsFailing
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, integration: webhook, receiver: critical}
+
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{cluster="unfold",integration="webhook",receiver="critical"}'
+        values: "3x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldAlertNotificationsFailing
+        exp_alerts: []

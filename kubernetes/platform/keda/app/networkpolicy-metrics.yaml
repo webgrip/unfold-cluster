@@ -1,0 +1,19 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keda-metrics
+spec:
+  description: The KEDA operator's metrics answer alloy-metrics in observability on 8080, and nothing else reaches that port.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: keda-operator
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

@@ -1,0 +1,28 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: policy-reporter
+spec:
+  interval: 12h
+  url: oci://ghcr.io/kyverno/charts/policy-reporter
+  ref:
+    tag: 3.11.2
+    digest: sha256:8ae9316555bc2f4b111bbec67c428549c1bf254ed806575784738e5a3022f2b7
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: trivy-operator-polr-adapter
+spec:
+  interval: 12h
+  url: oci://ghcr.io/fjogeleit/charts/trivy-operator-polr-adapter
+  ref:
+    tag: 0.11.5
+    digest: sha256:3b2e6d361f3b07a7faf7390622a7a03837b1aa91737f1b4b6aad62a59f0f9d9e
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy

@@ -44,6 +44,7 @@ spec:
                         emptyDir:
                           sizeLimit: 3Gi
   values:
+    priorityClassName: platform-background
     fullnameOverride: trivy-operator
     targetNamespaces: ""
     excludeNamespaces: kube-node-lease,kube-public
@@ -107,9 +108,30 @@ spec:
       - name: cache-policies
         emptyDir:
           sizeLimit: 256Mi
-    nodeSelector:
-      node.webgrip.io/pool: unfold
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+                    - unfold
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+
     tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
+        effect: NoSchedule
       - key: node.webgrip.io/pool
         operator: Equal
         value: unfold
@@ -118,9 +140,30 @@ spec:
       scanJobsInSameNamespace: false
       scanJobCompressLogs: true
       scanJobAutomountServiceAccountToken: false
-      scanJobNodeSelector:
-        node.webgrip.io/pool: unfold
+      scanJobAffinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+
       scanJobTolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
         - key: node.webgrip.io/pool
           operator: Equal
           value: unfold
@@ -141,6 +184,7 @@ spec:
       reportRecordFailedChecksOnly: true
       reportResourceLabels: app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component
     trivy:
+      priorityClassName: platform-background
       image:
         registry: ghcr.io
         repository: aquasecurity/trivy

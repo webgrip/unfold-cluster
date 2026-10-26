@@ -22,6 +22,8 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 
 The policies match Pods and the pod templates in Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs, so Flux's apply sees the warning before a controller creates the Pod.
 
+`host-access`, `immutable-image-references`, `pod-security-restricted` and `resource-limits` judge an update of a workload only when its pod template changes (the `creates-or-changes-the-pod-template` match condition). A rollout ends with the deployment controller setting the old ReplicaSet's `spec.replicas` to 0, an update of a ReplicaSet made before its Deployment complied. On 2026-10-26 `resource-limits` refused exactly that, so the old pods of the Flux operator and controllers, External Secrets and kube-state-metrics kept running beside the new ones and their HelmReleases failed on `ProgressDeadlineExceeded`. Pods are judged on every create and update, so scaling an old ReplicaSet up still cannot start a pod the policies refuse. The fixtures `*-replicaset-that-predates-it.yaml` prove both directions.
+
 ### Isolation classes and RuntimeClasses
 
 `sandboxed-workloads` reads the class from the pod's `ploeg.webgrip.dev/isolation-class` label (Ploeg ADR-0106) and from the same label on its namespace, and the stricter of the two wins. A pod cannot label itself down from its namespace's class.
@@ -50,6 +52,7 @@ Every exception is written into the policy that grants it, names one workload or
 | `resource-limits` | pods labelled `cnpg.io/cluster` (CloudNativePG instances and jobs), volume `plugins` only, disk-backed | an `emptyDir` without `sizeLimit` | the barman-cloud plugin injects it to hold its unix socket and gives it no size; the containers' ephemeral-storage limits still bound it. A memory-backed `plugins` volume, or the name on any other pod, is refused |
 | `encrypted-volumes` | PVC `zot/zot-data` | StorageClass `hcloud-volumes` (unencrypted) | it was bound before `hcloud-luks` existed and a StorageClass cannot be changed on a bound claim; it holds only mirrored public images. Moving it to `hcloud-luks` removes the grant |
 | `service-exposure` | Service `zot/zot`, nodePort 30500 only | type `NodePort` | the nodes' containerd pulls through Zot on `127.0.0.1:30500` ([talos-registry-mirrors](talos-registry-mirrors.md)) |
+| `service-exposure` | Service `ops-gateway/cilium-gateway-ops`, only while the Gateway `ops` owns it | type `NodePort`, any port | Cilium creates a host-network Gateway's Service as a NodePort with a port it picks; the consoles are served by Envoy on the host network, not through that port ([ops-consoles](ops-consoles.md)) |
 
 Adding a grant means adding it to the policy's grant map, adding an admitted fixture for it and a refused fixture for the nearest thing it must not allow, and adding a row here.
 

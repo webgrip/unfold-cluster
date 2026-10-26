@@ -22,6 +22,7 @@ spec:
       retries: 3
   values:
     controller:
+      priorityClassName: system-cluster-critical
       image:
         hcloudCSIDriver:
           # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-csi-driver
@@ -38,6 +39,37 @@ spec:
         livenessProbe:
           # renovate: datasource=docker depName=registry.k8s.io/sig-storage/livenessprobe
           tag: v2.20.0@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8
+      resources:
+        csiAttacher:
+          requests:
+            cpu: 4m
+            memory: 16Mi
+          limits:
+            memory: 48Mi
+        csiResizer:
+          requests:
+            cpu: 4m
+            memory: 24Mi
+          limits:
+            memory: 64Mi
+        csiProvisioner:
+          requests:
+            cpu: 4m
+            memory: 24Mi
+          limits:
+            memory: 64Mi
+        livenessProbe:
+          requests:
+            cpu: 4m
+            memory: 16Mi
+          limits:
+            memory: 32Mi
+        hcloudCSIDriver:
+          requests:
+            cpu: 4m
+            memory: 16Mi
+          limits:
+            memory: 48Mi
       nodeSelector:
         node-role.kubernetes.io/control-plane: ""
       tolerations:
@@ -45,6 +77,7 @@ spec:
           operator: Exists
           effect: NoSchedule
     node:
+      priorityClassName: system-node-critical
       image:
         hcloudCSIDriver:
           # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-csi-driver
@@ -55,6 +88,25 @@ spec:
         livenessProbe:
           # renovate: datasource=docker depName=registry.k8s.io/sig-storage/livenessprobe
           tag: v2.20.0@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8
+      resources:
+        csiNodeDriverRegistrar:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            memory: 32Mi
+        livenessProbe:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            memory: 48Mi
+        hcloudCSIDriver:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            memory: 48Mi
     storageClasses:
       - name: hcloud-volumes
         defaultStorageClass: false

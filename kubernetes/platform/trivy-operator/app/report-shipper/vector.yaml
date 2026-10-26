@@ -71,11 +71,11 @@ transforms:
       }
       .message = kind + " " + namespace + " " + workload + " critical=" + to_string(critical_count) + " high=" + to_string(high_count) + " critical_fixable=" + to_string(length(critical_fixable))
 sinks:
-  homelab:
+  victorialogs:
     type: http
     inputs:
       - report_records
-    uri: http://unfold-gateway.webgrip.dev:8427/insert/jsonline
+    uri: http://vlsingle-logs.observability.svc.cluster.local:9428/insert/jsonline
     method: post
     compression: gzip
     encoding:
@@ -89,6 +89,10 @@ sinks:
       timeout_secs: 60
       headers:
         Content-Type: application/x-ndjson
+        VL-Extra-Fields: cluster=unfold
+        VL-Stream-Fields: cluster,source,namespace
+        VL-Msg-Field: message
+        VL-Time-Field: timestamp
     buffer:
       type: disk
       max_size: 268435488

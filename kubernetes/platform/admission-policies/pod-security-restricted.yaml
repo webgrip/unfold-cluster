@@ -19,6 +19,13 @@ spec:
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
         resources: ["jobs", "cronjobs"]
+  matchConditions:
+    - name: creates-or-changes-the-pod-template
+      expression: >-
+        request.operation != 'UPDATE' || object.kind == 'Pod'
+        || (object.kind == 'CronJob'
+          ? object.spec.jobTemplate != oldObject.spec.jobTemplate
+          : object.spec.template != oldObject.spec.template)
   variables:
     - name: spec
       expression: >-
@@ -57,7 +64,7 @@ spec:
       expression: >-
         {
           'observability/DaemonSet/node-exporter': ['hostPathVolumes'],
-          'observability/DaemonSet/vector': ['hostPathVolumes', 'runAsRoot']
+          'observability/DaemonSet/alloy-logs': ['hostPathVolumes', 'runAsRoot']
         }
     - name: granted
       expression: variables.workloadGrants[?variables.workload].orValue([])

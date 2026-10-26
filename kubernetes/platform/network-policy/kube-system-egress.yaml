@@ -242,3 +242,63 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hubble-ui-egress
+  namespace: kube-system
+spec:
+  description: 'Hubble UI''s backend reads flows from Hubble Relay and namespaces through the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: hubble-relay
+      toPorts:
+        - ports:
+            - port: "4245"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-server-egress
+  namespace: kube-system
+spec:
+  description: 'metrics-server reads each kubelet''s resource metrics on 10250 and serves them to the API server as metrics.k8s.io. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP

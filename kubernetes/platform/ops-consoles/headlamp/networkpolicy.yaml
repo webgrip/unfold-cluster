@@ -1,0 +1,32 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: headlamp
+spec:
+  description: Headlamp takes requests from the ops Gateway's Envoy, calls the Kubernetes API with the signed-in person's own ID token, and reaches Authentik only through authentik-relay. Its service account has no role, so without a person's token it reads nothing.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: headlamp
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "4466"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ops-auth
+            app.kubernetes.io/name: authentik-relay
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP

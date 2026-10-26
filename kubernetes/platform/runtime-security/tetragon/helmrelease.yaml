@@ -68,7 +68,8 @@ spec:
       processAncestors:
         enabled: ""
       prometheus:
-        enabled: false
+        enabled: true
+        port: 2112
       gops:
         enabled: false
       cri:

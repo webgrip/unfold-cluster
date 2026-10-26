@@ -3,11 +3,11 @@ image:
   tag: v0.61.0@sha256:71041d9fff7f7b05f1a8123ebe73c73b7b156f4aacfe1e8e19b5aa953a98892c
 resources:
   requests:
-    cpu: 100m
-    memory: 64Mi
+    cpu: 50m
+    memory: 128Mi
   limits:
-    cpu: 2000m
-    memory: 1Gi
+    cpu: null
+    memory: 512Mi
     ephemeral-storage: 1Gi
 tolerations:
   - key: node-role.kubernetes.io/control-plane
@@ -15,3 +15,4 @@ tolerations:
     effect: NoSchedule
 nodeSelector:
   node-role.kubernetes.io/control-plane: ""
+priorityClassName: system-cluster-critical

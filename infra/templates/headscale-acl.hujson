@@ -37,13 +37,23 @@
     },
     {
       "action": "accept",
-      "src": ["tag:cp"],
+      "src": ${jsonencode(ci_job_count_sources)},
       "dst": ["tag:homelab-gateway:9150"]
     },
     {
       "action": "accept",
       "src": ["tag:headscale"],
       "dst": ["tag:homelab-gateway:443"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:hub"],
+      "dst": ["tag:homelab-gateway:443"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:homelab-gateway"],
+      "dst": ["${ops_gateway}/32:443"]
     }
   ],
   "autoApprovers": {

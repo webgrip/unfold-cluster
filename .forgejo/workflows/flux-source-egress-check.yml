@@ -1,0 +1,28 @@
+---
+name: flux-source-egress-check
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/**
+      - scripts/check-flux-source-egress.sh
+      - .forgejo/workflows/flux-source-egress-check.yml
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/**
+      - scripts/check-flux-source-egress.sh
+      - .forgejo/workflows/flux-source-egress-check.yml
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Every Flux source host is named by source-controller's egress policy, and the check catches a missing one
+        run: ./scripts/check-flux-source-egress.sh --mutation-test

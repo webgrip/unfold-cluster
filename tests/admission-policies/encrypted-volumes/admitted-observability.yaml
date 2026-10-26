@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-vlsingle-audit-0
+  namespace: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: hcloud-luks
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-vlsingle-logs-0
+  namespace: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: hcloud-luks
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-vmsingle-0
+  namespace: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: hcloud-luks

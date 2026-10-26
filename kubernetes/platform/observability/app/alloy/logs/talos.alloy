@@ -1,0 +1,19 @@
+otelcol.receiver.tcplog "talos_services" {
+	listen_address = "127.0.0.1:6050"
+
+	output {
+		logs = [otelcol.exporter.loki.talos.input]
+	}
+}
+
+otelcol.receiver.tcplog "talos_kernel" {
+	listen_address = "127.0.0.1:6051"
+
+	output {
+		logs = [otelcol.exporter.loki.talos.input]
+	}
+}
+
+otelcol.exporter.loki "talos" {
+	forward_to = [loki.process.talos.receiver]
+}

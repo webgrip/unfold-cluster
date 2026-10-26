@@ -72,7 +72,7 @@ variables {
   admin_cidrs          = ["203.0.113.7/32"]
 }
 
-run "only_headscale_reaches_the_identity_provider_behind_the_gateways_443" {
+run "only_headscale_and_the_hub_reach_the_identity_provider_behind_the_gateways_443" {
   command = plan
 
   assert {
@@ -93,8 +93,8 @@ run "only_headscale_reaches_the_identity_provider_behind_the_gateways_443" {
           ])
         )
       ])
-    ] == [["tag:headscale"]]
-    error_message = "exactly one rule may reach the homelab gateway's port 443, which leads to the homelab's internal gateway, and only tag:headscale may be its source; no wildcard, port range, tailnet prefix or admin rule may cover it"
+    ] == [["tag:headscale"], ["tag:hub"]]
+    error_message = "exactly two rules may reach the homelab gateway's port 443, which leads to the homelab's internal gateway: tag:headscale for the tailnet's browser login and tag:hub, where authentik-relay carries the consoles' OIDC exchanges (ADR 0006); no wildcard, port range, tailnet prefix, admin or other node rule may cover it"
   }
 
   assert {

@@ -1,0 +1,164 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: headlamp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headlamp
+  labels:
+    app.kubernetes.io/name: headlamp
+spec:
+  selector:
+    app.kubernetes.io/name: headlamp
+  ports:
+    - name: http
+      port: 4466
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headlamp
+  labels:
+    app.kubernetes.io/name: headlamp
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: headlamp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: headlamp
+    spec:
+      serviceAccountName: headlamp
+      enableServiceLinks: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - unfold
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: headlamp
+          # renovate: datasource=docker depName=ghcr.io/headlamp-k8s/headlamp
+          image: ghcr.io/headlamp-k8s/headlamp:v0.46.0@sha256:8a0ef97527544baa2b35825940ddf4db6e2d09c30cd5aa31fd269ff604cc8b75
+          args:
+            - -in-cluster
+            - -in-cluster-context-name=unfold-main
+            - -port=4466
+            - -watch-plugins-changes=false
+            - -oidc-idp-issuer-url=https://authentik.webgrip.dev/application/o/unfold-kubernetes/
+            - -oidc-client-id=unfold-kubernetes
+            - -oidc-use-pkce
+            - -oidc-scopes=profile,offline_access,unfold_kubernetes
+            - -oidc-callback-url=https://headlamp.ops.unfoldhq.dev/oidc-callback
+            - -me-groups-path=unfold_groups
+          env:
+            - name: HOME
+              value: /home/headlamp
+            - name: HTTPS_PROXY
+              value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+            - name: NO_PROXY
+              value: .cluster.local,.svc,10.65.0.0/16,10.66.0.0/16
+          ports:
+            - name: http
+              containerPort: 4466
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 192Mi
+              ephemeral-storage: 64Mi
+          volumeMounts:
+            - name: home
+              mountPath: /home/headlamp
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: home
+          emptyDir:
+            sizeLimit: 32Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: headlamp
+spec:
+  parentRefs:
+    - name: ops
+      namespace: ops-gateway
+      sectionName: https
+  hostnames:
+    - headlamp.ops.unfoldhq.dev
+  rules:
+    - backendRefs:
+        - name: headlamp
+          port: 4466
+      timeouts:
+        request: 0s
