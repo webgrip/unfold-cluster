@@ -16,6 +16,7 @@ on:
       - kubernetes/platform/hetzner-charts/**
       - kubernetes/platform/flux-operator/**
       - kubernetes/platform/flux-instance/**
+      - kubernetes/platform/coredns/**
       - kubernetes/platform/etcd-backup/namespace.yaml
       - scripts/write-cluster-secrets.sh
       - scripts/encrypt-node.sh
