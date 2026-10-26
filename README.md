@@ -125,6 +125,8 @@ The Headscale server installs Ubuntu security updates at 04:00 UTC and reboots a
 
 ## Machines
 
+What each node pool carries, how big every component is, and the node bill per growth stage are in [docs/architecture/capacity-and-scale.md](docs/architecture/capacity-and-scale.md) and [ADR 0013](docs/adr/0013-control-planes-stay-small-and-a-system-pool-carries-the-platform.md).
+
 | Node | Hetzner type | Size | Private address | Role |
 | --- | --- | --- | --- | --- |
 | `unfold-cp-1` to `-3` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | `10.64.0.11` to `.13` | control planes, one placement group |
