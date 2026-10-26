@@ -28,12 +28,18 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 | source-controller | `github.com` | 443 | the GitRepository `flux-system` (this repository) |
 | source-controller | `charts.hetzner.cloud` | 443 | the `hetzner` HelmRepository index and its chart archives, served from the same host |
 | source-controller | `helm.cilium.io` | 443 | the `cilium` HelmRepository index and the Tetragon chart archive ([runtime security](runtime-security.md)) |
-| source-controller | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | OCI charts on ghcr.io (Zot, External Secrets, Flux operator charts); blob downloads redirect to the second host |
+| source-controller | `kedacore.github.io` | 443 | the `kedacore` HelmRepository index and the KEDA chart archive, served from the same host |
+| source-controller | `prometheus-community.github.io`, `kubernetes.github.io`, `aquasecurity.github.io` | 443 | the `prometheus-community` (kube-state-metrics, node-exporter), `kubernetes-autoscaler` and `aqua-security` (Trivy) HelmRepository indexes |
+| source-controller | `release-assets.githubusercontent.com`, `objects.githubusercontent.com` | 443 | those three indexes point their chart archives at GitHub release downloads on `github.com`, which redirect to the first host today and to the second before GitHub moved them |
+| source-controller | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | OCI charts on ghcr.io (Zot, External Secrets, Kyverno, CloudNativePG, Flux operator charts); blob downloads redirect to the second host |
 | source-controller | `quay.io`, `*.quay.io` | 443 | the Cilium chart; blob downloads redirect to `cdn*.quay.io` |
 | flux-operator | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | the `flux-operator-manifests` distribution artifact |
+| flux-operator | notification-controller | 9090 | its Kubernetes events |
 | kustomize-controller, helm-controller | source-controller | 9090 | artifacts, through the `source-controller` Service |
 
-Forgejo is not on the list: Flux reads this repository from GitHub. A new Flux source on another host adds that host here in the same pull request.
+Forgejo is not on the list: Flux reads this repository from GitHub. A new Flux source on another host adds that host here in the same pull request; `scripts/check-flux-source-egress.sh` (workflow `flux-source-egress-check`, on pull requests and on pushes to `main`) fails when a GitRepository, HelmRepository, OCIRepository or Bucket names a host the policy does not. Redirect targets such as CDNs cannot be read from the tree, so they stay a review item.
+
+Ingress to flux-system is owned by [flux-system-ingress.yaml](../../kubernetes/platform/network-policy/flux-system-ingress.yaml): any flux-system pod from the others, 8080 (metrics) from any pod in the cluster, and 9292 (webhook receivers) on notification-controller from any pod in the cluster. That is exactly what the Flux distribution's `allow-egress` (its ingress half), `allow-scraping` and `allow-webhooks` NetworkPolicies admit, so adding it changes nothing while those exist: network policies only add, and the namespace is already isolated for ingress by them. The flux-operator chart's own `flux-operator-web` policy keeps 9080.
 
 ### kube-system
 
@@ -98,9 +104,62 @@ The export did not exist yet and the homelab gateway was offline, so the only ev
 
 No namespace was flipped on this evidence.
 
+### What the evidence said on 2026-10-26
+
+Each agent's export file, read through `kubectl exec ... cat /var/log/hubble/egress-flows*.log`, covered 35 to 55 minutes per node (00:27 UTC back to 23:33). Summarised by source workload, destination name, port and `allowed_by`:
+
+- **flux-system:** three source-controller connections were allowed by `allow-egress` and nothing else: `kubernetes.github.io`, `aquasecurity.github.io` and `release-assets.githubusercontent.com`, as was flux-operator's event flow to notification-controller. Reading every HelmRepository index in the tree showed two more hosts the window did not catch (`kedacore.github.io`, `prometheus-community.github.io`) and the release-asset redirects of three of them. All are now named above. Every other new flux-system connection named its own policy.
+- **kube-system:** every new connection in the window named its own policy (CoreDNS and the cloud controller to the host resolver, the cloud controller to `api.hetzner.cloud`). The window holds no CSI provisioning, no Hubble certificate job and no daily run.
+- **Drops:** only Trivy scan jobs to Cloudflare addresses on 443 (`trivy-system`, already enforced; for the Trivy policy owner). No drops from `external-secrets-cert-controller` or `kube-state-metrics`, and their Hubble counters show none since the agents restarted at 20:40.
+
+#### The two drops found on 2026-10-25
+
+`external-secrets-cert-controller` (19) and `kube-state-metrics` (20) were refused egress to `remote-node`. Both policies allow only the `kube-apiserver` entity, and neither pod has any other remote-node destination. Cilium gives a control plane's address the `kube-apiserver` identity only while that API server is listed in the `default/kubernetes` EndpointSlice. All three API servers restarted at 19:23 (their pods' age, and the controller manager's lost lease at the same minute), each leaving the EndpointSlice for a moment. During that moment its address is plain `remote-node`, and Cilium enforces policy on established connections too, so the last packets of the pods' open watch connections to that API server were refused. client-go then reconnects through the Service to a ready API server. The counts (about 20 packets each) fit one closed connection per restart.
+
+These drops are correct and harmless, so no rule widens: allowing `remote-node` on 6443 would admit every node, including the CI nodes, which run no API server. If the drops recur outside an API server restart, the export now records the address and port; a control-plane address on 6443 confirms this reading.
+
+## Egress default deny, namespace by namespace
+
+Every namespace except kube-system and flux-system is already egress default deny through the `default-deny` CiliumClusterwideNetworkPolicy. Those two wait:
+
+| Namespace | What it needs before `enableDefaultDeny.egress: true` | State |
+| --- | --- | --- |
+| flux-system | Flux's own NetworkPolicies off (`cluster.networkPolicy: false`, which removes `allow-egress`, `allow-scraping`, `allow-webhooks`), the ingress policy above in place, and a week of export in which every flux-system connection names its own policy, including a Renovate chart bump for each HelmRepository | waits: policies complete, evidence under an hour |
+| kube-system | a week of export covering a volume being created and attached (CSI controller), the Hubble certificate job, a node joining (the cloud controller) and a Cilium upgrade; a policy for every new non-host pod first (a Hubble UI from the showcase stream needs one) | waits: evidence under an hour |
+
+### Enforcing flux-system, in three steps
+
+1. **Named policies alongside `allow-egress`.** The egress and ingress policies above, staged. Nothing changes on the wire.
+2. **Evidence.** With the export keeping only policy verdicts and drops (since the Cilium values of 2026-10-26), each node's files cover days. Over a week, long enough for every HelmRepository and OCIRepository interval (12h for the longest) and a Renovate chart bump, this query must return no row whose `allowed_by` is `allow-egress` or empty:
+
+   ```logsql
+   cluster:=unfold source:=hubble-egress source.namespace:=flux-system
+     | stats by (source_workload, destination_name, destination_port, allowed_by) count()
+   ```
+
+   Until Vector ships the export, read the files on each agent: `kubectl -n kube-system exec <cilium pod> -c cilium-agent -- cat /var/log/hubble/egress-flows*.log`, and keep only records with `source.namespace` `flux-system`.
+3. **Remove `allow-egress`.** One pull request sets `cluster.networkPolicy: false` on the FluxInstance and `enableDefaultDeny.egress: true` on the five flux-system policies. flux-operator garbage-collects its three NetworkPolicies (they carry no `fluxcd.controlplane.io/prune: disabled` annotation; flux-operator v0.61.0 `internal/controller/fluxinstance_controller.go`). The FluxInstance is also a Talos inline manifest, so the infra plan shows the control-plane configs updated in place; Talos applies it only at bootstrap.
+
+### Break glass: Flux cannot fetch or apply
+
+Symptoms: the `flux-system` GitRepository or a HelmRepository stops reconciling with a timeout or `no such host`, and the export shows `DROPPED` flows from flux-system with `denied_by` empty.
+
+A fix merged to `main` cannot arrive while source-controller cannot reach GitHub, so it needs one hand step by the owner, with the admin kubeconfig:
+
+1. Merge the fix (or the revert of the change that broke it) in Forgejo, so `main` already holds the corrected policy when Flux recovers.
+2. Remove the default deny Flux is stuck behind, for the controller that is blocked (source-controller for fetches, kustomize-controller or helm-controller for applies):
+
+   ```sh
+   kubectl -n flux-system patch ciliumnetworkpolicy source-controller-egress --type merge -p '{"spec":{"enableDefaultDeny":{"egress":false}}}'
+   ```
+
+3. `flux reconcile source git flux-system` and `flux reconcile kustomization flux-system`. Flux fetches the fixed `main` and puts the policy back as `main` has it, overwriting the hand patch.
+
+If the API server path itself is refused (every controller fails with `dial tcp 10.66.0.1:443: i/o timeout`), patch all five policies the same way. No Flux NetworkPolicy needs restoring by hand: with `enableDefaultDeny.egress` false and no NetworkPolicy left, nothing in flux-system is refused.
+
 ## Enforcing a staged policy
 
 1. Let the export run for a week, so it covers the six-hourly etcd backup, the daily scrubs and a Renovate bump.
 2. Every flow from the namespace must have `allowed_by` naming the namespace's own policy (first query above). A flow that does not is either added here with its reason or is a finding.
-3. In one pull request per namespace, set `enableDefaultDeny.egress` to `true` (or remove the field) and remove the namespace from the `default-deny` exclusion list. For flux-system, also turn off Flux's own NetworkPolicies (see above). Flux first: if Flux loses GitHub, the fix reaches the cluster only by hand.
+3. In one pull request per namespace, set `enableDefaultDeny.egress` to `true` (or remove the field). For flux-system, also turn off Flux's own NetworkPolicies (see above) and keep the namespace out of the `default-deny` exclusion change: its own policies already name DNS and ingress, so the clusterwide policy adds nothing but a second place to get wrong. Flux first: if Flux loses GitHub, the fix reaches the cluster only by hand (break glass above).
 4. After the merge, watch for dropped flows from that namespace (second query above) and for Flux's `Ready` condition.

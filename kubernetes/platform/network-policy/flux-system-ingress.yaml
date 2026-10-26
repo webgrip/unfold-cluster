@@ -1,0 +1,41 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flux-system-ingress
+  namespace: flux-system
+spec:
+  description: 'Every pod in flux-system accepts traffic from the other flux-system pods (artifacts on 9090 from source-controller, events on 9090 to notification-controller), and metrics scrapes on 8080 from any pod in the cluster. With notification-controller-webhook-ingress below, this is what the Flux distribution''s allow-egress, allow-scraping and allow-webhooks NetworkPolicies admit today, owned here so they can be turned off with cluster.networkPolicy false. The flux-operator chart keeps its own flux-operator-web policy for 9080.'
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+    - fromEndpoints:
+        - matchExpressions:
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: notification-controller-webhook-ingress
+  namespace: flux-system
+spec:
+  description: 'notification-controller serves webhook receivers on 9292 to any pod in the cluster, as the Flux distribution''s allow-webhooks NetworkPolicy does.'
+  endpointSelector:
+    matchLabels:
+      app: notification-controller
+  ingress:
+    - fromEndpoints:
+        - matchExpressions:
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "9292"
+              protocol: TCP
