@@ -121,7 +121,7 @@ kubectl() {
 }
 
 declared_chart_version() {
-  sed -n 's/^ *version: *\([0-9][0-9.]*\) *$/\1/p' "$1" | head -n 1
+  sed -n 's/^ *version: *\([0-9][0-9.]*\) *$/\1/p;T;q' "$1"
 }
 
 check_chart() {
@@ -246,6 +246,10 @@ policy_files() {
   find "$1" -maxdepth 1 -name '*.yaml' ! -name kustomization.yaml | sort
 }
 
+first_policy_file() {
+  policy_files "$1" | sed -n 1p
+}
+
 dry_run_policies() {
   kubectl apply --server-side --dry-run=server -o json -f "$1" 2>&1
 }
@@ -303,13 +307,13 @@ mutate_policies() {
   rm -rf "${mutant}"
   cp -r "${policy_dir}" "${mutant}"
   local victim
-  victim="$(policy_files "${mutant}" | head -n 1)"
+  victim="$(first_policy_file "${mutant}")"
   sed -i '/^  options:$/,/^      value: monitor$/d' "${victim}"
   check_modes "${mutant}" fail "${victim##*/} without its options"
 
   rm -rf "${mutant}"
   mkdir -p "${mutant}"
-  cp "$(policy_files "${policy_dir}" | head -n 1)" "${mutant}/"
+  cp "$(first_policy_file "${policy_dir}")" "${mutant}/"
   local original
   original="$(find "${mutant}" -name '*.yaml')"
   awk '!done && /operator: [A-Za-z]+/ { sub(/operator: [A-Za-z]+/, "operator: PrefixOf"); done = 1 } { print }' \
