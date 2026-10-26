@@ -3,11 +3,6 @@ name: admission-policies-check
 
 on:
   pull_request:
-    paths:
-      - kubernetes/platform/admission-policies/**
-      - tests/admission-policies/**
-      - scripts/test-admission-policies.sh
-      - .forgejo/workflows/admission-policies-check.yml
   push:
     branches:
       - main
