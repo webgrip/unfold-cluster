@@ -72,7 +72,9 @@ The Cilium agent, operator and envoy, kube-proxy (while it still exists) and the
 
 ## Flow evidence
 
-Every Cilium agent writes each new egress connection (not replies) to `/var/log/hubble/egress-flows.log` on its node, through Hubble's static exporter (`hubble.export.static` in [the Cilium values](../../kubernetes/platform/cilium/values.yaml), 10 MB, two rotations). Each record keeps only these fields:
+Every Cilium agent writes each egress policy verdict (one per new connection, with the policy that decided it) and every drop to `/var/log/hubble/egress-flows.log` on its node, through Hubble's static exporter (`hubble.export.static` in [the Cilium values](../../kubernetes/platform/cilium/values.yaml), 10 MB, five rotations). Flows from the node itself (`reserved:host`: etcd, the kubelet, host-network pods) are left out; pod policies never select them.
+
+Until 2026-10-26 the export kept every egress packet. Host traffic was 65% of it and only 4% carried a policy verdict, so each node's 30 MB covered less than an hour, too short to prove a daily job's flows. Keeping verdicts and drops only stretches the same space to days. Each record keeps only these fields:
 
 - the verdict and drop reason
 - the source namespace, pod and workload

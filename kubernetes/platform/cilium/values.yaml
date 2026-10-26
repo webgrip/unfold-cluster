@@ -52,10 +52,23 @@ operator:
       memory: 64Mi
     limits:
       memory: 256Mi
+rollOutCiliumPods: true
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
 encryption:
   enabled: true
   type: wireguard
   nodeEncryption: false
+  strictMode:
+    egress:
+      enabled: true
+      cidr: 10.65.0.0/16
+      allowRemoteNodeIdentities: true
+    ingress:
+      enabled: true
 prometheus:
   enabled: true
 hubble:
@@ -75,7 +88,10 @@ hubble:
       enabled: true
       filePath: /var/log/hubble/egress-flows.log
       allowList:
-        - '{"traffic_direction":["EGRESS"],"reply":[false]}'
+        - '{"event_type":[{"type":5}],"traffic_direction":["EGRESS"]}'
+        - '{"event_type":[{"type":1}]}'
+      denyList:
+        - '{"source_label":["reserved:host"]}'
       fieldMask:
         - time
         - node_name
@@ -97,7 +113,7 @@ hubble:
         - egress_allowed_by
         - egress_denied_by
       fileMaxSizeMb: 10
-      fileMaxBackups: 2
+      fileMaxBackups: 5
   relay:
     enabled: true
     resources:
