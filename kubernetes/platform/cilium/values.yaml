@@ -31,8 +31,27 @@ securityContext:
       - NET_ADMIN
       - SYS_ADMIN
       - SYS_RESOURCE
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+envoy:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 operator:
   replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
 encryption:
   enabled: true
   type: wireguard
@@ -81,6 +100,12 @@ hubble:
       fileMaxBackups: 2
   relay:
     enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
