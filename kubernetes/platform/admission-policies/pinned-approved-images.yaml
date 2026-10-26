@@ -42,7 +42,13 @@ spec:
         'ghcr.io/kyverno/reports-controller:',
         'ghcr.io/kyverno/kyverno-cli:',
         'ghcr.io/kyverno/readiness-checker:',
-        'registry.k8s.io/autoscaling/cluster-autoscaler:']
+        'registry.k8s.io/autoscaling/cluster-autoscaler:',
+        'quay.io/oauth2-proxy/oauth2-proxy:',
+        'docker.io/envoyproxy/envoy:',
+        'ghcr.io/headlamp-k8s/headlamp:',
+        'ghcr.io/kyverno/policy-reporter:',
+        'ghcr.io/kyverno/policy-reporter-ui:',
+        'ghcr.io/fjogeleit/trivy-operator-polr-adapter:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)

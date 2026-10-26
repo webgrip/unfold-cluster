@@ -21,13 +21,27 @@ spec:
         object.spec.?type.orValue('ClusterIP') == 'NodePort'
         && variables.service in variables.grantedNodePorts
         && object.spec.ports.all(p, p.?nodePort.orValue(0) in variables.grantedNodePorts[variables.service])
+    - name: hostNetworkGateways
+      expression: "['ops-gateway/cilium-gateway-ops']"
+    - name: ownedByGateway
+      expression: >-
+        object.metadata.?ownerReferences.orValue([]).exists(o,
+          o.apiVersion.startsWith('gateway.networking.k8s.io/') && o.kind == 'Gateway'
+          && o.?controller.orValue(false) && 'cilium-gateway-' + o.name == object.metadata.name)
+    - name: isHostNetworkGatewayService
+      expression: >-
+        object.spec.?type.orValue('ClusterIP') == 'NodePort'
+        && variables.service in variables.hostNetworkGateways
+        && variables.ownedByGateway
   validations:
     - expression: >-
         variables.isGrantedNodePort
+        || variables.isHostNetworkGatewayService
         || !(object.spec.?type.orValue('ClusterIP') in ['NodePort', 'LoadBalancer', 'ExternalName'])
       messageExpression: >-
         'Services of type ' + object.spec.type + ' are refused; traffic enters through the tunnel and the gateway. '
         + 'Granted NodePorts: ' + variables.grantedNodePorts.map(k, k).join(', ')
+        + '; host-network Gateways, whose Service Cilium creates as NodePort: ' + variables.hostNetworkGateways.join(', ')
       reason: Forbidden
     - expression: object.spec.?externalIPs.orValue([]).size() == 0
       message: Services must not set externalIPs.
