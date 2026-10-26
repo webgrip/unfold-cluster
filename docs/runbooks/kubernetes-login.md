@@ -10,10 +10,12 @@ WireGuard VPN (the Authentik login page is not public). Then, from this reposito
 
 ```sh
 mise install
-export KUBECONFIG="$PWD/access/unfold-oidc.kubeconfig.yaml"
 mise exec -- kubectl auth whoami
 mise exec -- k9s
 ```
+
+`mise.toml` sets `KUBECONFIG` to `access/unfold-oidc.kubeconfig.yaml`, so every `mise exec` here,
+and every command in a shell with mise activated, uses your own login without an export.
 
 The first call opens a browser on `http://localhost:8000` (or `18000` when 8000 is taken): sign
 in to Authentik, which signs you in through Google, then asks for your passkey or security key
