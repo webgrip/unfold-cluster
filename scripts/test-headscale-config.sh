@@ -95,8 +95,10 @@ render "jsonencode(templatefile(\"${templates}/headscale-config.yaml.tftpl\", {
   oidc_client_id          = \"unfold-headscale\"
   oidc_client_secret_path = \"${work}/oidc_client_secret\"
   oidc_allowed_groups     = [\"unfold-admins\"]
+  ops_console_records     = [{ name = \"hubble.ops.unfoldhq.dev\", type = \"A\", value = \"10.64.0.10\" }, { name = \"headlamp.ops.unfoldhq.dev\", type = \"A\", value = \"10.64.0.10\" }]
 }))" >"${work}/rendered.yaml"
 grep -q '^oidc:' "${work}/rendered.yaml" || fail "the rendered configuration has no oidc block"
+grep -q '^    - name: hubble.ops.unfoldhq.dev$' "${work}/rendered.yaml" || fail "the rendered configuration has no tailnet DNS record for the ops consoles"
 : >"${work}/oidc_client_secret"
 
 port=$((20000 + RANDOM % 20000))

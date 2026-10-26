@@ -1,0 +1,192 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: unfold-cost
+spec:
+  allowCrossNamespaceImport: true
+  folderRef: unfold
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  datasources:
+    - inputName: DS_METRICS
+      datasourceName: unfold-prometheus
+  json: |
+    {
+      "uid": "unfold-cost",
+      "title": "Unfold / Cost",
+      "tags": [
+        "unfold",
+        "ops-consoles",
+        "finops"
+      ],
+      "schemaVersion": 41,
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "refresh": "1m",
+      "panels": [
+        {
+          "id": 1,
+          "type": "text",
+          "title": "Where the money is",
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 5
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Cost lives in the homelab FinOps dashboard, which reads OpenCost and the Hetzner invoices for both clusters: [Executive / FinOps & Cost](https://grafana.webgrip.dev/d/exec-finops/executive-finops-and-cost). The panels below show what this cluster requests, the input to that bill."
+          }
+        },
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "CPU requested (cores)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 5,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"})",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Memory requested (GiB)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 5,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) / 2^30",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Nodes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 5,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "count(kube_node_info)",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 4,
+          "type": "table",
+          "title": "Requests by namespace",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 9,
+            "w": 24,
+            "h": 10
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum by (namespace, resource) (kube_pod_container_resource_requests{resource=~\"cpu|memory\"})",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ]
+        }
+      ],
+      "editable": false,
+      "links": [
+        {
+          "title": "Homelab FinOps",
+          "url": "https://grafana.webgrip.dev/d/exec-finops/executive-finops-and-cost",
+          "type": "link",
+          "targetBlank": true
+        }
+      ]
+    }

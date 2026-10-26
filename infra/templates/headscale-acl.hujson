@@ -44,6 +44,11 @@
       "action": "accept",
       "src": ["tag:headscale"],
       "dst": ["tag:homelab-gateway:443"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:hub"],
+      "dst": ["tag:homelab-gateway:443"]
     }
   ],
   "autoApprovers": {

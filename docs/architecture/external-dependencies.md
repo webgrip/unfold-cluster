@@ -160,4 +160,7 @@ at its row.
 | `pkgs.tailscale.com` | E41 |
 | `dl.k8s.io` | E42 |
 | `slsa.dev`, `spdx.dev` | none: predicate type identifiers in attestations, never contacted |
+| `ops.unfoldhq.dev`, `hubble.ops.unfoldhq.dev`, `headlamp.ops.unfoldhq.dev`, `policy-reporter.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own consoles behind its Gateway on the tailnet; login goes through Authentik, the certificate through Cloudflare DNS-01 and Let's Encrypt |
+| `grafana.webgrip.dev` | none: a dashboard link a viewer follows to the homelab FinOps dashboard, never contacted by the cluster |
+| `kubernetes.io`, `git.k8s.io`, `datatracker.ietf.org`, `tools.ietf.org`, `www.rfc-editor.org`, `fetch.spec.whatwg.org` | none: specification links in the Gateway API CRD descriptions, never contacted |
 | `ploeg.webgrip.dev` | none: a label and annotation prefix, never contacted |
