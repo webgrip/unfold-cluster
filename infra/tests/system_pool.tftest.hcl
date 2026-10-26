@@ -73,20 +73,20 @@ variables {
   admin_cidrs          = ["203.0.113.7/32"]
 }
 
-run "the_system_pool_waits_at_zero_for_hetzner_to_raise_the_primary_ip_limit" {
+run "the_system_pool_is_one_cpx32_in_fsn1_beside_the_hub" {
   command = plan
 
   assert {
     condition = alltrue([
       var.worker_pools.system.server_type == "cpx32",
       var.worker_pools.system.location == "fsn1",
-      var.worker_pools.system.node_count == 0,
+      var.worker_pools.system.node_count == 1,
       var.worker_pools.system.name_prefix == "unfold-system",
       var.worker_pools.system.first_host == 51,
       var.worker_pools.system.labels == tomap({ "node.webgrip.io/pool" = "system" }),
       var.worker_pools.system.taints == tomap({ "node.webgrip.io/pool" = "system:NoSchedule" }),
     ])
-    error_message = "the system pool of ADR 0013 is a CPX32 in fsn1, beside the hub and its volumes, labelled and tainted node.webgrip.io/pool=system, in the address block from 10.64.0.51; it holds no node until the Hetzner project may hold another primary IP"
+    error_message = "the system pool of ADR 0013 is one CPX32 in fsn1 at stage S1, beside the hub and its volumes, labelled and tainted node.webgrip.io/pool=system, in the address block from 10.64.0.51"
   }
 
   assert {
@@ -100,39 +100,8 @@ run "the_system_pool_waits_at_zero_for_hetzner_to_raise_the_primary_ip_limit" {
   }
 }
 
-run "raising_the_count_to_one_adds_one_cpx32_in_its_role_and_changes_no_other_node" {
+run "the_plan_adds_one_cpx32_in_its_role_and_changes_no_other_node" {
   command = plan
-
-  variables {
-    worker_pools = {
-      unfold = {
-        server_type = "cx33"
-        node_count  = 1
-        name_prefix = "unfold-app"
-        first_host  = 21
-        labels      = { "node.webgrip.io/pool" = "unfold", "runtime.webgrip.io/gvisor" = "true" }
-        taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
-      }
-      ci = {
-        server_type = "cx43"
-        location    = "nbg1"
-        node_count  = 0
-        name_prefix = "unfold-ci"
-        first_host  = 31
-        labels      = { "node.webgrip.io/pool" = "ci", "runtime.webgrip.io/gvisor" = "true" }
-        taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
-      }
-      system = {
-        server_type = "cpx32"
-        location    = "fsn1"
-        node_count  = 1
-        name_prefix = "unfold-system"
-        first_host  = 51
-        labels      = { "node.webgrip.io/pool" = "system" }
-        taints      = { "node.webgrip.io/pool" = "system:NoSchedule" }
-      }
-    }
-  }
 
   assert {
     condition = alltrue([
