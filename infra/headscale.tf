@@ -115,29 +115,7 @@ resource "hcloud_server" "headscale" {
     ipv6_enabled = true
   }
 
-  user_data = templatefile("${path.module}/templates/headscale-cloud-init.yaml.tftpl", {
-    hostname                = var.headscale_hostname
-    ipv4                    = hcloud_primary_ip.headscale.ip_address
-    acme_email              = var.acme_email
-    ssh_public_key          = var.admin_ssh_public_key
-    tofu_ssh_public_key     = trimspace(tls_private_key.headscale_tofu.public_key_openssh)
-    host_key_private        = trimspace(tls_private_key.headscale_host.private_key_openssh)
-    host_key_public         = trimspace(tls_private_key.headscale_host.public_key_openssh)
-    headscale_version       = local.headscale_version
-    headscale_sha256        = local.headscale_sha256
-    admin_user              = var.headscale_admin_user
-    node_user               = local.headscale_node_user
-    tailnet_key_script      = local.tailnet_key_tool
-    tailnet_key_sudoers     = local.tailnet_key_sudoers
-    acl                     = local.headscale_policy
-    config                  = local.headscale_config
-    oidc_client_secret_path = local.headscale_oidc.client_secret_path
-    tailscale_version       = local.tailscale_version
-    tailscale_sha256        = local.tailscale_sha256
-    kms_image               = local.disk_kms_server_image
-    kms_port                = local.disk_kms_port
-    kms_master_key_b64      = local.disk_kms_master_key
-  })
+  user_data = local.headscale_user_data
 
   labels = {
     cluster = "unfold-main"
@@ -147,6 +125,11 @@ resource "hcloud_server" "headscale" {
   lifecycle {
     ignore_changes       = [user_data, image]
     replace_triggered_by = [terraform_data.headscale_generation]
+
+    precondition {
+      condition     = length(local.headscale_user_data) <= 32768
+      error_message = "Hetzner refuses user_data over 32768 bytes; compress the largest file in templates/headscale-cloud-init.yaml.tftpl with encoding: gz+b64."
+    }
 
     precondition {
       condition     = !var.talos_snapshot_required || can(regex("^[A-Za-z0-9+/]{43}=$", local.disk_kms_master_key))
@@ -165,4 +148,30 @@ resource "terraform_data" "headscale_address" {
       PROPERTY       = var.headscale_address_property
     }
   }
+}
+
+locals {
+  headscale_user_data = templatefile("${path.module}/templates/headscale-cloud-init.yaml.tftpl", {
+    hostname                    = var.headscale_hostname
+    ipv4                        = hcloud_primary_ip.headscale.ip_address
+    acme_email                  = var.acme_email
+    ssh_public_key              = var.admin_ssh_public_key
+    tofu_ssh_public_key         = trimspace(tls_private_key.headscale_tofu.public_key_openssh)
+    host_key_private            = trimspace(tls_private_key.headscale_host.private_key_openssh)
+    host_key_public             = trimspace(tls_private_key.headscale_host.public_key_openssh)
+    headscale_version           = local.headscale_version
+    headscale_sha256            = local.headscale_sha256
+    admin_user                  = var.headscale_admin_user
+    node_user                   = local.headscale_node_user
+    tailnet_key_script_gzip_b64 = base64gzip(local.tailnet_key_tool)
+    tailnet_key_sudoers         = local.tailnet_key_sudoers
+    acl                         = local.headscale_policy
+    config                      = local.headscale_config
+    oidc_client_secret_path     = local.headscale_oidc.client_secret_path
+    tailscale_version           = local.tailscale_version
+    tailscale_sha256            = local.tailscale_sha256
+    kms_image                   = local.disk_kms_server_image
+    kms_port                    = local.disk_kms_port
+    kms_master_key_b64          = local.disk_kms_master_key
+  })
 }

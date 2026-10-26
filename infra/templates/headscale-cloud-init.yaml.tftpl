@@ -58,8 +58,8 @@ write_files:
       HEALTH_CONNECT_TO=${hostname}:443:127.0.0.1:443
   - path: /usr/local/sbin/unfold-tailnet-key
     permissions: "0755"
-    content: |
-      ${indent(6, tailnet_key_script)}
+    encoding: gz+b64
+    content: ${tailnet_key_script_gzip_b64}
   - path: /etc/sudoers.d/unfold-tailnet-key
     permissions: "0440"
     content: |
