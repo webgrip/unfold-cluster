@@ -1,25 +1,146 @@
-# Observability and the homelab gateway
+# Observability
 
-Unfold collects its own metrics and logs and sends them to the homelab over the tailnet. The homelab stores them (VictoriaMetrics, VictoriaLogs), shows them in Grafana (folder **Unfold cluster**) and alerts on them (vmalert to the homelab Alertmanager and ntfy). This is RFC 0001 delivery step 8, with the homelab as the backend until the cluster runs its own stack. The same homelab gateway also carries External Secrets' reads of the homelab OpenBao ([external-secrets](runbooks/external-secrets.md)).
+Unfold collects, stores and alerts on its own metrics and logs, in the `observability` namespace,
+and keeps doing so when the homelab is down ([ADR 0015](adr/0015-unfold-observes-itself.md)). The
+homelab's Grafana reads Unfold's stores through one read-only endpoint. Firefighting is in the
+[observability runbook](runbooks/observability.md).
 
 ## What runs where
 
-| Piece | Where | What it does |
+| Piece | Kind | What it does |
 | --- | --- | --- |
-| vmagent | Unfold, `observability`, Deployment | Scrapes the API servers, kubelets and cAdvisor, etcd (`:2383` on the control planes), node-exporter, kube-state-metrics, Cilium agent and operator, Hubble, CoreDNS, the Flux controllers, Vector, the Trivy operator and its report shipper ([vulnerability-scanning](runbooks/vulnerability-scanning.md)) and the Kyverno controllers ([image-signatures](runbooks/image-signatures.md)). Adds `cluster=unfold`. Remote-writes to `http://unfold-gateway.webgrip.dev:8427/api/v1/write`. Buffers up to 1.8 GB in an emptyDir, which covers a homelab outage of many hours at this cluster's size. |
-| Vector | Unfold, `observability`, DaemonSet, host network | Reads pod logs from `/var/log/pods`, Talos service logs on `127.0.0.1:6050` and kernel logs on `127.0.0.1:6051` (JSON lines from Talos `machine.logging` and `KmsgLogConfig`), the API server audit log `/var/log/audit/kube/*.log` on the control planes, Hubble's egress flow log `/var/log/hubble/egress-flows.log` ([egress by name](runbooks/egress-by-name.md#flow-evidence)), and Tetragon's event file `/var/log/tetragon/tetragon.log` as `source=tetragon` ([runtime security](runbooks/runtime-security.md)). Sends them to the gateway's `/insert/jsonline` and `/audit/insert/jsonline`. Buffers 2 GiB of logs and 1 GiB of audit events per node under `/var/lib/vector`. |
-| node-exporter, kube-state-metrics | Unfold, `observability`, Helm charts | The usual node and object metrics. |
-| Talos patches | `infra/log-shipping.tf`, `infra/metrics-ports.tf`, `infra/host-firewall.tf` | Log destinations, and host firewall rules that open the scraped ports to the pod network only. |
-| unfold-gateway | homelab, `observability`, Deployment | Tailscale (userspace) joined to Unfold's Headscale as `tag:homelab-gateway`. Tailnet port 8427 goes to vmauth in the same pod, which accepts only the three write paths (metrics to `vmsingle-unfold`, logs to `vlsingle-victorialogs`, audit to `vlsingle-victorialogs-audit`) and stamps `cluster=unfold` on every log line. Tailnet port 8200 goes to the homelab OpenBao. Tailnet port 9150 goes to the homelab's `forgejo-runner-queue`, which answers only `GET /waiting-jobs/unfold-ci` with the number of waiting `unfold-ci` jobs ([ci-runners](runbooks/ci-runners.md)). |
-| unfold-gateway-address | homelab, CronJob every 5 minutes | Reads the gateway's tailnet IPv4 address from its Tailscale state Secret and publishes it as `unfold-gateway.webgrip.dev` (DNS only; a `100.64.0.0/10` address, useless off the tailnet). |
-| vmsingle-unfold, vmalert-unfold | homelab | Unfold's metrics, kept apart from the homelab's so no homelab dashboard or rule sums the two clusters. 30 days. |
-| vmalert-unfold-runtime | homelab | The LogsQL rules on Unfold's Tetragon events (VMRule `unfold-runtime`), evaluated against VictoriaLogs; `vmalert-unfold` reads only VictoriaMetrics ([runtime security](runbooks/runtime-security.md#the-alerts)). |
+| `alloy-metrics` | Deployment | Scrapes the API servers, kubelets and cAdvisor, etcd (`:2383` on the control planes), node-exporter, kube-state-metrics, the Cilium agent, operator and Hubble, CoreDNS, the Flux controllers, KEDA, the cluster-autoscaler, cert-manager, Tetragon (`:2112` on each node), the Trivy operator and its report shipper, the Kyverno controllers and every observability pod (`alloy/metrics/metrics.alloy`). Adds `cluster=unfold` and writes to `vmsingle`. |
+| `alloy-logs` | DaemonSet, host network | Reads pod logs from `/var/log/pods`, the Talos service and kernel logs that Talos sends as JSON lines to `127.0.0.1:6050` and `:6051` (`infra/log-shipping.tf`), the API audit log `/var/log/audit/kube/*.log` on the control planes, Hubble's egress flow log and Tetragon's export file (`alloy/logs/`). Writes the audit log to `vlsingle-audit` and everything else to `vlsingle-logs`. |
+| `vmsingle` | StatefulSet, 20 GiB `hcloud-luks` | VictoriaMetrics, 30 days. |
+| `vlsingle-logs` | StatefulSet, 15 GiB `hcloud-luks` | VictoriaLogs, 14 days, capped at 13 GiB. |
+| `vlsingle-audit` | StatefulSet, 10 GiB `hcloud-luks` | VictoriaLogs for the API audit log, 90 days, capped at 8 GiB. |
+| `vmalert-metrics`, `vmalert-logs`, `vmalert-audit` | Deployments | Evaluate `alerting/rules/cluster.yaml` and `supply-chain.yaml` (PromQL), `runtime.yaml` (LogsQL on Tetragon events) and `audit.yaml` (LogsQL on the audit log); write alert state to `vmsingle`. |
+| `alertmanager` | Deployment | Routes `critical` and `warning` to ntfy and the always-firing `Watchdog` to the dead-man's switch ([alerts](#alerts)). |
+| `grafana-operator`, `grafana` | HelmRelease, Grafana CR | `https://grafana.ops.unfoldhq.dev` on the tailnet, sign-in through Authentik with a passkey ([Grafana](#grafana)). |
+| `vmauth-query` | Deployment | `https://query.ops.unfoldhq.dev`: the homelab Grafana's read-only way in ([the homelab reads](#the-homelab-reads)). |
+| `trivy-report-shipper` | `trivy-system`, Vector | Writes one record per Trivy report to `vlsingle-logs` ([vulnerability scanning](runbooks/vulnerability-scanning.md)). |
+| kube-state-metrics, node-exporter | Helm charts | The usual object and node metrics. |
 
-## Who may connect
+Every central piece prefers the `system` pool and falls back to the hub (`node.webgrip.io/pool`
+`system`, then `unfold`; `app/placement.yaml`), as [ADR 0013](adr/0013-control-planes-stay-small-and-a-system-pool-carries-the-platform.md)
+decides. The `system` pool is declared in `infra/variables.tf` with `node_count = 0`.
 
-The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets every node role open `tag:homelab-gateway` on 8427 (Vector ships each node's logs from its host network), and `tag:cp` alone on 8200 and 9150 (External Secrets and KEDA run only on the control planes), and nothing else ([node roles](runbooks/infra-workflow.md#node-roles-on-the-tailnet)); besides them only the devices people register (`autogroup:member`) reach those ports, and only the Headscale server (`tag:headscale`) reaches 443, Authentik's way in ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only the vmagent, External Secrets and KEDA operator pods have a Cilium egress rule to the gateway name, and Vector runs on the host network. Metrics and logs carry no bearer token yet; External Secrets now exists on Unfold, so a vmauth token minted in the homelab can follow.
+### Fields
 
-## How the policy and the key get there, with nobody typing them
+Log records keep the field names the homelab used, so queries and rules carry over:
+
+| `source` | Fields besides `cluster`, `node` and the message |
+| --- | --- |
+| `pod` | `namespace`, `pod`, `container`, `app`, `stream` |
+| `talos` | `talos_service` (`kernel` for the kernel stream), `level` |
+| `hubble-egress` | the flow itself (`verdict`, `IP.destination`, `source.namespace`, ...), `source_namespace`, `source_workload`, `destination_name`, `destination_port`, `allowed_by`, `denied_by` |
+| `tetragon` | the event itself (`process_exec.process.binary`, ...), `event`, `namespace`, `pod`, `container`, `workload`, `workload_kind`, `image`, `isolation_class`, `binary`, `arguments`, `uid`, `in_init_tree`, `parent_binary`, `privileges_changed`, `policy`, `function`, `action`, `path`, `daddr`, `dport`, `string_args` |
+| `trivy` | see [vulnerability scanning](runbooks/vulnerability-scanning.md) |
+
+The audit store holds the audit events as they are (`user.username`, `verb`, `objectRef.*`, ...),
+with `job=kube-audit` and the request URI as the message. Routine reads by `system:` users and
+status writes are dropped on the node.
+
+## Storage and what it costs
+
+| Store | Volume | Retention | Expected use |
+| --- | --- | --- | --- |
+| `vmsingle` | 20 GiB (22 GB billed) | 30 days | 60 to 100 thousand active series every 30 s at about 1 byte a sample: 5 to 8 GB at 30 days. The homelab, at 816 thousand series, holds 16 GiB at 15 days. |
+| `vlsingle-logs` | 15 GiB (17 GB billed) | 14 days, 13 GiB cap | A quarter of the homelab's 112 KB/s of ingest, about 0.1 GiB a day after compression: under 2 GiB, with room for a noisy week of Tetragon or Hubble. |
+| `vlsingle-audit` | 10 GiB (11 GB billed) | 90 days, 8 GiB cap | The filtered audit log, a few KB/s: 1 to 2 GiB at 90 days. 10 GB is the smallest volume Hetzner sells. |
+
+50 GB at €0.044 per GB: **€2.20 a month** (€2.66 with VAT). The `system` node, when the owner
+raises its count, is a CPX32 at €35.99 a month ([ADR 0013](adr/0013-control-planes-stay-small-and-a-system-pool-carries-the-platform.md)).
+`UnfoldObservabilityVolumeFilling` fires at 85%; `hcloud-luks` grows online.
+
+## Alerts
+
+| Rules | Evaluated by | Against |
+| --- | --- | --- |
+| `alerting/rules/cluster.yaml`: delivery (Watchdog, metrics, logs, remote write, volumes, notifications), platform (nodes, API servers, etcd, Flux, certificates, etcd backups, Tetragon), the CI autoscaler | `vmalert-metrics` | `vmsingle` |
+| `alerting/rules/supply-chain.yaml`: vulnerabilities, secrets in images, the scanner, unsigned webgrip images, the signature webhook | `vmalert-metrics` | `vmsingle` |
+| `alerting/rules/runtime.yaml`: the 14 Tetragon detections ([runtime security](runbooks/runtime-security.md#the-alerts)) | `vmalert-logs` | `vlsingle-logs` |
+| `alerting/rules/audit.yaml`: the break-glass certificate ([kubernetes login](runbooks/kubernetes-login.md#break-glass)) | `vmalert-audit` | `vlsingle-audit` |
+
+Alertmanager (`alerting/alertmanager.yml`):
+
+* `severity=critical` goes to `https://ntfy.webgrip.dev/alerts-critical` (urgent), `warning` to
+  `alerts-warning`, with the write-only token in the Secret `alertmanager-ntfy` (OpenBao
+  `secret/unfold-main/alertmanager/ntfy`, `token`, copied there from the homelab's own token by the
+  homelab). These are the topics the phone already reads.
+* `Watchdog`, always firing, goes every two minutes to the uptime-kuma push URL in
+  `alertmanager-deadman` (OpenBao `secret/unfold-main/alertmanager/deadman`, `ping_url`). uptime-kuma
+  runs on the off-site box, outside both clusters, and pages when the beat stops.
+* The homelab watches the same `Watchdog` from its side: its blackbox exporter reads
+  `ALERTS{alertname="Watchdog"}` through the query endpoint and fires `UnfoldAlertingSilent`.
+
+The ntfy hop still runs in the homelab. With the homelab down, alerts fire and show in Grafana but
+do not reach the phone; only the dead-man's switch stays independent. An ntfy on the off-site box
+(RFC 0001 delivery step 8) removes that dependency: change the two URLs and the token's OpenBao path.
+
+## Grafana
+
+* `https://grafana.ops.unfoldhq.dev`, through the ops Gateway, on the tailnet only ([ops consoles](runbooks/ops-consoles.md)).
+* Sign-in: Authentik client `unfold-grafana` (homelab access plane), confidential, passkey required.
+  `unfold-admins` become Admin, `unfold-viewers` Viewer, anyone else is refused. Grafana's server
+  calls to Authentik go through `ops-auth/authentik-relay` (`HTTPS_PROXY`); the client secret comes
+  from OpenBao `secret/unfold-main/grafana/oidc`.
+* Break-glass when Authentik is unreachable: the operator's generated admin login in the Secret
+  `grafana-admin-credentials`; reading it needs cluster access.
+* Data sources, UID and name alike: `unfold-prometheus`, `victorialogs`, `victorialogs-audit`,
+  `alertmanager`. The VictoriaLogs plugin (`victoriametrics-logs-datasource` 0.33.1) is downloaded
+  from grafana.com at start.
+* Dashboards in folder `unfold`, as GrafanaDashboard CRs: `grafana/dashboards/` (Unfold cluster and
+  supply chain, moved from the homelab; the two spend panels stay on the homelab's **Unfold cloud
+  costs** dashboard) and `kubernetes/platform/ops-consoles/dashboards/`.
+
+## The homelab reads
+
+```
+homelab Grafana ── unfold-query.observability:8481 (vmauth in the homelab gateway pod, adds the bearer token)
+  ── HTTPS_PROXY: the gateway's Tailscale outbound proxy, tag:homelab-gateway
+  ── tailnet, policy: tag:homelab-gateway → 10.64.0.10:443 only
+  ── ops Gateway, query.ops.unfoldhq.dev ── vmauth-query (one bearer token, read paths only)
+       ├── /api/v1/query, query_range, series, labels, label values, metadata ── vmsingle
+       └── /select/logsql/... ── vlsingle-logs
+```
+
+The token is generated in the homelab and pushed to OpenBao `secret/unfold-main/observability/query-token`;
+Unfold's External Secrets hands it to `vmauth-query`. The audit store cannot be reached this way.
+
+## While the homelab copy still exists
+
+This change also writes every sample and log line to the homelab gateway's 8427, so the homelab's
+`vmalert-unfold` and `vmalert-unfold-runtime` keep working until this stack has proven itself. An
+Unfold alert pages twice in that time. Retiring the copy is a follow-up pull request here (the
+`homelab_*` sinks, the second remote-write endpoint and the tailnet's 8427 rules) and the prepared
+homelab change on its branch `hl-unfold-obs-removal`.
+
+## Tests
+
+* `scripts/test-observability-logs.sh --mutation-test`: the real Alloy pipeline and real
+  VictoriaLogs servers; every fixture in `tests/observability/fixtures` checked field by field
+  (`tests/observability/expectations.json`), every LogsQL rule fired at its fixture, every pipeline
+  and rule mutation caught.
+* `scripts/test-observability-metrics.sh --mutation-test`: `vmalert-tool` unit tests for every
+  PromQL rule (`tests/observability/rules`), a firing and a quiet case each, and each alert replaced
+  by a never-firing and an always-firing expression; `vmalert -dryRun`, `amtool` and `vmauth -dryRun`
+  on the configurations; the scrape relabelling on `tests/observability/pod-targets.json`; the
+  Grafana image pinned alike in its three places.
+* `scripts/test-admission-policies.sh`: every observability pod and volume claim
+  (`tests/admission-policies/*/admitted-observability.yaml`) admitted under Deny.
+
+## The homelab gateway
+
+The homelab gateway (`tag:homelab-gateway`) also carries External Secrets' reads of the homelab
+OpenBao (8200, [external-secrets](runbooks/external-secrets.md)), KEDA's CI job count (9150) and
+Authentik for Headscale and `authentik-relay` (443).
+
+### Who may connect
+
+The tailnet decides. Headscale's policy (`infra/templates/headscale-acl.hujson`) lets every node role open `tag:homelab-gateway` on 8427 (alloy-logs ships a copy of each node's logs from its host network until the homelab copy is retired), `tag:cp` alone on 8200 and 9150 (External Secrets and KEDA run only on the control planes), `tag:headscale` and `tag:hub` on 443 (Headscale's browser login and `authentik-relay`), and `tag:homelab-gateway` itself only `10.64.0.10:443`, the ops Gateway ([node roles](runbooks/infra-workflow.md#node-roles-on-the-tailnet)); besides them only the devices people register (`autogroup:member`) reach those ports ([browser login](runbooks/headscale-browser-login.md)). On Unfold, only alloy-metrics, External Secrets, the KEDA operator and `authentik-relay` have a Cilium egress rule to the gateway name, and alloy-logs runs on the host network. The 8427 copy carries no bearer token; it goes away with the homelab copy.
+
+### How the policy and the key get there, with nobody typing them
 
 Everything below is a pull request and the `infra` apply.
 
@@ -32,24 +153,3 @@ Everything below is a pull request and the `infra` apply.
 
 The `unfold-headscale` created on 2026-10-25 ran the first version of the program, without the `install`, `policy` and `gateway` modes, and its sudoers rule named only the old modes, so the `tofu` key could not upgrade it. Instead of a one-time command on the server, `headscale_generation` 3 replaces it through the apply: the apply lifts its delete protection, the new server starts from the current cloud-init, and every node and the gateway log in again with keys minted by the new server in the same run ([reproducibility](reproducibility.md#the-live-headscale-server)).
 
-## Checking it works
-
-In Grafana (Explore, datasource **VictoriaMetrics (Unfold)**):
-
-- `count by (job) (up{cluster="unfold"} == 1)` lists every scrape job with its number of healthy targets; `up{cluster="unfold"} == 0` must be empty.
-- `time() - max(timestamp(up{cluster="unfold"}))` stays under a minute.
-- `etcd_server_has_leader{cluster="unfold"}` returns three series of 1.
-
-In Grafana (datasource **VictoriaLogs**): `cluster:=unfold | stats by (source) count()` shows `pod` and `talos`. In **VictoriaLogs audit**: `cluster:=unfold job:=kube-audit | stats count()`.
-
-On Unfold: `kubectl get clustersecretstore openbao-homelab` shows `Ready`.
-
-## Alerts
-
-vmalert-unfold evaluates `vmrule-unfold-cluster.yaml` and `vmrule-unfold-supply-chain.yaml` (vulnerabilities, secrets in images, unsigned webgrip images; see [vulnerability-scanning](runbooks/vulnerability-scanning.md#alerts-homelab-vmalert-unfold-vmrule-unfold-supply-chainyaml)) in the homelab: Unfold stopped sending (only once it has sent in the last 7 days, so an unfinished setup does not page), node NotReady, no API server answering, etcd without a leader or near its quota, Flux resources not Ready, kubelet, client and cert-manager certificates close to expiry, no successful etcd backup for 7 hours, and growing send buffers.
-
-## Known limits
-
-- The pod path to the tailnet relies on Cilium masquerading pod traffic that leaves through `tailscale0`. If `up{cluster="unfold"}` never appears while Vector's logs arrive, that is the first suspect; running vmagent on the host network is the fallback. External Secrets takes the same path.
-- The vmagent buffer is an emptyDir: a reschedule during an outage loses what it held.
-- RFC 0001 wants the cluster to alert on itself without the house. Until the in-cluster stack exists, an outage of the homelab silences Unfold's alerts; only the uptime-kuma dead-man's switch notices.

@@ -132,6 +132,7 @@ What each node pool carries, how big every component is, and the node bill per g
 | `unfold-cp-1` to `-3` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | `10.64.0.11` to `.13` | control planes, one placement group |
 | `unfold-app-1` | Cloud CX33 | 4 vCPU, 8 GB, 80 GB | `10.64.0.21` | Unfold, ploegd and their databases only (label and taint `node.webgrip.io/pool=unfold`) |
 | `unfold-ci-1` | Cloud CX43 | 8 vCPU, 16 GB, 160 GB | `10.64.0.31` | CI jobs only, under the `gvisor` RuntimeClass (label and taint `node.webgrip.io/pool=ci`) |
+| `unfold-sys-1` | Cloud CPX32, not created (`node_count` 0) | 4 vCPU, 8 GB, 160 GB | `10.64.0.41` | the `system` pool of ADR 0013: observability and the platform controllers, which run on the hub until the owner raises the count (label and taint `node.webgrip.io/pool=system`) |
 | `unfold-headscale` | Cloud CX23 | 2 vCPU, 4 GB, 40 GB | public only | Headscale, the admin tailnet's coordination server and relay |
 | `unfold-metal-1` | Robot EX44 or AX41, not declared yet | | `10.64.1.31` on the vSwitch | agent Runs under Kata 4.3.1 and CI under gVisor on KVM (label and taint `node.webgrip.io/pool=metal`); waits until one is in stock ([runbook](docs/runbooks/metal-node.md)) |
 

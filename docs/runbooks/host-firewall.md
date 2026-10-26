@@ -15,8 +15,8 @@ Every node runs Talos's ingress firewall: `NetworkDefaultActionConfig` with `ing
 | `cilium-wireguard-ingress` | 51871/udp | all | private network | Cilium's pod-traffic encryption |
 | `cilium-health-ingress` | 4240/tcp | all | private network | Cilium's node-to-node health probes |
 | `hubble-peer-ingress` | 4244/tcp | all | private network, pod network | Hubble Relay |
-| `node-metrics-ingress` | 9100, 9598, 9962-9963, 9965/tcp | all | pod network | vmagent in `observability` scraping node-exporter, Vector, the Cilium agent and operator, and Hubble ([observability](../observability.md)) |
-| `etcd-metrics-ingress` | 2383/tcp | control planes | pod network | vmagent scraping etcd |
+| `node-metrics-ingress` | 9100, 9598, 9962-9963, 9965, 2112/tcp | all | pod network | alloy-metrics in `observability` scraping node-exporter, alloy-logs, the Cilium agent and operator, Hubble and Tetragon ([observability](../observability.md)) |
+| `etcd-metrics-ingress` | 2383/tcp | control planes | pod network | alloy-metrics scraping etcd |
 
 Talos accepts some traffic without a rule. In `block` mode it accepts:
 
