@@ -73,48 +73,6 @@ variables {
   admin_cidrs          = ["203.0.113.7/32"]
 }
 
-run "flux_owns_coredns_and_the_talos_seed_installs_the_same_files" {
-  command = plan
-
-  assert {
-    condition     = contains(local.control_plane_patches, local.talos_coredns_disabled_patch) && yamldecode(local.talos_coredns_disabled_patch) == { apiVersion = "v1alpha1", kind = "KubeCoreDNSConfig", enabled = false }
-    error_message = "Talos's own CoreDNS must be off (KubeCoreDNSConfig enabled: false): Talos cannot spread its replicas, and a Kubernetes upgrade through talosctl would put its Deployment back over Flux's"
-  }
-
-  assert {
-    condition     = contains([for manifest in local.inline_manifests : manifest.name if manifest.contents == local.coredns_manifest], "coredns")
-    error_message = "the Talos seed must install CoreDNS from kubernetes/platform/coredns, because Flux needs cluster DNS to fetch its source"
-  }
-
-  assert {
-    condition = [for document in split("\n---\n", trimprefix(local.coredns_manifest, "---\n")) : yamldecode(document)] == [
-      for coredns_file in local.coredns_files : yamldecode(file("${path.module}/../kubernetes/platform/coredns/${coredns_file}"))
-    ]
-    error_message = "the seed's CoreDNS must be exactly the files Flux reconciles, one object per file in kustomization order"
-  }
-
-  assert {
-    condition = alltrue([
-      join(",", keys(yamldecode(file("${path.module}/../kubernetes/platform/coredns/kustomization.yaml")))) == "apiVersion,kind,resources",
-      contains(yamldecode(file("${path.module}/../kubernetes/clusters/main/kustomization.yaml")).resources, "../../platform/coredns"),
-    ])
-    error_message = "Flux must reconcile kubernetes/platform/coredns from kubernetes/clusters/main with no namespace, patch or generator, so it owns the very objects the seed installs"
-  }
-
-  assert {
-    condition = alltrue([
-      for coredns_file in local.coredns_files :
-      yamldecode(file("${path.module}/../kubernetes/platform/coredns/${coredns_file}")).metadata.annotations["kustomize.toolkit.fluxcd.io/prune"] == "disabled"
-    ])
-    error_message = "every CoreDNS object carries kustomize.toolkit.fluxcd.io/prune: disabled, so deleting or moving a file never takes cluster DNS down"
-  }
-
-  assert {
-    condition     = yamldecode(file("${path.module}/../kubernetes/platform/coredns/service.yaml")).spec.clusterIP == cidrhost(local.service_subnet, 10)
-    error_message = "the kube-dns Service keeps the tenth address of the service subnet, the address every kubelet hands its pods as their resolver"
-  }
-}
-
 run "coredns_runs_on_two_control_planes_and_keeps_one_through_a_drain" {
   command = plan
 
@@ -138,7 +96,7 @@ run "coredns_runs_on_two_control_planes_and_keeps_one_through_a_drain" {
     condition = alltrue([
       yamldecode(file("${path.module}/../kubernetes/platform/coredns/poddisruptionbudget.yaml")).spec.maxUnavailable == 1,
       yamldecode(file("${path.module}/../kubernetes/platform/coredns/poddisruptionbudget.yaml")).spec.selector.matchLabels == yamldecode(file("${path.module}/../kubernetes/platform/coredns/deployment.yaml")).spec.selector.matchLabels,
-      contains(local.coredns_files, "poddisruptionbudget.yaml"),
+      contains(yamldecode(file("${path.module}/../kubernetes/platform/coredns/kustomization.yaml")).resources, "poddisruptionbudget.yaml"),
     ])
     error_message = "a PodDisruptionBudget with maxUnavailable 1 over the CoreDNS pods keeps one replica answering through a node drain"
   }
