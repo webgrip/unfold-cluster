@@ -3,38 +3,6 @@ name: infra-check
 
 on:
   pull_request:
-    paths:
-      - infra/**
-      - scripts/*tailnet*
-      - scripts/*headscale*
-      - .forgejo/workflows/infra.yml
-      - .forgejo/workflows/infra-check.yml
-      - kubernetes/clusters/main/**
-      - kubernetes/platform/cilium/**
-      - kubernetes/platform/hcloud-cloud-controller-manager/**
-      - kubernetes/platform/hetzner-charts/**
-      - kubernetes/platform/flux-operator/**
-      - kubernetes/platform/flux-instance/**
-      - kubernetes/platform/etcd-backup/namespace.yaml
-      - kubernetes/platform/cluster-autoscaler/**
-      - scripts/write-cluster-secrets.sh
-      - scripts/encrypt-node.sh
-      - scripts/disk-kms-key.sh
-      - scripts/guard-encryption-rollout.sh
-      - scripts/mask-hcloud-token-prefixes.sh
-      - scripts/test-mask-hcloud-token-prefixes.sh
-      - scripts/diagnose-cluster.sh
-      - scripts/openbao-kv.sh
-      - scripts/lift-headscale-protection.sh
-      - scripts/set-etcd-backup-lifecycle.sh
-      - scripts/plan-digest.sh
-      - scripts/tofu-plan.sh
-      - scripts/rebuild-drill.sh
-      - scripts/robot.sh
-      - scripts/check-metal-image.sh
-      - talos/**
-      - scripts/test-*.sh
-      - .forgejo/workflows/rebuild-drill.yml
 
 env:
   TF_IN_AUTOMATION: "1"

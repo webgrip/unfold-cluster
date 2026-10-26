@@ -90,6 +90,23 @@
       "dependencyDashboardApproval": true
     },
     {
+      "description": "Talos runs the kubelet, API server, controller manager and scheduler from the tag@sha256 references in talos/talenv.yaml; kubernetesVersion names the same release. They move in one PR, because the infra plan refuses tags that differ from kubernetesVersion.",
+      "matchFileNames": [
+        "talos/talenv.yaml"
+      ],
+      "matchDepNames": [
+        "ghcr.io/siderolabs/kubelet",
+        "registry.k8s.io/kube-apiserver",
+        "registry.k8s.io/kube-controller-manager",
+        "registry.k8s.io/kube-scheduler"
+      ],
+      "groupName": "kubernetes",
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Merging changes nothing running. The next `infra` apply updates every machine config in place: Talos restarts the static pods on each control plane and the kubelet on every node. Never run `talosctl upgrade-k8s`: it rewrites the static pods to tags without a digest, which `immutable-image-references` refuses in kube-system (runbook `docs/runbooks/kubernetes-upgrades.md`)."
+      ]
+    },
+    {
       "description": "The Flux operator chart, its image and the manifests artifact are released together and must move together. Flux itself moves with them: the operator only installs a Flux version that the pinned manifests artifact contains.",
       "matchDepNames": [
         "flux-operator",

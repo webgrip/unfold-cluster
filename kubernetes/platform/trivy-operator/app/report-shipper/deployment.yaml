@@ -25,9 +25,30 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
-      nodeSelector:
-        node.webgrip.io/pool: unfold
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+
       tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
         - key: node.webgrip.io/pool
           operator: Equal
           value: unfold

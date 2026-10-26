@@ -3,14 +3,6 @@ name: supply-chain-check
 
 on:
   pull_request:
-    paths:
-      - kubernetes/platform/kyverno/policies/**
-      - kubernetes/platform/trivy-operator/app/report-shipper/**
-      - tests/image-signatures/**
-      - tests/trivy-report-shipper/**
-      - scripts/test-image-signatures.sh
-      - scripts/test-trivy-report-shipper.sh
-      - .forgejo/workflows/supply-chain-check.yml
   push:
     branches:
       - main

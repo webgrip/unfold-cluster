@@ -1,0 +1,37 @@
+---
+name: external-dependencies-check
+
+on:
+  pull_request:
+    paths:
+      - infra/**
+      - kubernetes/**
+      - talos/**
+      - scripts/**
+      - .forgejo/workflows/**
+      - docs/architecture/external-dependencies.md
+  push:
+    branches:
+      - main
+    paths:
+      - infra/**
+      - kubernetes/**
+      - talos/**
+      - scripts/**
+      - .forgejo/workflows/**
+      - docs/architecture/external-dependencies.md
+  workflow_dispatch:
+
+jobs:
+  inventory:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Refuse an external host the dependency inventory does not list
+        run: ./scripts/check-external-dependencies.sh
+
+      - name: Prove the check fails on each kind of new host and passes on the repository as it is
+        run: ./scripts/test-check-external-dependencies.sh

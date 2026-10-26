@@ -37,7 +37,7 @@
     },
     {
       "action": "accept",
-      "src": ["tag:cp"],
+      "src": ${jsonencode(ci_job_count_sources)},
       "dst": ["tag:homelab-gateway:9150"]
     },
     {

@@ -3,12 +3,6 @@ name: runtime-security-check
 
 on:
   pull_request:
-    paths:
-      - kubernetes/platform/runtime-security/**
-      - kubernetes/platform/observability/vector/**
-      - tests/runtime-security/**
-      - scripts/test-runtime-security.sh
-      - .forgejo/workflows/runtime-security-check.yml
   push:
     branches:
       - main
