@@ -11,7 +11,7 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 | `host-access` | privileged containers, `hostNetwork`, `hostPID`, `hostIPC`, `hostPath`, `hostPort`, Windows host processes | every namespace but `kube-system` | Deny |
 | `sandbox-annotations` | pod annotations under `io.katacontainers.` or `dev.gvisor.` | every namespace | Deny, since the metal node brought Kata ([ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md)) |
 | `sandboxed-workloads` | a sandboxed pod on the wrong RuntimeClass or with its service-account token mounted, or an unknown isolation class | pods labelled, or in a namespace labelled, `ploeg.webgrip.dev/isolation-class`, and the `ci` namespace | Deny |
-| `immutable-image-references` | an image without a digest, or one naming the `latest` tag | every namespace | Deny; Audit, Warn in `kube-system` |
+| `immutable-image-references` | an image without a digest, or one naming the `latest` tag | every namespace, `kube-system` included | Deny |
 | `resource-limits` | a container without cpu and memory requests, a memory limit or an ephemeral-storage limit, an `emptyDir` without `sizeLimit` | every namespace but `kube-system` | Deny |
 | `service-exposure` | Services of type `NodePort`, `LoadBalancer` or `ExternalName`, and `externalIPs` | every namespace | Deny |
 | `cluster-admin-bindings` | a ClusterRoleBinding or RoleBinding to `cluster-admin` for anyone but Flux's `kustomize-controller`, `helm-controller` and `flux-operator` | every namespace; the API server's own bootstrap is exempt | Deny |
@@ -50,7 +50,6 @@ Every exception is written into the policy that grants it, names one workload or
 | `resource-limits` | pods labelled `cnpg.io/cluster` (CloudNativePG instances and jobs), volume `plugins` only, disk-backed | an `emptyDir` without `sizeLimit` | the barman-cloud plugin injects it to hold its unix socket and gives it no size; the containers' ephemeral-storage limits still bound it. A memory-backed `plugins` volume, or the name on any other pod, is refused |
 | `encrypted-volumes` | PVC `zot/zot-data` | StorageClass `hcloud-volumes` (unencrypted) | it was bound before `hcloud-luks` existed and a StorageClass cannot be changed on a bound claim; it holds only mirrored public images. Moving it to `hcloud-luks` removes the grant |
 | `service-exposure` | Service `zot/zot`, nodePort 30500 only | type `NodePort` | the nodes' containerd pulls through Zot on `127.0.0.1:30500` ([talos-registry-mirrors](talos-registry-mirrors.md)) |
-| `immutable-image-references` | namespace `kube-system` | stays Audit, Warn | Talos runs the control-plane static pods and CoreDNS from `registry.k8s.io` tags without a digest. Pinning them is a Talos machine-config change (`cluster.apiServer.image` and its siblings, `cluster.coreDNS.image`) in `infra/` |
 
 Adding a grant means adding it to the policy's grant map, adding an admitted fixture for it and a refused fixture for the nearest thing it must not allow, and adding a row here.
 
@@ -62,7 +61,7 @@ Known violations on the day the policies landed, all `resource-limits`: the `etc
 
 ### Moving to Deny (2026-10-25)
 
-Every policy but `immutable-image-references` in `kube-system` denies. The evidence before the switch:
+Every policy denies; `immutable-image-references` followed in `kube-system` once Talos ran the control plane and CoreDNS by digest ([kubernetes-upgrades](kubernetes-upgrades.md)). The evidence before the switch:
 
 - `apiserver_validating_admission_policy_check_total` on each API server counted violations of `resource-limits`, `host-access`, `pod-security-restricted`, `pod-security-floor`, `immutable-image-references` and `cluster-admin-bindings`, and none of the others.
 - A server-side dry run of every live Deployment, StatefulSet, DaemonSet, CronJob, Job, Pod, Service, Namespace and `cluster-admin` binding named the violators: every workload outside `kube-system` lacked an ephemeral-storage limit (Flux, External Secrets, KEDA, Zot and its credentials Job, kube-state-metrics, vmagent, node-exporter, Vector, etcd-backup); node-exporter and Vector use the host; `observability` lowers PodSecurity; Zot is a NodePort; the Talos images in `kube-system` carry no digest. The `cluster-admin` binding to `system:masters` is the API server's own, which the policy exempts by user.

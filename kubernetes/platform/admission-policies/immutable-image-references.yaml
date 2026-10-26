@@ -47,25 +47,3 @@ metadata:
 spec:
   policyName: immutable-image-references
   validationActions: ["Deny"]
-  matchResources:
-    namespaceSelector:
-      matchExpressions:
-        - key: kubernetes.io/metadata.name
-          operator: NotIn
-          values:
-            - kube-system
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicyBinding
-metadata:
-  name: immutable-image-references-talos-control-plane
-spec:
-  policyName: immutable-image-references
-  validationActions: ["Audit", "Warn"]
-  matchResources:
-    namespaceSelector:
-      matchExpressions:
-        - key: kubernetes.io/metadata.name
-          operator: In
-          values:
-            - kube-system
