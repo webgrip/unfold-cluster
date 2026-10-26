@@ -150,7 +150,7 @@ run "a_pool_without_a_role_tag_is_refused" {
   expect_failures = [data.external.worker_tailnet_key]
 }
 
-run "only_the_control_planes_reach_openbao_and_the_ci_job_count" {
+run "only_the_control_planes_reach_openbao_and_only_they_and_the_system_pool_the_ci_job_count" {
   command = plan
 
   assert {
@@ -169,6 +169,14 @@ run "only_the_control_planes_reach_openbao_and_the_ci_job_count" {
       ]
     ]))
     error_message = "no worker role (tag:hub, tag:ci, tag:runs, tag:metal) nor the retired tag:node may reach the gateway's OpenBao (8200) or CI job count (9150): those run on the control planes only (External Secrets and KEDA), and untrusted CI jobs run on the hub and CI nodes"
+  }
+
+  assert {
+    condition = alltrue([
+      anytrue([for rule in jsondecode(local.headscale_policy).acls : rule.src == ["tag:cp", "tag:system"] && rule.dst == ["tag:homelab-gateway:9150"]]),
+      !anytrue([for rule in jsondecode(local.headscale_policy).acls : contains(rule.src, "tag:system") && anytrue([for destination in rule.dst : endswith(destination, ":8200") || endswith(destination, ":*")])]),
+    ])
+    error_message = "the system pool, where KEDA runs from stage S1 (ADR 0013), reaches the CI job count (9150) and never OpenBao (8200)"
   }
 
   assert {
