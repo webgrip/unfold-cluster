@@ -79,11 +79,11 @@ run "the_tailnet_policy_lets_the_nodes_reach_the_homelab_gateway_and_nothing_mor
   assert {
     condition = [for rule in jsondecode(local.headscale_policy).acls : rule if !contains(rule.src, "autogroup:member")] == [
       { action = "accept", src = ["tag:cp"], dst = ["tag:homelab-gateway:8200"] },
-      { action = "accept", src = ["tag:cp", "tag:ci", "tag:hub", "tag:metal", "tag:runs"], dst = ["tag:homelab-gateway:8427"] },
-      { action = "accept", src = ["tag:cp"], dst = ["tag:homelab-gateway:9150"] },
+      { action = "accept", src = ["tag:cp", "tag:ci", "tag:hub", "tag:metal", "tag:runs", "tag:system"], dst = ["tag:homelab-gateway:8427"] },
+      { action = "accept", src = ["tag:cp", "tag:system"], dst = ["tag:homelab-gateway:9150"] },
       { action = "accept", src = ["tag:headscale"], dst = ["tag:homelab-gateway:443"] },
     ]
-    error_message = "besides the admins, only the nodes and Headscale may open connections: OpenBao (8200) only from the control planes, which run External Secrets; the metrics and log ingest (8427) from every node, because Vector ships each node's logs from its host network; the CI job count (9150) only from the control planes, which run KEDA; Headscale only to the identity provider behind the gateway's 443"
+    error_message = "besides the admins, only the nodes and Headscale may open connections: OpenBao (8200) only from the control planes, which run External Secrets; the metrics and log ingest (8427) from every node, because Vector ships each node's logs from its host network; the CI job count (9150) only from the control planes and the system pool, where KEDA runs (ADR 0013); Headscale only to the identity provider behind the gateway's 443"
   }
 
   assert {
