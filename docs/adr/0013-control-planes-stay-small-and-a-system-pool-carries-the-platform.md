@@ -69,6 +69,7 @@ Checked on 2026-10-26 unless stated.
    * **Trigger to grow,** to three CPX32 one node at a time: any of the API server above 1.5 GiB working set at p95 over 7 days, a control plane under 15% available memory for 30 minutes, etcd's database above 1 GiB, or etcd WAL fsync p99 above 25 ms for an hour. If it fires before the first client, it is an owner decision to exceed the cap or delay S3.
    * A lost control plane is replaced with a CPX22 while CX is sold out (`control_plane_server_type` per node, +€14).
 2. **System pool: option B, at S1, one CPX32.**
+   * It lives in fsn1, beside the hub: Hetzner volumes cannot move between locations, and the observability volumes must be able to fold into the hub at S3.
    * Pool `system`, label and taint `node.webgrip.io/pool=system`, tailnet tag `tag:system` with ports 8427 and 9150: KEDA reads the CI job count on 9150 from wherever it runs, so the pool it moves to needs that port; it never gets OpenBao (8200).
    * It takes KEDA, the cluster-autoscaler, the CNPG operator and its plugin, cert-manager, Zot, Trivy, the Kyverno reports controller, kube-state-metrics, hubble-relay and the package cache.
    * KEDA and the autoscaler leave the control planes. ADR 0004 put them there so they run with no worker at all; the system node is always on, and neither is needed to recover the cluster. KEDA's scaler credential (RFC 0003 R6) moves off the nodes that run etcd.
