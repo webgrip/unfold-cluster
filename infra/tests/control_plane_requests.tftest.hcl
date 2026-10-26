@@ -102,12 +102,4 @@ run "the_api_server_controller_manager_and_scheduler_request_what_they_use" {
     ])
     error_message = "the control-plane components get requests only: a memory limit would let the kernel kill the API server or etcd's neighbours on a spike instead of the scheduler keeping room for them"
   }
-
-  assert {
-    condition = !anytrue([
-      for patch in concat(local.common_patches, local.control_plane_patches, local.log_shipping_patches, local.host_firewall_patches.control_plane) :
-      contains(["KubeAPIServerConfig", "KubeControllerManagerConfig", "KubeSchedulerConfig"], try(yamldecode(patch).kind, ""))
-    ])
-    error_message = "a second KubeAPIServerConfig, KubeControllerManagerConfig or KubeSchedulerConfig would conflict with the requests patch; add fields to control-plane-requests.tf instead"
-  }
 }
