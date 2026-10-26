@@ -57,6 +57,20 @@ Every exception is written into the policy that grants it, names one workload or
 
 Adding a grant means adding it to the policy's grant map, adding an admitted fixture for it and a refused fixture for the nearest thing it must not allow, and adding a row here.
 
+## A policy change lands before its workload
+
+The root Flux Kustomization (`kubernetes/clusters/main/kustomization.yaml`) applies `admission-policies` and the workloads in one server-side apply. Its dry-run judges every workload against the policy already in the cluster, not the one in the same commit. A workload that only the new policy admits (a new image prefix in `pinned-approved-images`, a grant in `host-access` or `pod-security-restricted`) fails the dry-run, the whole apply stops, the new policy is never applied, and every retry fails the same way. The Kustomization `flux-system` then reports `False` with `dry-run failed (Forbidden)` and a `ValidatingAdmissionPolicy` name; children with their own Flux Kustomization keep reconciling.
+
+So a policy change merges first, and the workload merges once `flux-system` reports `Applied revision` for it.
+
+When the deadlock has happened: check that the policy in Git admits the workload (`granted: []` in the message means the cluster still has the old grant map), then apply the policies from Git once as Flux would, and let the next reconcile carry on:
+
+```sh
+kubectl apply --server-side --field-manager=kustomize-controller -k kubernetes/platform/admission-policies
+```
+
+The observability merge of 2026-10-26 deadlocked this way on `alloy-logs`.
+
 ## Rollout: Audit, Warn, then Deny
 
 New policies bind `validationActions: ["Audit", "Warn"]`. A violation is admitted, the client gets a warning naming the policy, and the API server adds an audit annotation and counts it in `apiserver_validating_admission_policy_check_total`. A policy moves to `["Deny"]` in its own pull request once the audit shows no violation from a workload that should keep running, and that pull request fixes or exempts what the audit found.
