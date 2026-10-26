@@ -47,6 +47,10 @@ STUB
 cat >"${work}/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 echo "systemctl $*" >>"${STUB_LOG}"
+if [ "$1" = "cat" ]; then
+  [ ! -e "${STUB_DIR}/not-installed" ]
+  exit
+fi
 if [ "$1" = "show" ]; then
   echo "invocation-1"
   exit 0
@@ -222,6 +226,9 @@ check "an empty configuration is refused" \
 check "config takes only set" \
   bash -c 'sh "$0" config get </dev/null 2>/dev/null; [ $? -eq 2 ]' "$tool"
 
+check "a client secret or configuration sent before cloud-init installed Headscale waits, and changes nothing" \
+  bash -c 'touch "$2/not-installed"; before="$(grep -c "^systemctl restart" "$1")"; secret_out="$(printf "early" | sh "$0" oidc-secret set 2>&1)"; secret_status=$?; config_out="$(printf "early: true" | sh "$0" config set 2>&1)"; config_status=$?; rm -f "$2/not-installed"; [ "$secret_status" -ne 0 ] && [ "$config_status" -ne 0 ] && printf "%s\n%s" "$secret_out" "$config_out" | grep -c "headscale does not answer on its socket yet" | grep -qx 2 && [ "$(cat "$3" 2>/dev/null)" != early ] && [ "$(grep -c "^systemctl restart" "$1")" = "$before" ]' "$tool" "$STUB_LOG" "$work" "${work}/oidc_client_secret"
+
 client_secret="canary-client-secret-$$"
 check "a new client secret is installed, readable by its group only, and Headscale restarted" \
   bash -c 'before="$(grep -c "^systemctl restart" "$2")"; out="$(printf "%s" "$3" | sh "$0" oidc-secret set 2>&1)" && [ "$out" = "client secret installed" ] && [ "$(cat "$1")" = "$3" ] && [ "$(stat -c %a "$1")" = 640 ] && [ "$(grep -c "^systemctl restart" "$2")" = "$((before + 1))" ]' "$tool" "${work}/oidc_client_secret" "$STUB_LOG" "$client_secret"
@@ -342,6 +349,9 @@ check "nodes tag replaces a node carrying its role tag and another" \
   bash -c 'echo "[{\"id\": 3, \"name\": \"unfold-cp-1\", \"tags\": [\"tag:cp\", \"tag:hub\"]}]" >"$2/nodes.json"; sh "$0" nodes tag unfold-cp-1 tag:cp >/dev/null && grep -qx "headscale nodes tag --identifier 3 --tags tag:cp -o json" "$1"' "$tool" "$STUB_LOG" "$work"
 
 touch "${work}/refuse-tag"
+check "nodes tag takes every pool's role tag, the system pool's included" \
+  bash -c '[ "$(sh "$0" nodes tag unfold-system-1 tag:system)" = "unfold-system-1 is not on the tailnet yet; it joins with a tag:system key" ]' "$tool"
+
 check "nodes tag fails when Headscale refuses the tag" \
   bash -c '! (sh "$0" nodes tag unfold-cp-1 tag:cp >/dev/null 2>&1)' "$tool"
 rm -f "${work}/refuse-tag"

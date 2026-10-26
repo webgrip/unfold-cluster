@@ -50,6 +50,7 @@ write_files:
       NODE_USER=${node_user}
       ADMIN_USER=${admin_user}
       CONTROL_PLANE_TAG=tag:cp
+      WORKER_TAGS="${worker_tags}"
       CONTROL_PLANE_KEY_LIFETIME_HOURS=2160
       RENEW_WHEN_DAYS_LEFT=45
       WORKER_KEY_LIFETIME_HOURS=24
