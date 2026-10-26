@@ -242,3 +242,26 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-server-egress
+  namespace: kube-system
+spec:
+  description: 'metrics-server reads each kubelet''s resource metrics on 10250 and serves them to the API server as metrics.k8s.io. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  enableDefaultDeny:
+    egress: false
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP

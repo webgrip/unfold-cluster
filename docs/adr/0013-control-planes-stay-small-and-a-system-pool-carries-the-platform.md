@@ -64,7 +64,7 @@ Checked on 2026-10-26 unless stated.
 ## Decision
 
 1. **Control planes: option C.**
-   * They carry etcd, the API server, controller manager and scheduler, and the recovery set: Flux, cilium-operator, the cloud controller, the CSI controller, CoreDNS, External Secrets, the Kyverno admission controller and the etcd backup. Nothing else tolerates their taint.
+   * They carry etcd, the API server, controller manager and scheduler, and the recovery set: Flux, cilium-operator, the cloud controller, the CSI controller, CoreDNS, External Secrets, the Kyverno admission controller, metrics-server (20m / 64Mi, so `kubectl top` and the HorizontalPodAutoscaler work with no worker) and the etcd backup. Nothing else tolerates their taint.
    * The API server's request becomes 1 GiB in the Talos machine config. Cilium, cilium-envoy, cilium-operator, hubble-relay and the CSI pods get requests. Flux's controllers drop their idle CPU requests.
    * **Trigger to grow,** to three CPX32 one node at a time: any of the API server above 1.5 GiB working set at p95 over 7 days, a control plane under 15% available memory for 30 minutes, etcd's database above 1 GiB, or etcd WAL fsync p99 above 25 ms for an hour. If it fires before the first client, it is an owner decision to exceed the cap or delay S3.
    * A lost control plane is replaced with a CPX22 while CX is sold out (`control_plane_server_type` per node, +€14).

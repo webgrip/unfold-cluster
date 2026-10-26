@@ -5,7 +5,7 @@ metadata:
   name: source-controller-egress
   namespace: flux-system
 spec:
-  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub, the Hetzner chart index and archives from charts.hetzner.cloud, the Tetragon chart from helm.cilium.io, and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub; the Hetzner and Cilium chart indexes and archives from charts.hetzner.cloud and helm.cilium.io; the KEDA, kube-state-metrics, node-exporter, cluster-autoscaler and Trivy chart indexes from their github.io pages, whose archives (except KEDA) are GitHub release assets that redirect to release-assets.githubusercontent.com or objects.githubusercontent.com; and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: source-controller
@@ -38,6 +38,12 @@ spec:
         - matchName: github.com
         - matchName: charts.hetzner.cloud
         - matchName: helm.cilium.io
+        - matchName: kedacore.github.io
+        - matchName: prometheus-community.github.io
+        - matchName: kubernetes.github.io
+        - matchName: aquasecurity.github.io
+        - matchName: release-assets.githubusercontent.com
+        - matchName: objects.githubusercontent.com
         - matchName: ghcr.io
         - matchName: pkg-containers.githubusercontent.com
         - matchName: quay.io
@@ -53,7 +59,7 @@ metadata:
   name: flux-operator-egress
   namespace: flux-system
 spec:
-  description: 'flux-operator pulls the Flux distribution manifests from ghcr.io, whose blobs are served from pkg-containers.githubusercontent.com. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'flux-operator pulls the Flux distribution manifests from ghcr.io, whose blobs are served from pkg-containers.githubusercontent.com, and sends its events to notification-controller. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: flux-operator
@@ -75,6 +81,13 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
     - toFQDNs:
         - matchName: ghcr.io
         - matchName: pkg-containers.githubusercontent.com

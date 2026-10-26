@@ -16,9 +16,14 @@ mise exec -- k9s
 ```
 
 The first call opens a browser on `http://localhost:8000` (or `18000` when 8000 is taken): sign
-in to Authentik, which signs you in through Google. Expect `Username: oidc:<your Authentik user
-name>` and `Groups: [oidc:unfold-admins system:authenticated]`. The ID token lives 15 minutes;
-kubelogin renews it silently with the refresh token for 12 hours, then opens the browser again.
+in to Authentik, which signs you in through Google, then asks for your passkey or security key
+(the homelab `unfold-kubernetes` application runs the `webgrip-passkey-authorization` flow, user
+verification required). Without an enrolled passkey the login is refused; enroll one first under
+Authentik **Settings → MFA Devices → Passkey or security key**. kubelogin's PKCE login runs in your
+browser, which performs the WebAuthn step, so nothing changes on the command line. Expect
+`Username: oidc:<your Authentik user name>` and `Groups: [oidc:unfold-admins system:authenticated]`.
+The ID token lives 15 minutes; kubelogin renews it silently with the refresh token for 12 hours,
+without the passkey, then opens the browser again and asks for it.
 Tokens are cached in `~/.kube/cache/oidc-login`; delete that directory to sign out.
 
 The kubeconfig is committed and holds no secret: a public client, the cluster address and the
@@ -156,6 +161,18 @@ Run after the infra apply has reached all three control planes.
    | jq -c 'select(.user.username=="oidc:ryangr0") | {verb, code: .responseStatus.code}' | tail`
    shows your `200`s and the `403`s from step 3; the `401` from step 4 shows as an event with
    `responseStatus.code` 401.
+
+### Proving the passkey step
+
+Two checks: the passkey is asked, and refusing it ends the login.
+
+1. Sign out (`rm -rf ~/.kube/cache/oidc-login`) and run `mise exec -- kubectl auth whoami`. After
+   the Google sign-in, Authentik shows **Confirm with your passkey**; touch the key or unlock the
+   device. `whoami` then shows `oidc:<you>`. In Authentik **Settings → MFA Devices**, the passkey's
+   *Last used* time is now.
+2. Sign out again, run the same command and cancel the passkey prompt. Authentik refuses the
+   authorization, kubelogin gets no token, and kubectl fails. No token was issued, so the API
+   server sees no request.
 
 ### Proven before the merge
 

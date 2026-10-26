@@ -76,6 +76,8 @@ To rotate the cloud controller's token or the backup key, put the new value in O
 
 Since Talos 1.13 the seed is tracked in the ConfigMap `kube-system/talos-bootstrap-manifests-inventory`. Talos itself only creates seeded objects that are missing from it, so it never undoes what Flux changed. `talosctl upgrade-k8s` is different: it server-side applies every inline manifest again, and by default it deletes inventory objects that are no longer in the machine config. Because the seed is rendered from the files Flux applies, an upgrade with machine configs from current `main` re-applies what Flux already has. Never run it with machine configs older than `main`, which rolls components back to the old seed until Flux next upgrades them. Never remove an object from `inline_manifests` without passing `--manifests-no-prune` to every later upgrade: the prune would delete it, even the Flux operator or the `etcd-backup` namespace.
 
+Kubernetes itself is no longer upgraded that way: the command rewrites the control-plane static pods to tags without a digest, which `immutable-image-references` refuses in `kube-system`. A Kubernetes upgrade moves the pinned references in `talos/talenv.yaml` and reaches the nodes with an `infra` apply ([kubernetes-upgrades](docs/runbooks/kubernetes-upgrades.md)).
+
 ## No kube-proxy
 
 Cilium replaces kube-proxy (`kubeProxyReplacement: true`) and reaches the API server through KubePrism on `localhost:7445`, Talos's local load balancer, so nothing needs a Service before Cilium is up. The control planes' machine config therefore carries `KubeProxyConfig` with `enabled: false`. Deleting that document with `$patch: delete`, as the first configs did, does not work: Talos then falls back to the v1alpha1 default and deploys kube-proxy, which is why the first cluster came up with both. The OpenTofu test in `infra/tests/kube_proxy.tftest.hcl` fails on a `$patch: delete`, on a missing `enabled: false`, and on Cilium values that would need kube-proxy.
@@ -250,6 +252,8 @@ That admin kubeconfig is break-glass: it is in `system:masters` and cannot be re
 ## Security architecture
 
 The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md). The confidential class and the next tier of measures are in [RFC 0002](docs/rfc/0002-confidential-class-and-next-tier.md).
+
+Everything production depends on outside the cluster, what each stops when it is down and what it can change when it is compromised, is in [docs/architecture/external-dependencies.md](docs/architecture/external-dependencies.md), checked against the code on every pull request; the target that keeps production operable without the homelab is [ADR 0015](docs/adr/0015-production-stays-operable-without-the-homelab.md), and what to do meanwhile is the [break-glass runbook](docs/runbooks/break-glass.md).
 
 ## Open
 
