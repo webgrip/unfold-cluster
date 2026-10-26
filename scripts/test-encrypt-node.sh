@@ -256,8 +256,7 @@ echo "every check passed against the real script"
 mutate() {
   local name="$1" from="$2" to="$3" mutant="${work}/mutant.sh"
   grep -qF -- "$from" "$script" || { echo "FAIL: mutant '${name}' no longer applies; update the test"; return 1; }
-  python3 -c 'import sys; p,f,t,o=sys.argv[1:]; s=open(p).read(); open(o,"w").write(s.replace(f,t,1))' "$script" "$from" "$to" "$mutant"
-  chmod +x "$mutant"
+  "${repo}/scripts/write-mutant.sh" "$script" "$from" "$to" "$mutant" || { echo "FAIL: mutant '${name}' could not be written"; return 1; }
   quiet=1
   suite "$mutant"
   quiet=""
