@@ -26,6 +26,7 @@ spec:
       strategy: uninstall
       remediateLastFailure: true
   values:
+    priorityClassName: platform-critical
     crds:
       install: true
     affinity:

@@ -5,6 +5,7 @@ resources:
   - flux-system
   - ../../platform/flux-operator
   - ../../platform/flux-instance
+  - ../../platform/priority-classes
   - ../../platform/cilium
   - ../../platform/hetzner-charts
   - ../../platform/hcloud-cloud-controller-manager

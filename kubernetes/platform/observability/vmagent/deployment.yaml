@@ -18,6 +18,7 @@ spec:
         app.kubernetes.io/name: vmagent
     spec:
       serviceAccountName: vmagent
+      priorityClassName: platform-background
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

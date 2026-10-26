@@ -23,7 +23,7 @@ spec:
       enabled: true
       keep: true
     global:
-      priorityClassName: system-cluster-critical
+      priorityClassName: platform-critical
     replicaCount: 1
     enableCertificateOwnerRef: true
     dns01RecursiveNameservers: https://cloudflare-dns.com/dns-query

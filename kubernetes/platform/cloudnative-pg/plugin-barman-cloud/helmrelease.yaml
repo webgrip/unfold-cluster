@@ -32,7 +32,7 @@ spec:
       repository: cloudnative-pg/plugin-barman-cloud-sidecar
       # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar
       tag: v0.15.1@sha256:2287a793a804db751edd0d07d44cd549e357677e98a800eb12e2cf7c0d53f9b0
-    priorityClassName: system-cluster-critical
+    priorityClassName: platform-critical
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
