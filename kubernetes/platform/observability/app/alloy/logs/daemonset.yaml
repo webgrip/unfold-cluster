@@ -2,13 +2,13 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: vector
+  name: alloy-logs
   labels:
-    app.kubernetes.io/name: vector
+    app.kubernetes.io/name: alloy-logs
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: vector
+      app.kubernetes.io/name: alloy-logs
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -16,9 +16,9 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: vector
+        app.kubernetes.io/name: alloy-logs
     spec:
-      serviceAccountName: vector
+      serviceAccountName: alloy-logs
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       tolerations:
@@ -27,28 +27,35 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: vector
-          # renovate: datasource=docker depName=docker.io/timberio/vector
-          image: docker.io/timberio/vector:0.60.0-distroless-libc@sha256:a9ed9a4710bdc2efa66e94c1e8edc7b439709e6e50079f1e1b2b1bf479d387da
+        - name: alloy
+          # renovate: datasource=docker depName=docker.io/grafana/alloy
+          image: docker.io/grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
           args:
-            - --config-dir
-            - /etc/vector/
+            - run
+            - /etc/alloy
+            - --server.http.listen-addr=0.0.0.0:9598
+            - --storage.path=/var/lib/alloy
+            - --stability.level=experimental
+            - --disable-reporting
           env:
-            - name: VECTOR_SELF_NODE_NAME
+            - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            - name: VECTOR_SELF_POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: VECTOR_SELF_POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
           ports:
-            - name: metrics
+            - name: http
               containerPort: 9598
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 30
+            failureThreshold: 5
           securityContext:
             runAsUser: 0
             allowPrivilegeEscalation: false
@@ -58,28 +65,33 @@ spec:
                 - ALL
           resources:
             requests:
-              cpu: 20m
-              memory: 96Mi
+              cpu: 30m
+              memory: 128Mi
             limits:
-              memory: 512Mi
+              memory: 384Mi
               ephemeral-storage: 256Mi
           volumeMounts:
             - name: config
-              mountPath: /etc/vector
+              mountPath: /etc/alloy
               readOnly: true
             - name: data
-              mountPath: /var/lib/vector
+              mountPath: /var/lib/alloy
             - name: var-log
               mountPath: /var/log
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: config
           configMap:
-            name: vector-config
+            name: alloy-logs
         - name: data
           hostPath:
-            path: /var/lib/vector
+            path: /var/lib/alloy
             type: DirectoryOrCreate
         - name: var-log
           hostPath:
             path: /var/log
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

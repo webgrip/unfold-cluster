@@ -1,0 +1,120 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  labels:
+    grafana.webgrip.io/instance: unfold
+spec:
+  version: docker.io/grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+  config:
+    server:
+      root_url: https://grafana.ops.unfoldhq.dev/
+    analytics:
+      reporting_enabled: "false"
+      check_for_updates: "false"
+      check_for_plugin_updates: "false"
+    news:
+      news_feed_enabled: "false"
+    users:
+      allow_sign_up: "false"
+      auto_assign_org_role: Viewer
+    security:
+      cookie_secure: "true"
+      disable_gravatar: "true"
+    auth:
+      disable_login_form: "false"
+      oauth_allow_insecure_email_lookup: "false"
+    auth.generic_oauth:
+      enabled: "true"
+      name: Authentik
+      client_id: unfold-grafana
+      scopes: openid profile email groups
+      auth_url: https://authentik.webgrip.dev/application/o/authorize/
+      token_url: https://authentik.webgrip.dev/application/o/token/
+      api_url: https://authentik.webgrip.dev/application/o/userinfo/
+      use_pkce: "true"
+      allow_sign_up: "true"
+      role_attribute_strict: "true"
+      role_attribute_path: "contains(groups[*], 'unfold-admins') && 'Admin' || contains(groups[*], 'unfold-viewers') && 'Viewer'"
+    plugins:
+      preinstall_disabled: "true"
+  deployment:
+    spec:
+      strategy:
+        type: Recreate
+      template:
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 472
+            runAsGroup: 472
+            fsGroup: 472
+            seccompProfile:
+              type: RuntimeDefault
+          tolerations:
+            - key: node.webgrip.io/pool
+              operator: Equal
+              value: system
+              effect: NoSchedule
+            - key: node.webgrip.io/pool
+              operator: Equal
+              value: unfold
+              effect: NoSchedule
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node.webgrip.io/pool
+                        operator: In
+                        values:
+                          - system
+                          - unfold
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: node.webgrip.io/pool
+                        operator: In
+                        values:
+                          - system
+          containers:
+            - name: grafana
+              image: docker.io/grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+              env:
+                - name: HTTPS_PROXY
+                  value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+                - name: NO_PROXY
+                  value: localhost,127.0.0.1,.svc,.svc.cluster.local,grafana.com,storage.googleapis.com
+                - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-oidc
+                      key: client_secret
+                      optional: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
+                  ephemeral-storage: 256Mi
+          volumes:
+            - name: grafana-data
+              emptyDir:
+                sizeLimit: 512Mi
+            - name: grafana-logs
+              emptyDir:
+                sizeLimit: 128Mi
+            - name: grafana-tmp
+              emptyDir:
+                sizeLimit: 128Mi

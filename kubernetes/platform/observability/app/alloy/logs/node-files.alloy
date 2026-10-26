@@ -1,0 +1,81 @@
+discovery.kubernetes "pods_on_this_node" {
+	role = "pod"
+
+	selectors {
+		role  = "pod"
+		field = "spec.nodeName=" + sys.env("NODE_NAME")
+	}
+}
+
+discovery.relabel "pod_logs" {
+	targets = discovery.kubernetes.pods_on_this_node.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		separator     = "/"
+		target_label  = "__path__"
+		replacement   = "/var/log/pods/*$1/*.log"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_node_name"]
+		target_label  = "node"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+}
+
+local.file_match "pod_logs" {
+	path_targets = discovery.relabel.pod_logs.output
+}
+
+loki.source.file "pod_logs" {
+	targets    = local.file_match.pod_logs.targets
+	forward_to = [loki.process.pod.receiver]
+}
+
+local.file_match "kube_audit" {
+	path_targets = [{"__path__" = "/var/log/audit/kube/*.log"}]
+}
+
+loki.source.file "kube_audit" {
+	targets       = local.file_match.kube_audit.targets
+	forward_to    = [loki.process.audit.receiver]
+	tail_from_end = true
+}
+
+local.file_match "hubble_egress" {
+	path_targets = [{"__path__" = "/var/log/hubble/egress-flows.log"}]
+}
+
+loki.source.file "hubble_egress" {
+	targets    = local.file_match.hubble_egress.targets
+	forward_to = [loki.process.hubble_egress.receiver]
+}
+
+local.file_match "tetragon" {
+	path_targets = [{"__path__" = "/var/log/tetragon/tetragon.log"}]
+}
+
+loki.source.file "tetragon" {
+	targets    = local.file_match.tetragon.targets
+	forward_to = [loki.process.tetragon.receiver]
+}
