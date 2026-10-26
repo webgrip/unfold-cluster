@@ -107,9 +107,30 @@ spec:
       - name: cache-policies
         emptyDir:
           sizeLimit: 256Mi
-    nodeSelector:
-      node.webgrip.io/pool: unfold
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+                    - unfold
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+
     tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
+        effect: NoSchedule
       - key: node.webgrip.io/pool
         operator: Equal
         value: unfold
@@ -118,9 +139,30 @@ spec:
       scanJobsInSameNamespace: false
       scanJobCompressLogs: true
       scanJobAutomountServiceAccountToken: false
-      scanJobNodeSelector:
-        node.webgrip.io/pool: unfold
+      scanJobAffinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+
       scanJobTolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
         - key: node.webgrip.io/pool
           operator: Equal
           value: unfold
