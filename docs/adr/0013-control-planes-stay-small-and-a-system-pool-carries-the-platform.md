@@ -98,3 +98,24 @@ PriorityClasses, disruption budgets and spread follow [Capacity and scale](../ar
 * The admission tests refuse a CI pod that tolerates `runs`, and a Run pod without `safe-to-evict: "false"` on the `runs` pool; they admit the correct ones.
 * An `infra` plan for S1 shows one CPX32 at €35.99 and no change to the control planes.
 * A Pending hardened Run creates exactly one CPX42 labelled `hcloud/node-group=runs`, which is deleted about ten minutes after the Run ends.
+
+## History
+
+* 2026-10-26: The trigger to grow fired: the API server's working set reached 1.66 to 1.71 GiB on
+  cp-1 and cp-3, cp-3 had 1% of its memory free, and the kernel killed the API server on cp-2 and
+  cp-3 (exit 137), taking the controller manager, the scheduler, Flux, Kyverno and KEDA down with
+  it. The owner ruled out growing them over the cap, so the control planes run less instead:
+  * the API server gets `GOMEMLIMIT=1400MiB`, so its garbage collector works before the node runs
+    out, and the kubelet on the control planes evicts ordinary pods at 500 MiB available (300 MiB
+    hard) before the kernel picks the API server, with the disk and inode thresholds kept at
+    their defaults;
+  * Kyverno's reports controller and every report type are off: two image-signature policies in
+    Audit do not need a controller that watches nearly every resource. The signature alert reads
+    Kyverno's metric, which the admission controller still emits;
+  * Tetragon runs on the workers only (ADR 0012);
+  * cert-manager, which was never in the recovery set, runs on the system pool only;
+  * Hubble relay runs on the system pool, and the CSI node plugin, which no control-plane pod
+    uses, no longer runs on the control planes.
+  The pods that prefer the system pool and had fallen back to the control planes before it
+  existed (KEDA, CloudNativePG, the cluster-autoscaler) were rescheduled onto it by hand; a
+  preference never moves a running pod.

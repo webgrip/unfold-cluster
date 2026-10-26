@@ -138,3 +138,13 @@ What runs ([runtime-security](../runbooks/runtime-security.md) has the detail):
 - Live, after the merge: `kubectl -n kube-system get ds tetragon` shows one ready pod per node,
   `kubectl get tracingpolicies` lists six, and the canary's events appear in VictoriaLogs
   (`cluster:=unfold source:=tetragon namespace:=runtime-security-canary`).
+
+## History
+
+* 2026-10-26: Tetragon leaves the control planes and runs on the workers only. The control planes
+  ran out of memory: the API server was killed by the kernel (exit 137) on two of them, cp-3 sat
+  at 99%, and the owner ruled out bigger control planes (ADR 0013). Tetragon used about 110 MiB
+  and reserved 384 MiB on each. The control planes run only the recovery set, signed and pinned,
+  on Talos without a shell; untrusted code runs only on workers, where detection stays.
+  `UnfoldTetragonNotOnEveryNode` compares the DaemonSet's own desired and ready counts, so it now
+  watches the workers. The live check above reads "one ready pod per worker".

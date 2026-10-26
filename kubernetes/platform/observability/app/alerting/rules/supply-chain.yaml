@@ -74,7 +74,7 @@ groups:
           team: platform
         annotations:
           summary: "A webgrip image without the estate's cosign signature was admitted in {{ $labels.resource_namespace }} ({{ $labels.policy_name }})"
-          description: "The signature policy runs in Audit: it reports and lets the pod start. Find the pod with kubectl get policyreports -A, or the Warn line in the client that applied it. A webgrip image must be signed by the OpenBao Transit key cosign-webgrip before it runs on Unfold; until every webgrip image here passes, the policy cannot move to Deny. Runbook: unfold-cluster docs/runbooks/image-signatures.md."
+          description: "The signature policy runs in Audit: it reports and lets the pod start. Find the pod in the Warn line of the client that applied it (Flux shows it in its events), or in the Kyverno admission controller's log; there are no PolicyReports since 2026-10-26. A webgrip image must be signed by the OpenBao Transit key cosign-webgrip before it runs on Unfold; until every webgrip image here passes, the policy cannot move to Deny. Runbook: unfold-cluster docs/runbooks/image-signatures.md."
       - alert: UnfoldSignatureWebhookAbsent
         expr: |
           (sum(up{cluster="unfold", job="kyverno", component="admission-controller"}) or vector(0)) == 0

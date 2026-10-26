@@ -31,11 +31,19 @@ spec:
     image:
       # renovate: datasource=docker depName=quay.io/jetstack/cert-manager-controller
       tag: v1.21.3@sha256:9f4f96a33c7774cef24466fcd85031997531a03a8d117f151126baa8d1290dcc
-    nodeSelector:
-      node-role.kubernetes.io/control-plane: ""
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
     tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
         effect: NoSchedule
     resources:
       requests:
@@ -52,11 +60,19 @@ spec:
       image:
         # renovate: datasource=docker depName=quay.io/jetstack/cert-manager-webhook
         tag: v1.21.3@sha256:055ac8e9de6a0ba6763794838fe38944acc650f68ebe1b01dd8be079e580f458
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
       tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
           effect: NoSchedule
       resources:
         requests:
@@ -75,11 +91,19 @@ spec:
       image:
         # renovate: datasource=docker depName=quay.io/jetstack/cert-manager-cainjector
         tag: v1.21.3@sha256:083d0e906f8eb44e255fe4ff817ae54e49f9ed82e22f1011bb4e9e4f4b8a641f
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
       tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
           effect: NoSchedule
       resources:
         requests:

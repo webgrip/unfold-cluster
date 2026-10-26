@@ -195,9 +195,12 @@ hubble:
         memory: 32Mi
       limits:
         memory: 128Mi
+    nodeSelector:
+      node.webgrip.io/pool: system
     tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
         effect: NoSchedule
   tls:
     auto:

@@ -170,7 +170,7 @@ data "talos_machine_configuration" "control_plane" {
   kubernetes_version = local.kubernetes_version
   docs               = false
   examples           = false
-  config_patches     = concat(local.common_patches, local.control_plane_patches, local.control_plane_component_requests_patches, [local.api_vip_patch], local.host_firewall_patches.control_plane, local.log_shipping_patches)
+  config_patches     = concat(local.common_patches, local.control_plane_patches, local.control_plane_component_requests_patches, [local.control_plane_kubelet_memory_patch, local.api_vip_patch], local.host_firewall_patches.control_plane, local.log_shipping_patches)
 }
 
 data "talos_machine_configuration" "worker" {
