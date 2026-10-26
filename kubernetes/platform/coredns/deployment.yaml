@@ -17,26 +17,12 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 25%
       maxUnavailable: 1
   template:
     metadata:
       labels:
         k8s-app: kube-dns
     spec:
-      priorityClassName: system-cluster-critical
-      serviceAccountName: coredns
-      dnsPolicy: Default
-      nodeSelector:
-        kubernetes.io/os: linux
-        node-role.kubernetes.io/control-plane: ""
-      tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
-        - key: node.cloudprovider.kubernetes.io/uninitialized
-          operator: Exists
-          effect: NoSchedule
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -62,15 +48,6 @@ spec:
                       operator: In
                       values:
                         - kube-dns
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels:
-              k8s-app: kube-dns
-          matchLabelKeys:
-            - pod-template-hash
       containers:
         - name: coredns
           image: registry.k8s.io/coredns/coredns:v1.14.7@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286
@@ -91,12 +68,6 @@ spec:
             - name: metrics
               containerPort: 9153
               protocol: TCP
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              memory: 170Mi
           livenessProbe:
             httpGet:
               path: /health
@@ -111,10 +82,12 @@ spec:
               path: /ready
               port: 8181
               scheme: HTTP
-            periodSeconds: 10
-            timeoutSeconds: 1
-            successThreshold: 1
-            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 70Mi
+            limits:
+              memory: 170Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -127,6 +100,18 @@ spec:
             - name: config-volume
               mountPath: /etc/coredns
               readOnly: true
+      dnsPolicy: Default
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
+      serviceAccountName: coredns
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node.cloudprovider.kubernetes.io/uninitialized
+          operator: Exists
+          effect: NoSchedule
       volumes:
         - name: config-volume
           configMap:
