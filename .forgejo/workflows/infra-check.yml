@@ -10,6 +10,8 @@ on:
       - .forgejo/workflows/infra.yml
       - .forgejo/workflows/infra-check.yml
       - kubernetes/clusters/main/**
+      - kubernetes/platform/flux-fallback-source/**
+      - kubernetes/platform/network-policy/flux-system-egress.yaml
       - kubernetes/platform/cilium/**
       - kubernetes/platform/hcloud-cloud-controller-manager/**
       - kubernetes/platform/hetzner-charts/**

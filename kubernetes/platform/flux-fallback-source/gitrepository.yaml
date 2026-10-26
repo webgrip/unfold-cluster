@@ -1,0 +1,14 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: unfold-cluster-forgejo
+spec:
+  interval: 10m
+  url: https://forgejo.webgrip.dev/webgrip/unfold-cluster.git
+  ref:
+    branch: main
+  verify:
+    mode: HEAD
+    secretRef:
+      name: trusted-signers
