@@ -1,0 +1,68 @@
+rule_files:
+  - cluster.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_created{cluster="unfold",node="unfold-ci-overflow-1"}'
+        values: "946684800x400"
+      - series: 'kube_node_labels{cluster="unfold",node="unfold-ci-overflow-1",label_node_webgrip_io_pool="ci"}'
+        values: "1x400"
+      - series: 'kube_node_created{cluster="unfold",node="unfold-app-1"}'
+        values: "946684800x400"
+      - series: 'kube_node_labels{cluster="unfold",node="unfold-app-1",label_node_webgrip_io_pool="unfold"}'
+        values: "1x400"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: UnfoldAutoscaledNodeRunningLong
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, service: ci-autoscaler, node: unfold-ci-overflow-1}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_created{cluster="unfold",node="unfold-ci-overflow-1"}'
+        values: "946699200x400"
+      - series: 'kube_node_labels{cluster="unfold",node="unfold-ci-overflow-1",label_node_webgrip_io_pool="ci"}'
+        values: "1x400"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: UnfoldAutoscaledNodeRunningLong
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'cluster_autoscaler_unregistered_nodes_count{cluster="unfold",job="cluster-autoscaler"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldAutoscalerUnregisteredNode
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, service: ci-autoscaler}
+
+  - interval: 1m
+    input_series:
+      - series: 'cluster_autoscaler_unregistered_nodes_count{cluster="unfold",job="cluster-autoscaler"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldAutoscalerUnregisteredNode
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="cluster-autoscaler"}'
+        values: "1x10 0x50"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldAutoscalerAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, service: ci-autoscaler}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="cluster-autoscaler"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: UnfoldAutoscalerAbsent
+        exp_alerts: []

@@ -1,0 +1,30 @@
+---
+name: ops-consoles-check
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/platform/gateway-api/**
+      - kubernetes/platform/ops-consoles/auth/authentik-relay.yaml
+      - scripts/test-ops-consoles.sh
+      - .forgejo/workflows/ops-consoles-check.yml
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/platform/gateway-api/**
+      - kubernetes/platform/ops-consoles/auth/authentik-relay.yaml
+      - scripts/test-ops-consoles.sh
+      - .forgejo/workflows/ops-consoles-check.yml
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Check the vendored Gateway API CRDs against the pinned release and prove the Authentik relay opens Authentik and nothing else
+        run: ./scripts/test-ops-consoles.sh --mutation-test

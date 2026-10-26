@@ -1,0 +1,11 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaFolder
+metadata:
+  name: unfold
+spec:
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  uid: unfold-cluster
+  title: Unfold cluster

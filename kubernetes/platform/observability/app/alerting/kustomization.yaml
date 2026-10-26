@@ -1,0 +1,20 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - vmalert.yaml
+  - alertmanager.yaml
+configMapGenerator:
+  - name: vmalert-metrics-rules
+    files:
+      - rules/cluster.yaml
+      - rules/supply-chain.yaml
+  - name: vmalert-logs-rules
+    files:
+      - rules/runtime.yaml
+  - name: vmalert-audit-rules
+    files:
+      - rules/audit.yaml
+  - name: alertmanager
+    files:
+      - alertmanager.yml

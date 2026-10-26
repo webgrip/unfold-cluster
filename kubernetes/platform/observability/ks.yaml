@@ -1,0 +1,52 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: observability-secrets
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: external-secrets-stores
+  interval: 1h
+  retryInterval: 2m
+  path: ./kubernetes/platform/observability/secrets
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: grafana-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  path: ./kubernetes/platform/observability/grafana-operator
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: grafana
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: grafana-operator
+    - name: observability-secrets
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  path: ./kubernetes/platform/observability/grafana
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

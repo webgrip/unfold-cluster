@@ -1,0 +1,24 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - namespace.yaml
+  - helmrepository.yaml
+  - kube-state-metrics.yaml
+  - node-exporter.yaml
+  - alloy
+  - victoria-metrics
+  - victoria-logs
+  - alerting
+  - query
+  - networkpolicy.yaml
+patches:
+  - path: placement.yaml
+    target:
+      kind: Deployment
+      labelSelector: observability.webgrip.io/placement=central
+  - path: placement.yaml
+    target:
+      kind: StatefulSet
+      labelSelector: observability.webgrip.io/placement=central

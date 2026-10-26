@@ -1,0 +1,2 @@
+{"msg":"service[kubelet](Running): Health check successful","talos-level":"info","talos-service":"kubelet","talos-time":"2026-10-25T21:00:03.500000000Z"}
+{"msg":"etcd member is unhealthy","talos-level":"error","talos-service":"etcd","talos-time":"2026-10-25T21:00:03.600000000Z"}

@@ -1,0 +1,166 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oauth2-proxy-policy-reporter
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-policy-reporter
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-policy-reporter
+    app.kubernetes.io/component: oauth2-proxy
+spec:
+  selector:
+    app.kubernetes.io/name: oauth2-proxy-policy-reporter
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-policy-reporter
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-policy-reporter
+    app.kubernetes.io/component: oauth2-proxy
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy-policy-reporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oauth2-proxy-policy-reporter
+        app.kubernetes.io/component: oauth2-proxy
+    spec:
+      serviceAccountName: oauth2-proxy-policy-reporter
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - unfold
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oauth2-proxy
+          # renovate: datasource=docker depName=quay.io/oauth2-proxy/oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+          args:
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --provider=oidc
+            - --provider-display-name=Authentik
+            - --oidc-issuer-url=https://authentik.webgrip.dev/application/o/unfold-consoles/
+            - --client-id=unfold-consoles
+            - --client-secret-file=/etc/oauth2-proxy/oidc/client_secret
+            - --code-challenge-method=S256
+            - --scope=openid profile offline_access unfold_kubernetes
+            - --oidc-email-claim=preferred_username
+            - --oidc-groups-claim=unfold_groups
+            - --allowed-group=unfold-admins
+            - --allowed-group=unfold-viewers
+            - --email-domain=*
+            - --redirect-url=https://policy-reporter.ops.unfoldhq.dev/oauth2/callback
+            - --upstream=http://policy-reporter-ui.policy-reporter.svc.cluster.local:8080
+            - --cookie-name=__Host-ops-policy-reporter
+            - --cookie-secret-file=/etc/oauth2-proxy/cookie/cookie_secret
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=12h
+            - --cookie-refresh=10m
+            - --skip-provider-button=true
+            - --silence-ping-logging=true
+            - --pass-access-token=false
+            - --pass-authorization-header=false
+          env:
+            - name: HTTPS_PROXY
+              value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+            - name: NO_PROXY
+              value: .cluster.local,.svc,10.65.0.0/16,10.66.0.0/16
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 5m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+              ephemeral-storage: 16Mi
+          volumeMounts:
+            - name: oidc
+              mountPath: /etc/oauth2-proxy/oidc
+              readOnly: true
+            - name: cookie
+              mountPath: /etc/oauth2-proxy/cookie
+              readOnly: true
+      volumes:
+        - name: oidc
+          secret:
+            secretName: ops-consoles-oidc
+        - name: cookie
+          secret:
+            secretName: oauth2-proxy-policy-reporter-cookie

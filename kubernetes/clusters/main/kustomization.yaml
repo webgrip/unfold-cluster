@@ -5,6 +5,8 @@ resources:
   - flux-system
   - ../../platform/flux-operator
   - ../../platform/flux-instance
+  - ../../platform/gateway-api
+  - ../../platform/flux-fallback-source
   - ../../platform/priority-classes
   - ../../platform/cilium
   - ../../platform/hetzner-charts
@@ -32,3 +34,4 @@ resources:
   - ../../platform/kyverno
   - ../../platform/trivy-operator
   - ../../platform/runtime-security
+  - ../../platform/ops-consoles

@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: kyverno-apiserver
 spec:
-  description: Every Kyverno pod, its upgrade and uninstall hooks included, talks to the Kubernetes API. vmagent scrapes the controllers' metrics on 8000.
+  description: Every Kyverno pod, its upgrade and uninstall hooks included, talks to the Kubernetes API. alloy-metrics scrapes the controllers' metrics on 8000.
   endpointSelector: {}
   egress:
     - toEntities:
@@ -17,7 +17,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/name: alloy-metrics
       toPorts:
         - ports:
             - port: "8000"

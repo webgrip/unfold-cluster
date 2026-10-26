@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: central-placement
+spec:
+  template:
+    spec:
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+                      - unfold
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system

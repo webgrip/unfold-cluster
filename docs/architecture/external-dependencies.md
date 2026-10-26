@@ -96,7 +96,7 @@ monthly change the target adds.
 | E34 | Upstream registries: `ghcr.io`, `quay.io`, `docker.io`, `registry.k8s.io` | U→X | Every image; Zot pulls through them and containerd falls back to them | New images and nodes cannot pull what is not cached. A booting node always pulls Cilium and the control plane upstream, before Zot runs. Zot forgets mirrored images not pulled in 30 days | No: everything is pinned by digest | Zot pull-through with fallback (`skipFallback: false`) | c | Talos image cache in the snapshot for the boot set; Zot keeps every pinned digest | M | 1,00 |
 | E35 | `code.forgejo.org` registry | U→X | The CI runner image | No new CI pods | No: digest pin | – | c | Mirrored through Zot like the other four | S | 0,00 |
 | E36 | Zot (in the cluster) | – | The pull-through cache, CI pushes, the Trivy database, signature lookups | containerd falls back upstream; CI pushes fail. One replica on the hub, an unencrypted volume | It serves digests only | Fallback by design | b | Already in; keep the boot set in it (E34) | – | 0,00 |
-| E37 | Chart sources: `helm.cilium.io`, `charts.hetzner.cloud`, the `github.io` chart pages, OCI charts on `ghcr.io` and `quay.io`, the Flux distribution on `ghcr.io` | U→X | Flux source-controller and flux-operator | No upgrades; after a source-controller restart, releases cannot be re-rendered (running pods stay) | No: chart digests and versions are pinned | – | c | OCI charts pulled through Zot once Zot is not needed to install itself | M | 0,00 |
+| E37 | Chart sources: `helm.cilium.io`, `charts.hetzner.cloud`, the `github.io` chart pages and the GitHub release-asset hosts their archives redirect to, OCI charts on `ghcr.io` and `quay.io`, the Flux distribution on `ghcr.io` | U→X | Flux source-controller and flux-operator | No upgrades; after a source-controller restart, releases cannot be re-rendered (running pods stay) | No: chart digests and versions are pinned | – | c | OCI charts pulled through Zot once Zot is not needed to install itself | M | 0,00 |
 | E38 | Sidero Image Factory (`factory.talos.dev`) and the Talos installer | U→X | The Talos snapshot build, every Talos upgrade (the installer is named by tag) | No new Talos version or schematic; scaling from the existing snapshot still works | **Yes, at the next upgrade:** the installer is pulled by tag (digest pinning is in flight) | – | d | Installer pinned by digest and mirrored; the factory is self-hostable (MPL) if Sidero's terms change | M | 0,00 |
 | E39 | Talos discovery service (`discovery.talos.dev`, the default) | U→X | Member hints for `talosctl get members`; KubeSpan is off | Nothing the cluster needs | Sees encrypted membership data; BUSL licence | – | b | Switch the service registry off | S | 0,00 |
 | E40 | NTP (Talos default `time.cloudflare.com`) | U→X | Node clocks | Drift, tolerable for days | Time skew could expire certificates early | – | a | Add Hetzner's NTP servers as more sources | S | 0,00 |
@@ -105,6 +105,8 @@ monthly change the target adds.
 | E43 | Google Workspace | U→X | Upstream of Authentik today; the operators' IdP and an alert mail relay in the target | No human OIDC login | **Partly:** an operator identity, as E13 | Workspace 2-step verification | a | Stays (ADR 0014) | – | 0,00 |
 | E44 | Model providers | U→X | LiteLLM's calls (ADR 0007) | Runs and the decider stop | No infrastructure change | Budgets per key | a | Stays | – | usage |
 | E45 | The owner's password manager and offline copy (the T0 seed) | – | Break-glass for everything; the rebuild | – | It opens everything | Holds the passphrase, the age key, the tokens and the Talos bundle. **Gap:** not the disk KMS master key or the `hcloud-luks` passphrase, both only in the homelab OpenBao (and the state) | a | Add both now ([break-glass](../runbooks/break-glass.md#the-offline-seed)) | S | 0,00 |
+| E46 | Grafana plugin source (`grafana.com`, redirecting to `storage.googleapis.com`) | U→X | Grafana downloads its one plugin, the VictoriaLogs data source, when its pod starts | A new Grafana pod starts without the logs data source; metrics and alerting are untouched | **No:** it can only serve a plugin to Grafana, which reads but cannot change the cluster | Egress allowed by name for Grafana only | c | Bake the plugin into a mirrored image or serve it from Zot | S | 0,00 |
+| E47 | Off-site uptime-kuma (`uptime.webgrip.dev`, on garage-fsn1) | U→X | The dead-man's switch: Alertmanager pushes `Watchdog` every two minutes | Nothing pages when Unfold's alerting itself dies | **No:** it only receives pushes | The homelab's blackbox exporter also reads `Watchdog` through `query.ops.unfoldhq.dev` | a | Keep; its push monitor becomes declarative | S | 0,00 |
 
 ## Classification
 
@@ -155,9 +157,16 @@ at its row.
 | `docker.io`, `registry-1.docker.io`, `auth.docker.io`, `production.cloudflare.docker.com`, `production.cloudfront.docker.com`, `docker-images-prod.*.r2.cloudflarestorage.com` | E34 |
 | `registry.k8s.io`, `cdn.registry.k8s.io`, `*-docker.pkg.dev` | E34 |
 | `code.forgejo.org` | E35 |
-| `helm.cilium.io`, `charts.hetzner.cloud`, `kedacore.github.io`, `prometheus-community.github.io`, `kubernetes.github.io`, `aquasecurity.github.io` | E37 |
+| `helm.cilium.io`, `charts.hetzner.cloud`, `kedacore.github.io`, `prometheus-community.github.io`, `kubernetes.github.io`, `aquasecurity.github.io`, `kubernetes-sigs.github.io`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` | E37 |
 | `factory.talos.dev` | E38 |
 | `pkgs.tailscale.com` | E41 |
 | `dl.k8s.io` | E42 |
+| `ntfy.webgrip.dev` | E14, E15 |
+| `grafana.ops.unfoldhq.dev`, `query.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own Grafana and its read-only query endpoint behind the ops Gateway; the homelab Grafana reads `query` over the tailnet |
+| `grafana.com`, `storage.googleapis.com` | E46 |
+| `uptime.webgrip.dev` | E47 |
 | `slsa.dev`, `spdx.dev` | none: predicate type identifiers in attestations, never contacted |
+| `ops.unfoldhq.dev`, `hubble.ops.unfoldhq.dev`, `headlamp.ops.unfoldhq.dev`, `policy-reporter.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own consoles behind its Gateway on the tailnet; login goes through Authentik, the certificate through Cloudflare DNS-01 and Let's Encrypt |
+| `grafana.webgrip.dev` | none: a dashboard link a viewer follows to the homelab FinOps dashboard, never contacted by the cluster |
+| `kubernetes.io`, `git.k8s.io`, `datatracker.ietf.org`, `tools.ietf.org`, `www.rfc-editor.org`, `fetch.spec.whatwg.org` | none: specification links in the Gateway API CRD descriptions, never contacted |
 | `ploeg.webgrip.dev` | none: a label and annotation prefix, never contacted |

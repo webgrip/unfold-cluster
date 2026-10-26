@@ -10,7 +10,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 
 | Namespace | Default deny | Egress policy |
 | --- | --- | --- |
-| every namespace except `kube-system` and `flux-system` | enforced by the `default-deny` CiliumClusterwideNetworkPolicy; DNS to kube-dns is allowed | its own CiliumNetworkPolicy (`etcd-backup`, and `zot` once it lands) |
+| every namespace except `kube-system` and `flux-system` | enforced by the `default-deny` CiliumClusterwideNetworkPolicy; DNS to kube-dns is allowed | its own CiliumNetworkPolicy (`etcd-backup`, and `zot` once it lands; `ops-auth`, `headlamp` and `policy-reporter` in [ops-consoles](ops-consoles.md#egress)) |
 | `flux-system` | not yet | [flux-system-egress.yaml](../../kubernetes/platform/network-policy/flux-system-egress.yaml), staged |
 | `kube-system` | not yet | [kube-system-egress.yaml](../../kubernetes/platform/network-policy/kube-system-egress.yaml), staged |
 
@@ -72,7 +72,9 @@ The Cilium agent, operator and envoy, kube-proxy (while it still exists) and the
 
 ## Flow evidence
 
-Every Cilium agent writes each new egress connection (not replies) to `/var/log/hubble/egress-flows.log` on its node, through Hubble's static exporter (`hubble.export.static` in [the Cilium values](../../kubernetes/platform/cilium/values.yaml), 10 MB, two rotations). Each record keeps only these fields:
+Every Cilium agent writes each egress policy verdict (one per new connection, with the policy that decided it) and every drop to `/var/log/hubble/egress-flows.log` on its node, through Hubble's static exporter (`hubble.export.static` in [the Cilium values](../../kubernetes/platform/cilium/values.yaml), 10 MB, five rotations). Flows from the node itself (`reserved:host`: etcd, the kubelet, host-network pods) are left out; pod policies never select them.
+
+Until 2026-10-26 the export kept every egress packet. Host traffic was 65% of it and only 4% carried a policy verdict, so each node's 30 MB covered less than an hour, too short to prove a daily job's flows. Keeping verdicts and drops only stretches the same space to days. Each record keeps only these fields:
 
 - the verdict and drop reason
 - the source namespace, pod and workload
@@ -80,7 +82,7 @@ Every Cilium agent writes each new egress connection (not replies) to `/var/log/
 - the port
 - `egress_allowed_by` and `egress_denied_by`: the policies that allowed or refused the flow
 
-Vector reads the file through its existing read-only `/var/log` mount and sends it to the homelab VictoriaLogs as `source:=hubble-egress`. Besides the flow itself, each record carries flat fields for queries: `source_namespace`, `source_workload`, `destination_name` (the DNS names, or the address when there is none), `destination_port`, `allowed_by` and `denied_by` (`kind/namespace/name` of each policy). The message reads `<namespace>/<workload> -> <destination>:<port> <verdict>`.
+alloy-logs reads the file through its read-only `/var/log` mount and writes it to the cluster's own VictoriaLogs (`vlsingle-logs`, [observability](../observability.md)) as `source:=hubble-egress`. The flow itself becomes the record's fields (`verdict`, `IP.destination`, `source.namespace` and so on); besides it, each record carries flat fields for queries: `source_namespace`, `source_workload`, `destination_name` (the DNS names, or the address when there is none), `destination_port`, `allowed_by` and `denied_by` (`kind/namespace/name` of each policy). The message reads `<namespace>/<workload> -> <destination>:<port> <verdict>`.
 
 The policy names are the evidence a flip needs: a flow is covered only if `allowed_by` names this namespace's CiliumNetworkPolicy.
 

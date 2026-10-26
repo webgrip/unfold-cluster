@@ -1,0 +1,69 @@
+static_resources:
+  listeners:
+    - name: connect
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 3128
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: connect
+                upgrade_configs:
+                  - upgrade_type: CONNECT
+                route_config:
+                  name: authentik-only
+                  virtual_hosts:
+                    - name: authentik
+                      domains:
+                        - authentik.webgrip.dev:443
+                      routes:
+                        - match:
+                            connect_matcher: {}
+                          route:
+                            cluster: authentik-behind-homelab-gateway
+                            upgrade_configs:
+                              - upgrade_type: CONNECT
+                                connect_config: {}
+                    - name: refused
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: /
+                          direct_response:
+                            status: 403
+                            body:
+                              inline_string: "authentik-relay opens authentik.webgrip.dev:443 and nothing else\n"
+                        - match:
+                            connect_matcher: {}
+                          direct_response:
+                            status: 403
+                            body:
+                              inline_string: "authentik-relay opens authentik.webgrip.dev:443 and nothing else\n"
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: authentik-behind-homelab-gateway
+      type: LOGICAL_DNS
+      connect_timeout: 5s
+      dns_lookup_family: V4_ONLY
+      typed_dns_resolver_config:
+        name: envoy.network.dns_resolver.cares
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.network.dns_resolver.cares.v3.CaresDnsResolverConfig
+          dns_resolver_options:
+            no_default_search_domain: true
+      load_assignment:
+        cluster_name: authentik-behind-homelab-gateway
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: unfold-gateway.webgrip.dev
+                      port_value: 443
