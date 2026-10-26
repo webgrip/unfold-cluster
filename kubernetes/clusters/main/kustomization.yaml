@@ -5,6 +5,7 @@ resources:
   - flux-system
   - ../../platform/flux-operator
   - ../../platform/flux-instance
+  - ../../platform/gateway-api
   - ../../platform/cilium
   - ../../platform/hetzner-charts
   - ../../platform/hcloud-cloud-controller-manager
@@ -29,3 +30,4 @@ resources:
   - ../../platform/kyverno
   - ../../platform/trivy-operator
   - ../../platform/runtime-security
+  - ../../platform/ops-consoles

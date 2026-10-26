@@ -1,0 +1,104 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: authentik-relay
+spec:
+  description: The relay carries the consoles' OIDC calls (discovery, keys, the code and refresh exchanges) to Authentik through the homelab gateway, which only the hub's tailnet tag may open on 443. Only the oauth2-proxy pods here and Headlamp may use it. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: authentik-relay
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/component: oauth2-proxy
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: headlamp
+            app.kubernetes.io/name: headlamp
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: unfold-gateway.webgrip.dev
+    - toFQDNs:
+        - matchName: unfold-gateway.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: oauth2-proxy
+spec:
+  description: Each oauth2-proxy takes requests from the ops Gateway's Envoy (Cilium's ingress identity) and talks to Authentik only through authentik-relay.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: oauth2-proxy
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "4180"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: authentik-relay
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: oauth2-proxy-hubble-upstream
+spec:
+  description: The Hubble front door forwards signed-in requests to Hubble UI in kube-system.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy-hubble
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: hubble-ui
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: oauth2-proxy-policy-reporter-upstream
+spec:
+  description: The Policy Reporter front door forwards signed-in requests to the Policy Reporter UI.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy-policy-reporter
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: policy-reporter
+            app.kubernetes.io/name: policy-reporter-ui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

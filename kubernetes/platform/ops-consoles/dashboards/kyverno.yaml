@@ -1,0 +1,178 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: unfold-kyverno
+spec:
+  allowCrossNamespaceImport: true
+  folderRef: unfold
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  datasources:
+    - inputName: DS_METRICS
+      datasourceName: unfold-prometheus
+  json: |
+    {
+      "uid": "unfold-kyverno",
+      "title": "Unfold / Image-signature audits (Kyverno)",
+      "tags": [
+        "unfold",
+        "ops-consoles",
+        "supply-chain",
+        "admission"
+      ],
+      "schemaVersion": 41,
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "refresh": "1m",
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Failed results, 24h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum(increase(kyverno_policy_results_total{rule_result=\"fail\"}[24h])) or vector(0)",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Passed results, 24h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum(increase(kyverno_policy_results_total{rule_result=\"pass\"}[24h])) or vector(0)",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Admission requests, 24h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum(increase(kyverno_admission_requests_total[24h])) or vector(0)",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none"
+          }
+        },
+        {
+          "id": 4,
+          "type": "table",
+          "title": "Results by policy, rule and namespace, 24h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_METRICS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 4,
+            "w": 24,
+            "h": 12
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_METRICS}"
+              },
+              "expr": "sum by (policy_name, rule_name, resource_namespace, rule_result, policy_validation_mode) (increase(kyverno_policy_results_total[24h])) > 0",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ]
+        }
+      ],
+      "editable": false,
+      "links": [
+        {
+          "title": "Policy Reporter",
+          "url": "https://policy-reporter.ops.unfoldhq.dev",
+          "type": "link",
+          "targetBlank": true
+        }
+      ]
+    }
