@@ -68,7 +68,7 @@ settings_file="${UNFOLD_TAILNET_SETTINGS:-/etc/unfold-tailnet/settings.env}"
 : "${NODE_USER:?}" "${ADMIN_USER:?}" "${CONTROL_PLANE_TAG:?}"
 : "${CONTROL_PLANE_KEY_LIFETIME_HOURS:?}" "${RENEW_WHEN_DAYS_LEFT:?}" "${WORKER_KEY_LIFETIME_HOURS:?}"
 : "${STATE_DIR:?}" "${HEALTH_URL:?}" "${HEALTH_CONNECT_TO:?}"
-: "${WORKER_TAGS:=tag:hub tag:ci tag:runs tag:metal}"
+: "${WORKER_TAGS:=tag:hub tag:ci tag:runs tag:metal tag:system}"
 : "${GATEWAY_TAG:=tag:homelab-gateway}"
 : "${GATEWAY_KEY_LIFETIME_HOURS:=168}"
 : "${POLICY_PATH:=/etc/headscale/acl.hujson}"
@@ -107,6 +107,10 @@ require_headscale() {
   headscale users list -o json >/dev/null 2>&1 || fail "headscale does not answer on its socket yet"
   ensure_user "$NODE_USER"
   ensure_user "$ADMIN_USER"
+}
+
+require_headscale_installed() {
+  systemctl cat headscale.service >/dev/null 2>&1 || fail "headscale does not answer on its socket yet"
 }
 
 require_public_health() {
@@ -655,9 +659,11 @@ case "$mode/${action:-}" in
     set_policy
     ;;
   config/set)
+    require_headscale_installed
     set_config
     ;;
   oidc-secret/set)
+    require_headscale_installed
     set_oidc_secret
     ;;
   host/apply)

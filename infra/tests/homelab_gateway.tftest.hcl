@@ -151,4 +151,9 @@ run "the_headscale_cloud_init_fits_hetzner_user_data" {
     condition     = can(yamldecode(hcloud_server.headscale.user_data))
     error_message = "the compressed cloud-init stays valid YAML"
   }
+
+  assert {
+    condition     = strcontains(hcloud_server.headscale.user_data, "WORKER_TAGS=\"tag:ci tag:hub tag:metal tag:runs tag:system\"")
+    error_message = "the tailnet key tool on a new server knows every pool's role tag, or tagging a node of a pool it does not know is refused mid-apply"
+  }
 }

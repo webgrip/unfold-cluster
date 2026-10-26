@@ -164,6 +164,7 @@ locals {
     admin_user                  = var.headscale_admin_user
     node_user                   = local.headscale_node_user
     tailnet_key_script_gzip_b64 = base64gzip(local.tailnet_key_tool)
+    worker_tags                 = join(" ", sort(distinct(values(local.tailnet_tag_by_pool))))
     tailnet_key_sudoers         = local.tailnet_key_sudoers
     acl                         = local.headscale_policy
     config                      = local.headscale_config
