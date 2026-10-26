@@ -190,7 +190,7 @@ At S3, losing one CPX32 leaves 14 GiB for 13.2 GiB of requests. It fits only bec
 | `run-hardened` | 1000 | Never | hardened Runs on the `runs` pool |
 | `ci-runner` | -5 | Never | CI jobs (exists; above the autoscaler's -10 cutoff) |
 
-The Alloy agent runs as `system-node-critical` so a full node still takes its log shipper; without logs, Tetragon's events are lost. Grafana sits below the databases: if the hub runs short at S3, dashboards go before data.
+The classes live in `kubernetes/platform/priority-classes`. Tetragon is the exception to the table: ADR 0012 gives it no PriorityClass on purpose, so it never preempts a pod, and `UnfoldTetragonNotOnEveryNode` reports a node it cannot reach. The Alloy agent runs as `system-node-critical` so a full node still takes its log shipper; without logs, Tetragon's events are lost. Grafana sits below the databases: if the hub runs short at S3, dashboards go before data.
 
 ### Disruption budgets and spread
 

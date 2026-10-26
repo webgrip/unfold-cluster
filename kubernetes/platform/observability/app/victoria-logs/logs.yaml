@@ -34,6 +34,7 @@ spec:
       labels:
         app.kubernetes.io/name: vlsingle-logs
     spec:
+      priorityClassName: platform-critical
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60
       securityContext:

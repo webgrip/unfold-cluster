@@ -15,3 +15,4 @@ tolerations:
     effect: NoSchedule
 nodeSelector:
   node-role.kubernetes.io/control-plane: ""
+priorityClassName: system-cluster-critical

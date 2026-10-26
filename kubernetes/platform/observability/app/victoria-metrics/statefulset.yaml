@@ -20,6 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: vmsingle
     spec:
+      priorityClassName: platform-critical
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60
       securityContext:

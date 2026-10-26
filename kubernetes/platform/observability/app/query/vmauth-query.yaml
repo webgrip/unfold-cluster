@@ -30,6 +30,7 @@ spec:
       labels:
         app.kubernetes.io/name: vmauth-query
     spec:
+      priorityClassName: platform-background
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

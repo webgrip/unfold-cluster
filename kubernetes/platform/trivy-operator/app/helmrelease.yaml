@@ -44,6 +44,7 @@ spec:
                         emptyDir:
                           sizeLimit: 3Gi
   values:
+    priorityClassName: platform-background
     fullnameOverride: trivy-operator
     targetNamespaces: ""
     excludeNamespaces: kube-node-lease,kube-public
@@ -183,6 +184,7 @@ spec:
       reportRecordFailedChecksOnly: true
       reportResourceLabels: app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component
     trivy:
+      priorityClassName: platform-background
       image:
         registry: ghcr.io
         repository: aquasecurity/trivy

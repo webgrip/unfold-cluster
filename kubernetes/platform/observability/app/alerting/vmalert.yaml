@@ -18,6 +18,7 @@ spec:
       labels:
         app.kubernetes.io/name: vmalert-metrics
     spec:
+      priorityClassName: platform-critical
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -96,6 +97,7 @@ spec:
       labels:
         app.kubernetes.io/name: vmalert-logs
     spec:
+      priorityClassName: platform-critical
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -175,6 +177,7 @@ spec:
       labels:
         app.kubernetes.io/name: vmalert-audit
     spec:
+      priorityClassName: platform-critical
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

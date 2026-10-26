@@ -45,6 +45,7 @@ spec:
         type: Recreate
       template:
         spec:
+          priorityClassName: platform-background
           automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
