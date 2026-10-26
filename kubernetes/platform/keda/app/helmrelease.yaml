@@ -23,6 +23,8 @@ spec:
     cleanupOnFail: true
     remediation:
       retries: 3
+      strategy: uninstall
+      remediateLastFailure: true
   values:
     crds:
       install: true

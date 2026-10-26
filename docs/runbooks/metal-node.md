@@ -174,7 +174,7 @@ Run the `infra` workflow in `diagnose` mode. It must show:
 2. `talosctl get extensions`: `kata-containers` `4.3.1-webgrip.1`, `gvisor`, `tailscale`,
    `amd-ucode`; `/etc/unfold-sandbox/runsc.toml` with `platform = "kvm"`; `/dev/kvm` present;
    `vswitch0` with MTU 1400.
-3. The `kata-probe` log: a guest kernel that differs from the node's `kernelVersion`, `seccomp=2`.
+3. Set `suspend: false` on `kubernetes/platform/sandbox-probes/kata-probe.cronjob.yaml` in the same PR that declares the metal node; until a node offers the `kata` handler the probe stays suspended, because its pods could only wait Pending. Then the `kata-probe` log: a guest kernel that differs from the node's `kernelVersion`, `seccomp=2`.
 4. The `gvisor-probe` log: kernel `4.4.0` on the metal node.
 5. The annotation guard refusing the dry-run pod with a Kata annotation (`sandbox-annotations`).
 6. The Robot firewall active with the rules above.
