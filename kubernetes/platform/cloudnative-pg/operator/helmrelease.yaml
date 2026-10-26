@@ -39,8 +39,8 @@ spec:
         effect: NoSchedule
     resources:
       requests:
-        cpu: 25m
-        memory: 128Mi
+        cpu: 50m
+        memory: 192Mi
       limits:
         memory: 512Mi
         ephemeral-storage: 256Mi
