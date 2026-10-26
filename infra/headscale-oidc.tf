@@ -22,7 +22,7 @@ locals {
   headscale_user_node_expiry = "720h"
 
   ops_console_domain = "ops.unfoldhq.dev"
-  ops_console_hosts  = ["headlamp", "hubble", "policy-reporter"]
+  ops_console_hosts  = ["grafana", "headlamp", "hubble", "policy-reporter", "query"]
   ops_console_records = [
     for host in local.ops_console_hosts : { name = "${host}.${local.ops_console_domain}", type = "A", value = local.api_vip }
   ]

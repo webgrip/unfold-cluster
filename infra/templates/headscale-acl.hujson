@@ -49,6 +49,11 @@
       "action": "accept",
       "src": ["tag:hub"],
       "dst": ["tag:homelab-gateway:443"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:homelab-gateway"],
+      "dst": ["${ops_gateway}/32:443"]
     }
   ],
   "autoApprovers": {
