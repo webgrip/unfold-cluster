@@ -3,6 +3,28 @@ locals {
   talos_version      = local.talenv.talosVersion
   kubernetes_version = trimprefix(local.talenv.kubernetesVersion, "v")
 
+  kubernetes_images = {
+    for component, image in local.talenv.kubernetesImages : component => "${image.repository}:${image.reference}"
+  }
+  kubernetes_image_tags = {
+    for component, image in local.talenv.kubernetesImages : component => split("@", image.reference)[0]
+  }
+  coredns_deployment = yamldecode(file("${path.module}/../kubernetes/platform/coredns/deployment.yaml"))
+  coredns_image      = one([for container in local.coredns_deployment.spec.template.spec.containers : container.image if container.name == "coredns"])
+
+  kubelet_image_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "KubeletConfig"
+    image      = local.kubernetes_images.kubelet
+  })
+
+  control_plane_image_patches = [
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeAPIServerConfig", image = local.kubernetes_images.apiServer }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeControllerManagerConfig", image = local.kubernetes_images.controllerManager }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeSchedulerConfig", image = local.kubernetes_images.scheduler }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeCoreDNSConfig", image = local.coredns_image }),
+  ]
+
   cluster_name     = "unfold-main"
   cluster_endpoint = "https://${local.api_vip}:6443"
   install_image    = "factory.talos.dev/installer/${var.talos_cloud_schematic}:${local.talos_version}"
@@ -31,6 +53,7 @@ locals {
   common_patches = concat([local.hcloud_cloud_provider_patch, local.cloud_install_patch], local.node_patches)
 
   node_patches = concat([
+    local.kubelet_image_patch,
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "KubeNodeConfig"
@@ -51,7 +74,7 @@ locals {
     }),
   ], local.registry_mirror_patches)
 
-  control_plane_patches = [
+  control_plane_patches = concat([
     yamlencode({
       cluster = {
         etcd = {
@@ -65,7 +88,7 @@ locals {
     local.kube_proxy_disabled_patch,
     local.kube_authentication_patch,
     local.kube_audit_policy_patch,
-  ]
+  ], local.control_plane_image_patches)
 
   kube_proxy_disabled_patch = yamlencode({
     apiVersion = "v1alpha1"
@@ -148,6 +171,17 @@ data "talos_machine_configuration" "control_plane" {
   docs               = false
   examples           = false
   config_patches     = concat(local.common_patches, local.control_plane_patches, [local.api_vip_patch], local.host_firewall_patches.control_plane, local.log_shipping_patches)
+
+  lifecycle {
+    precondition {
+      condition     = alltrue([for tag in values(local.kubernetes_image_tags) : tag == "v${local.kubernetes_version}"])
+      error_message = "every image under kubernetesImages in talos/talenv.yaml must carry the tag v${local.kubernetes_version} that kubernetesVersion names; Renovate moves them in one pull request"
+    }
+    precondition {
+      condition     = alltrue([for image in values(local.kubernetes_images) : can(regex("^[^@]+:v[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$", image))]) && can(regex("@sha256:[0-9a-f]{64}$", local.coredns_image))
+      error_message = "every Kubernetes and CoreDNS image Talos runs must be pinned as tag@sha256:digest, or immutable-image-references refuses its pods in kube-system"
+    }
+  }
 }
 
 data "talos_machine_configuration" "worker" {
