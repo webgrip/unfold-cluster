@@ -138,9 +138,14 @@ run "the_firewall_opens_exactly_the_ports_the_nodes_listen_on_for_others" {
   assert {
     condition = sort([for rule in local.host_firewall_rules.control_plane : "${rule.protocol}/${join(",", [for port in rule.ports : tostring(port)])}"]) == sort([
       "tcp/10250", "udp/8472", "udp/51871", "tcp/4240", "tcp/4244", "tcp/50000", "tcp/6443", "tcp/50001", "tcp/2379-2380",
-      "tcp/9100,9598,9962-9963,9965", "tcp/2383",
+      "tcp/9100,9598,9962-9963,9965", "tcp/2383", "tcp/443",
     ])
-    error_message = "a control plane opens kubelet, Cilium VXLAN, WireGuard, health and Hubble, apid, the API server, trustd, etcd and the metrics ports, nothing more"
+    error_message = "a control plane opens kubelet, Cilium VXLAN, WireGuard, health and Hubble, apid, the API server, trustd, etcd, the metrics ports and the ops Gateway, nothing more"
+  }
+
+  assert {
+    condition     = sort(one([for rule in local.host_firewall_rules.control_plane : rule if rule.name == "ops-gateway"]).sources) == sort(concat(local.tailnet_prefixes, [local.network_range]))
+    error_message = "the ops Gateway on 443 answers the tailnet and the private network, never ADMIN_CIDRS or the internet"
   }
 
   assert {
