@@ -110,7 +110,8 @@ run "the_server_and_the_apply_install_the_same_program_and_policy" {
   assert {
     condition = alltrue([
       strcontains(hcloud_server.headscale.user_data, trimspace(local.tailnet_key_sudoers)),
-      strcontains(hcloud_server.headscale.user_data, "policy set"),
+      strcontains(hcloud_server.headscale.user_data, "content: ${base64gzip(local.tailnet_key_tool)}"),
+      strcontains(local.tailnet_key_tool, "policy set"),
       strcontains(hcloud_server.headscale.user_data, "\"tag:homelab-gateway\""),
     ])
     error_message = "a new server must start with the same program, sudoers rule and policy that the apply pushes"
@@ -135,5 +136,19 @@ run "the_gateway_key_never_shows_in_a_plan" {
   assert {
     condition     = issensitive(output.homelab_gateway_tailnet_key)
     error_message = "the gateway's pre-auth key must stay out of the public plan log"
+  }
+}
+
+run "the_headscale_cloud_init_fits_hetzner_user_data" {
+  command = plan
+
+  assert {
+    condition     = length(hcloud_server.headscale.user_data) <= 32768
+    error_message = "Hetzner refuses user_data over 32768 bytes, which leaves the destroyed Headscale server uncreated mid-apply"
+  }
+
+  assert {
+    condition     = can(yamldecode(hcloud_server.headscale.user_data))
+    error_message = "the compressed cloud-init stays valid YAML"
   }
 }
