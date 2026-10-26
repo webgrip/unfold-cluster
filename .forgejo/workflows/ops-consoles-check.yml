@@ -22,7 +22,7 @@ jobs:
   checks:
     runs-on: docker
     container:
-      image: harbor.webgrip.dev/webgrip/infra-runner:0.1.0@sha256:d98987878aa40983b26ac4aa23dde1f105edd72dc4721d85fa18436b5db07140
+      image: harbor.webgrip.dev/dockerhub/library/node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 

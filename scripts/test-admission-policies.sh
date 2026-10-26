@@ -46,7 +46,7 @@ readonly etcd_sha256_linux_amd64="5dfa9cc3b3ce3b4b491fbcc2057d3daa166bcc6676f743
 readonly etcd_client_port="${ADMISSION_TEST_ETCD_PORT:-23790}"
 readonly etcd_peer_port="$((etcd_client_port + 1))"
 readonly api_port="${ADMISSION_TEST_API_PORT:-16443}"
-readonly ready_timeout_seconds=90
+readonly ready_timeout_seconds=180
 readonly sentinel_policy="admission-test-sentinel"
 
 mutation_test=false
@@ -117,6 +117,32 @@ write_service_account_key() {
   chmod 0600 "${work_dir}/service-account.key"
 }
 
+await_ready() {
+  local name="$1" pid="$2" log="$3"
+  shift 3
+  local deadline=$((SECONDS + ready_timeout_seconds))
+  until "$@" >/dev/null 2>&1; do
+    if [ "${SECONDS}" -ge "${deadline}" ] || ! kill -0 "${pid}" 2>/dev/null; then
+      echo "the throwaway ${name} exited or was not ready within ${ready_timeout_seconds}s; its log:" >&2
+      tail -n 40 "${log}" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+}
+
+etcd_is_healthy() {
+  curl -fsS --max-time 5 "http://127.0.0.1:${etcd_client_port}/health" | jq -e '.health == "true"'
+}
+
+api_server_is_ready() {
+  kubectl get --raw /readyz
+}
+
+kube_system_exists() {
+  kubectl get namespace kube-system
+}
+
 start_servers() {
   "${etcd_bin}" \
     --data-dir "${work_dir}/etcd" \
@@ -125,8 +151,10 @@ start_servers() {
     --listen-peer-urls "http://127.0.0.1:${etcd_peer_port}" \
     --initial-advertise-peer-urls "http://127.0.0.1:${etcd_peer_port}" \
     --initial-cluster "default=http://127.0.0.1:${etcd_peer_port}" \
+    --unsafe-no-fsync \
     --log-level error >"${work_dir}/etcd.log" 2>&1 &
   background_pids+=("$!")
+  await_ready "etcd" "${background_pids[-1]}" "${work_dir}/etcd.log" etcd_is_healthy
 
   local token
   token="$(head -c 32 /dev/urandom | sha256sum | cut -c1-48)"
@@ -171,17 +199,9 @@ current-context: throwaway
 EOF
   chmod 0600 "${kubeconfig}"
 
-  local waited=0 api_server_pid="${background_pids[-1]}"
-  until kubectl get --raw /readyz >/dev/null 2>&1; do
-    waited=$((waited + 1))
-    if [ "${waited}" -ge "${ready_timeout_seconds}" ] || ! kill -0 "${api_server_pid}" 2>/dev/null; then
-      echo "the throwaway API server did not become ready; its log:" >&2
-      tail -n 40 "${work_dir}/kube-apiserver.log" >&2
-      exit 1
-    fi
-    sleep 1
-  done
-  until kubectl get namespace kube-system >/dev/null 2>&1; do sleep 1; done
+  local api_server_pid="${background_pids[-1]}"
+  await_ready "API server" "${api_server_pid}" "${work_dir}/kube-apiserver.log" api_server_is_ready
+  await_ready "API server" "${api_server_pid}" "${work_dir}/kube-apiserver.log" kube_system_exists
 }
 
 sentinel_generation=0

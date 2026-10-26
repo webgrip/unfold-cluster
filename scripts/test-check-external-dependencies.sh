@@ -69,7 +69,7 @@ printf 'variable "mutant" {\n  default = "kms-two.webgrip.dev"\n}\n' > "${copy}/
 expect_missing "a new name under webgrip.dev fails" "$copy" "kms-two.webgrip.dev"
 
 copy="$(fresh_copy dropped-row)"
-python3 -I -c 'import sys; p=sys.argv[1]; s=open(p).read(); n=s.replace("`api.hetzner.cloud`", "api-hetzner-cloud", 1); assert n != s, "the inventory does not list api.hetzner.cloud"; open(p, "w").write(n)' "${copy}/docs/architecture/external-dependencies.md"
+"${repo}/scripts/write-mutant.sh" "${copy}/docs/architecture/external-dependencies.md" "\`api.hetzner.cloud\`" "api-hetzner-cloud" "${copy}/docs/architecture/external-dependencies.md"
 expect_missing "a host dropped from the inventory fails" "$copy" "api.hetzner.cloud"
 
 copy="$(fresh_copy ignored)"
