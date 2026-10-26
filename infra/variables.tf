@@ -27,7 +27,7 @@ variable "control_plane_server_type" {
 }
 
 variable "worker_pools" {
-  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33; until the Unfold application or the metal node takes its place, it also runs up to two CI jobs under gVisor, the baseline that needs no cold node (docs/adr/0004-ci-baseline-on-the-hub-and-autoscaled-overflow.md). ci is the CI pool of RFC 0001 step 13; it has no fixed node (node_count 0) and the cluster-autoscaler grows it from zero with CPX42 servers in Nuremberg when CI overflows the hub worker (autoscaled_worker_pools); its CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. Nodes a cluster-autoscaler adds are not listed here."
+  description = "The fixed worker pools OpenTofu creates, by pool name. A pool without a location uses var.location. Each node is named name_prefix-N, takes the private address first_host+N-1 in the cloud subnet, and carries its pool's Kubernetes labels and taints (Talos KubeNodeConfig: taint value is value:Effect). unfold is the hub worker dedicated to Unfold (VIK-2157), a cost-optimized CX33; until the Unfold application or the metal node takes its place, it also runs up to two CI jobs under gVisor, the baseline that needs no cold node (docs/adr/0004-ci-baseline-on-the-hub-and-autoscaled-overflow.md). ci is the CI pool of RFC 0001 step 13; it has no fixed node (node_count 0) and the cluster-autoscaler grows it from zero with CPX42 servers in Nuremberg when CI overflows the hub worker (autoscaled_worker_pools); its CI jobs run under the gvisor RuntimeClass on the systrap platform. A pool labelled runtime.webgrip.io/gvisor=true gets the gVisor runtime config (sandbox-runtimes.tf), and the gvisor RuntimeClass selects that label. system is the observability and platform pool of ADR 0013: a CPX32 in Nuremberg for VictoriaMetrics, VictoriaLogs, vmalert, Alertmanager, Grafana and the platform controllers, which otherwise run on the hub; it costs EUR 35.99 a month per node, so it stays at node_count 0 until the owner raises it. Nodes a cluster-autoscaler adds are not listed here."
   type = map(object({
     server_type = string
     location    = optional(string)
@@ -54,6 +54,15 @@ variable "worker_pools" {
       first_host  = 31
       labels      = { "node.webgrip.io/pool" = "ci", "runtime.webgrip.io/gvisor" = "true" }
       taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
+    }
+    system = {
+      server_type = "cpx32"
+      location    = "nbg1"
+      node_count  = 0
+      name_prefix = "unfold-sys"
+      first_host  = 41
+      labels      = { "node.webgrip.io/pool" = "system" }
+      taints      = { "node.webgrip.io/pool" = "system:NoSchedule" }
     }
   }
 
