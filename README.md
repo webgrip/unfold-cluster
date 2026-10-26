@@ -101,6 +101,8 @@ Trusting the instance key is a deliberate trade-off (owner decision, 2026-10-25)
 
 Verification checks only the newest commit, so it does not stop a rollback: a force-push of an older signed commit to the mirror would deploy. The GitHub mirror's `main` therefore needs branch protection that refuses force-pushes and deletion and allows pushes only from the mirror's token. That setting lives in GitHub, not here.
 
+A second GitRepository, `flux-system/unfold-cluster-forgejo` (`kubernetes/platform/flux-fallback-source`), fetches the same `main` from Forgejo every 10 minutes with the same signature check and applies nothing: no Kustomization names it, and `infra/tests/flux_fallback_source.tftest.hcl` fails if one does, if it stops verifying, or if `source-controller-egress` stops naming Forgejo. It proves the fallback works before it is needed, and shows when the mirror falls behind: its revision moves ahead of `flux-system`'s, for example when the mirror's token has expired. When GitHub is down, the break-glass in [docs/runbooks/break-glass.md](docs/runbooks/break-glass.md#the-github-mirror-is-down-or-stuck) points `flux-system` at Forgejo for one fetch.
+
 ## Security floor from the first boot
 
 * **Pod Security `restricted`** is the API server's default for every namespace; Talos exempts `kube-system`, where Cilium and the storage node plugin need host access.

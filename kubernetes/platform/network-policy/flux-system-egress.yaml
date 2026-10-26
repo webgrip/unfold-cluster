@@ -5,7 +5,7 @@ metadata:
   name: source-controller-egress
   namespace: flux-system
 spec:
-  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub; the Hetzner and Cilium chart indexes and archives from charts.hetzner.cloud and helm.cilium.io; the KEDA, kube-state-metrics, node-exporter, cluster-autoscaler and Trivy chart indexes from their github.io pages, whose archives (except KEDA) are GitHub release assets that redirect to release-assets.githubusercontent.com or objects.githubusercontent.com; and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub and, as the warm fallback source, from Forgejo; the Hetzner and Cilium chart indexes and archives from charts.hetzner.cloud and helm.cilium.io; the KEDA, kube-state-metrics, node-exporter, cluster-autoscaler, Trivy and metrics-server chart indexes from their github.io pages, whose archives (except KEDA) are GitHub release assets that redirect to release-assets.githubusercontent.com or objects.githubusercontent.com; and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: source-controller
@@ -36,12 +36,14 @@ spec:
               protocol: TCP
     - toFQDNs:
         - matchName: github.com
+        - matchName: forgejo.webgrip.dev
         - matchName: charts.hetzner.cloud
         - matchName: helm.cilium.io
         - matchName: kedacore.github.io
         - matchName: prometheus-community.github.io
         - matchName: kubernetes.github.io
         - matchName: aquasecurity.github.io
+        - matchName: kubernetes-sigs.github.io
         - matchName: release-assets.githubusercontent.com
         - matchName: objects.githubusercontent.com
         - matchName: ghcr.io
