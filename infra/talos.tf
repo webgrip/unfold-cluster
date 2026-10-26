@@ -171,17 +171,6 @@ data "talos_machine_configuration" "control_plane" {
   docs               = false
   examples           = false
   config_patches     = concat(local.common_patches, local.control_plane_patches, [local.api_vip_patch], local.host_firewall_patches.control_plane, local.log_shipping_patches)
-
-  lifecycle {
-    precondition {
-      condition     = alltrue([for tag in values(local.kubernetes_image_tags) : tag == "v${local.kubernetes_version}"])
-      error_message = "every image under kubernetesImages in talos/talenv.yaml must carry the tag v${local.kubernetes_version} that kubernetesVersion names; Renovate moves them in one pull request"
-    }
-    precondition {
-      condition     = alltrue([for image in values(local.kubernetes_images) : can(regex("^[^@]+:v[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$", image))]) && can(regex("@sha256:[0-9a-f]{64}$", local.coredns_image))
-      error_message = "every Kubernetes and CoreDNS image Talos runs must be pinned as tag@sha256:digest, or immutable-image-references refuses its pods in kube-system"
-    }
-  }
 }
 
 data "talos_machine_configuration" "worker" {
@@ -194,6 +183,17 @@ data "talos_machine_configuration" "worker" {
   docs               = false
   examples           = false
   config_patches     = concat(local.common_patches, local.host_firewall_patches.worker, local.log_shipping_patches)
+
+  lifecycle {
+    precondition {
+      condition     = alltrue([for tag in values(local.kubernetes_image_tags) : tag == "v${local.kubernetes_version}"])
+      error_message = "every image under kubernetesImages in talos/talenv.yaml must carry the tag v${local.kubernetes_version} that kubernetesVersion names; Renovate moves them in one pull request"
+    }
+    precondition {
+      condition     = alltrue([for image in values(local.kubernetes_images) : can(regex("^[^@]+:v[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$", image))]) && can(regex("@sha256:[0-9a-f]{64}$", local.coredns_image))
+      error_message = "every Kubernetes and CoreDNS image Talos runs must be pinned as tag@sha256:digest, or immutable-image-references refuses its pods in kube-system"
+    }
+  }
 }
 
 resource "talos_machine_configuration_apply" "control_plane" {

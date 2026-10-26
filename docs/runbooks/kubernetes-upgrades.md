@@ -12,7 +12,7 @@ Talos runs the kubelet, the API server, the controller manager, the scheduler an
 | kube-scheduler | `talos/talenv.yaml`, `kubernetesImages.scheduler` | `KubeSchedulerConfig.image`, a static pod |
 | CoreDNS | `kubernetes/platform/coredns/deployment.yaml` | Flux, which owns the `kube-system/coredns` Deployment; OpenTofu reads the same image into `KubeCoreDNSConfig.image`, so a new cluster boots with it |
 
-`kubernetesVersion` in `talos/talenv.yaml` names the release, and every tag under `kubernetesImages` must equal it: the `infra` plan refuses anything else (preconditions on `data.talos_machine_configuration.control_plane`), and so does the OpenTofu test `infra/tests/kubernetes_images.tftest.hcl`, which also checks that each reference has the `# renovate:` line naming its own repository directly above it.
+`kubernetesVersion` in `talos/talenv.yaml` names the release, and every tag under `kubernetesImages` must equal it: the `infra` plan refuses anything else (preconditions on `data.talos_machine_configuration.worker`), and so does the OpenTofu test `infra/tests/kubernetes_images.tftest.hcl`, which also checks that each reference has the `# renovate:` line naming its own repository directly above it.
 
 Talos creates CoreDNS once, at bootstrap, and never updates it afterwards: its bootstrap manifests are create-only (the README's seed section). Flux therefore owns the Deployment, with the selector and pod template Talos renders, and `kustomize.toolkit.fluxcd.io/prune: disabled` so a deleted file never removes cluster DNS. Talos still owns the CoreDNS ConfigMap, Service, ServiceAccount and RBAC. Replicas, spread and requests for CoreDNS are edits to that file.
 
