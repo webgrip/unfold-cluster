@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: trivy-operator
 spec:
-  description: The operator watches workloads through the API server, starts scan jobs, asks the Trivy server whether it is healthy, fetches the check bundle from Zot's ghcr.io mirror, and posts every report it writes to the report shipper. vmagent scrapes its metrics. It reaches nothing outside the cluster.
+  description: The operator watches workloads through the API server, starts scan jobs, asks the Trivy server whether it is healthy, fetches the check bundle from Zot's ghcr.io mirror, and posts every report it writes to the report shipper. alloy-metrics scrapes its metrics. It reaches nothing outside the cluster.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: trivy-operator
@@ -41,7 +41,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/name: alloy-metrics
       toPorts:
         - ports:
             - port: "8080"
@@ -109,7 +109,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: trivy-report-shipper
 spec:
-  description: The report shipper receives each report from the operator and writes a compact record of it to the homelab's VictoriaLogs through the gateway on the tailnet, unfold-gateway.webgrip.dev:8427. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns that address. vmagent scrapes its metrics.
+  description: The report shipper receives each report from the operator and writes a compact record of it to the cluster's own VictoriaLogs (vlsingle-logs in observability). alloy-metrics scrapes its metrics.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: trivy-report-shipper
@@ -124,7 +124,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/name: alloy-metrics
       toPorts:
         - ports:
             - port: "9598"
@@ -140,13 +140,11 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-          rules:
-            dns:
-              - matchName: unfold-gateway.webgrip.dev
-              - matchPattern: "*.cluster.local"
-    - toFQDNs:
-        - matchName: unfold-gateway.webgrip.dev
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vlsingle-logs
       toPorts:
         - ports:
-            - port: "8427"
+            - port: "9428"
               protocol: TCP

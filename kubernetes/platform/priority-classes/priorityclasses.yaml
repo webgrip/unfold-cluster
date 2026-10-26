@@ -1,0 +1,54 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-critical
+value: 100000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+description: Platform controllers the cluster needs to change itself but not to recover itself (KEDA, the CloudNativePG operator and its barman plugin, cert-manager, the cluster-autoscaler, Zot, and from S1 the metrics and log stores). Below the recovery set's system-cluster-critical, above every application.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: hub-critical
+value: 50000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+description: The hub's stateful and serving workloads (ploeg-db, litellm-db, ploegd, Unfold, LiteLLM, Valkey, cloudflared, OpenBao, NATS). If the hub runs short, dashboards and scanners give way before these.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-background
+value: 10000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+description: Platform work that can wait (Trivy, its report shipper, the Kyverno reports controller, kube-state-metrics, vmagent, Grafana, VictoriaTraces, the package cache). The first platform pods to be preempted.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: standard
+value: 0
+preemptionPolicy: PreemptLowerPriority
+globalDefault: true
+description: The default for every pod that names no class, the same priority Kubernetes gives such a pod without a default, made explicit.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: run-isolated
+value: 1000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+description: Ploeg workers, workspaces and the delivery verifier under Kata on the metal node. They preempt the CI filler there (ci-runner at -5); a preempted CI job is retried.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: run-hardened
+value: 1000
+preemptionPolicy: Never
+globalDefault: false
+description: Hardened Runs under gVisor on the autoscaled runs pool. They never preempt; a pending one makes the cluster-autoscaler add a node instead.

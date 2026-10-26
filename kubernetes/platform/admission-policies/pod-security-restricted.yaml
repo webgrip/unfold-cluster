@@ -64,7 +64,7 @@ spec:
       expression: >-
         {
           'observability/DaemonSet/node-exporter': ['hostPathVolumes'],
-          'observability/DaemonSet/vector': ['hostPathVolumes', 'runAsRoot']
+          'observability/DaemonSet/alloy-logs': ['hostPathVolumes', 'runAsRoot']
         }
     - name: granted
       expression: variables.workloadGrants[?variables.workload].orValue([])

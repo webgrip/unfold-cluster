@@ -1,0 +1,110 @@
+rule_files:
+  - supply-chain.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 5m
+    input_series:
+      - series: 'trivy_vulnerability_id{cluster="unfold",namespace="zot",resource_kind="StatefulSet",resource_name="zot",image_repository="project-zot/zot",vuln_id="CVE-2026-1",severity="Critical",fixed_version="2.1.16"}'
+        values: "_x24 1x24"
+    alert_rule_test:
+      - eval_time: 140m
+        alertname: UnfoldNewCriticalFixableVulnerability
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, namespace: zot, resource_kind: StatefulSet, resource_name: zot, image_repository: project-zot/zot}
+  - interval: 5m
+    input_series:
+      - series: 'trivy_vulnerability_id{cluster="unfold",namespace="zot",resource_kind="StatefulSet",resource_name="zot",image_repository="project-zot/zot",vuln_id="CVE-2026-1",severity="Critical",fixed_version="2.1.16"}'
+        values: "1x48"
+    alert_rule_test:
+      - eval_time: 140m
+        alertname: UnfoldNewCriticalFixableVulnerability
+        exp_alerts: []
+
+  - interval: 5m
+    input_series:
+      - series: 'trivy_vulnerability_id{cluster="unfold",namespace="zot",resource_kind="StatefulSet",resource_name="zot",image_repository="project-zot/zot",vuln_id="CVE-2026-1",severity="Critical",fixed_version="2.1.16"}'
+        values: "1x100"
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: UnfoldCriticalFixableVulnerabilities
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+  - interval: 5m
+    input_series:
+      - series: 'trivy_vulnerability_id{cluster="unfold",namespace="zot",resource_kind="StatefulSet",resource_name="zot",image_repository="project-zot/zot",vuln_id="CVE-2026-2",severity="Critical",fixed_version=""}'
+        values: "1x100"
+      - series: 'trivy_vulnerability_id{cluster="unfold",namespace="zot",resource_kind="StatefulSet",resource_name="zot",image_repository="project-zot/zot",vuln_id="CVE-2026-3",severity="High",fixed_version="1.0"}'
+        values: "1x100"
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: UnfoldCriticalFixableVulnerabilities
+        exp_alerts: []
+
+  - interval: 5m
+    input_series:
+      - series: 'trivy_image_exposedsecrets{cluster="unfold",namespace="ci",resource_kind="Job",resource_name="build",image_repository="webgrip/builder",severity="High"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UnfoldExposedSecretInImage
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, namespace: ci, resource_kind: Job, resource_name: build, image_repository: webgrip/builder}
+  - interval: 5m
+    input_series:
+      - series: 'trivy_image_exposedsecrets{cluster="unfold",namespace="ci",resource_kind="Job",resource_name="build",image_repository="webgrip/builder",severity="Low"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UnfoldExposedSecretInImage
+        exp_alerts: []
+
+  - interval: 5m
+    input_series:
+      - series: 'up{cluster="unfold",job="trivy-operator"}'
+        values: "1x4 0x30"
+      - series: 'up{cluster="unfold",job="alloy-metrics"}'
+        values: "1x34"
+      - series: 'up{cluster="unfold",job="kyverno",component="admission-controller"}'
+        values: "1x4 0x30"
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: UnfoldVulnerabilityScannerAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+      - eval_time: 80m
+        alertname: UnfoldSignatureWebhookAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+  - interval: 5m
+    input_series:
+      - series: 'up{cluster="unfold",job="trivy-operator"}'
+        values: "1x34"
+      - series: 'up{cluster="unfold",job="alloy-metrics"}'
+        values: "1x34"
+      - series: 'up{cluster="unfold",job="kyverno",component="admission-controller"}'
+        values: "1x34"
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: UnfoldVulnerabilityScannerAbsent
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: UnfoldSignatureWebhookAbsent
+        exp_alerts: []
+
+  - interval: 5m
+    input_series:
+      - series: 'kyverno_image_validating_policy_results_total{cluster="unfold",policy_name="webgrip-image-signatures",resource_namespace="zot",result="fail"}'
+        values: "0x6 1x10"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldUnsignedWebgripImage
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, policy_name: webgrip-image-signatures, resource_namespace: zot}
+  - interval: 5m
+    input_series:
+      - series: 'kyverno_image_validating_policy_results_total{cluster="unfold",policy_name="webgrip-image-signatures",resource_namespace="zot",result="pass"}'
+        values: "0+1x16"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldUnsignedWebgripImage
+        exp_alerts: []

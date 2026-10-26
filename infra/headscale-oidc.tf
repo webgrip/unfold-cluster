@@ -21,6 +21,12 @@ locals {
 
   headscale_user_node_expiry = "720h"
 
+  ops_console_domain = "ops.unfoldhq.dev"
+  ops_console_hosts  = ["grafana", "headlamp", "hubble", "policy-reporter", "query"]
+  ops_console_records = [
+    for host in local.ops_console_hosts : { name = "${host}.${local.ops_console_domain}", type = "A", value = local.api_vip }
+  ]
+
   headscale_config = templatefile("${path.module}/templates/headscale-config.yaml.tftpl", {
     hostname                = var.headscale_hostname
     ipv4                    = hcloud_primary_ip.headscale.ip_address
@@ -30,6 +36,7 @@ locals {
     oidc_client_id          = local.headscale_oidc.client_id
     oidc_client_secret_path = local.headscale_oidc.client_secret_path
     oidc_allowed_groups     = local.headscale_oidc.allowed_groups
+    ops_console_records     = local.ops_console_records
   })
 
   headscale_oidc_client_secret_given = nonsensitive(var.headscale_oidc_client_secret != "")

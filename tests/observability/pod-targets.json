@@ -1,0 +1,426 @@
+{
+  "targets": [
+    {
+      "__address__": "10.64.0.11:9100",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "node-exporter-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.11",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "9100",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "prometheus-node-exporter"
+    },
+    {
+      "__address__": "10.64.0.21:9598",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "alloy-logs-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.21",
+      "__meta_kubernetes_pod_node_name": "unfold-app-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "http",
+      "__meta_kubernetes_pod_container_port_number": "9598",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "alloy-logs"
+    },
+    {
+      "__address__": "10.65.0.5:9428",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "vlsingle-logs-0",
+      "__meta_kubernetes_pod_ip": "10.65.0.5",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "http",
+      "__meta_kubernetes_pod_container_port_number": "9428",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "vlsingle-logs"
+    },
+    {
+      "__address__": "10.65.0.6:3000",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "grafana-abc",
+      "__meta_kubernetes_pod_ip": "10.65.0.6",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "grafana",
+      "__meta_kubernetes_pod_container_port_name": "grafana-http",
+      "__meta_kubernetes_pod_container_port_number": "3000",
+      "__meta_kubernetes_pod_label_app": "grafana"
+    },
+    {
+      "__address__": "10.65.0.6:9094",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "grafana-abc",
+      "__meta_kubernetes_pod_ip": "10.65.0.6",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "grafana",
+      "__meta_kubernetes_pod_container_port_name": "grafana-alert",
+      "__meta_kubernetes_pod_container_port_number": "9094",
+      "__meta_kubernetes_pod_label_app": "grafana"
+    },
+    {
+      "__address__": "10.64.0.11:9962",
+      "__meta_kubernetes_namespace": "kube-system",
+      "__meta_kubernetes_pod_name": "cilium-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.11",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "cilium-agent",
+      "__meta_kubernetes_pod_container_port_name": "prometheus",
+      "__meta_kubernetes_pod_container_port_number": "9962",
+      "__meta_kubernetes_pod_label_k8s_app": "cilium"
+    },
+    {
+      "__address__": "10.64.0.11:9965",
+      "__meta_kubernetes_namespace": "kube-system",
+      "__meta_kubernetes_pod_name": "cilium-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.11",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "cilium-agent",
+      "__meta_kubernetes_pod_container_port_name": "hubble-metrics",
+      "__meta_kubernetes_pod_container_port_number": "9965",
+      "__meta_kubernetes_pod_label_k8s_app": "cilium"
+    },
+    {
+      "__address__": "10.64.0.12:9963",
+      "__meta_kubernetes_namespace": "kube-system",
+      "__meta_kubernetes_pod_name": "cilium-operator-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.12",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "cilium-operator",
+      "__meta_kubernetes_pod_container_port_name": "prometheus",
+      "__meta_kubernetes_pod_container_port_number": "9963",
+      "__meta_kubernetes_pod_label_io_cilium_app": "operator"
+    },
+    {
+      "__address__": "10.65.0.7:9153",
+      "__meta_kubernetes_namespace": "kube-system",
+      "__meta_kubernetes_pod_name": "coredns-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.7",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "coredns",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "9153",
+      "__meta_kubernetes_pod_label_k8s_app": "kube-dns"
+    },
+    {
+      "__address__": "10.64.0.21",
+      "__meta_kubernetes_namespace": "kube-system",
+      "__meta_kubernetes_pod_name": "tetragon-a",
+      "__meta_kubernetes_pod_ip": "10.64.0.21",
+      "__meta_kubernetes_pod_node_name": "unfold-app-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "tetragon",
+      "__meta_kubernetes_pod_container_port_name": "",
+      "__meta_kubernetes_pod_container_port_number": "",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "tetragon"
+    },
+    {
+      "__address__": "10.65.0.8:8080",
+      "__meta_kubernetes_namespace": "flux-system",
+      "__meta_kubernetes_pod_name": "source-controller-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.8",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "manager",
+      "__meta_kubernetes_pod_container_port_name": "http-prom",
+      "__meta_kubernetes_pod_container_port_number": "8080"
+    },
+    {
+      "__address__": "10.65.1.2:8080",
+      "__meta_kubernetes_namespace": "trivy-system",
+      "__meta_kubernetes_pod_name": "trivy-operator-a",
+      "__meta_kubernetes_pod_ip": "10.65.1.2",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "8080",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "trivy-operator"
+    },
+    {
+      "__address__": "10.65.1.3:9598",
+      "__meta_kubernetes_namespace": "trivy-system",
+      "__meta_kubernetes_pod_name": "trivy-report-shipper-a",
+      "__meta_kubernetes_pod_ip": "10.65.1.3",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "9598",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "trivy-report-shipper"
+    },
+    {
+      "__address__": "10.65.0.9:8000",
+      "__meta_kubernetes_namespace": "kyverno",
+      "__meta_kubernetes_pod_name": "kyverno-admission-controller-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.9",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics-port",
+      "__meta_kubernetes_pod_container_port_number": "8000",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_part_of": "kyverno",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_component": "admission-controller"
+    },
+    {
+      "__address__": "10.65.0.10:8080",
+      "__meta_kubernetes_namespace": "keda",
+      "__meta_kubernetes_pod_name": "keda-operator-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.10",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "8080",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "keda-operator"
+    },
+    {
+      "__address__": "10.65.0.11:8085",
+      "__meta_kubernetes_namespace": "cluster-autoscaler",
+      "__meta_kubernetes_pod_name": "ca-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.11",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "",
+      "__meta_kubernetes_pod_container_port_number": "8085",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "hetzner-cluster-autoscaler"
+    },
+    {
+      "__address__": "10.65.0.12:9402",
+      "__meta_kubernetes_namespace": "cert-manager",
+      "__meta_kubernetes_pod_name": "cert-manager-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.12",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "http-metrics",
+      "__meta_kubernetes_pod_container_port_number": "9402",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_component": "controller",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "cert-manager"
+    },
+    {
+      "__address__": "10.65.0.13:8080",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "kube-state-metrics-a",
+      "__meta_kubernetes_pod_ip": "10.65.0.13",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "http",
+      "__meta_kubernetes_pod_container_port_number": "8080",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "kube-state-metrics"
+    },
+    {
+      "__address__": "10.65.0.14:5000",
+      "__meta_kubernetes_namespace": "zot",
+      "__meta_kubernetes_pod_name": "zot-0",
+      "__meta_kubernetes_pod_ip": "10.65.0.14",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "zot",
+      "__meta_kubernetes_pod_container_port_number": "5000",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "zot"
+    },
+    {
+      "__address__": "10.65.2.2:9100",
+      "__meta_kubernetes_namespace": "ci",
+      "__meta_kubernetes_pod_name": "runner-a",
+      "__meta_kubernetes_pod_ip": "10.65.2.2",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Running",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "metrics",
+      "__meta_kubernetes_pod_container_port_number": "9100",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "prometheus-node-exporter"
+    },
+    {
+      "__address__": "10.65.0.15:8428",
+      "__meta_kubernetes_namespace": "observability",
+      "__meta_kubernetes_pod_name": "vmsingle-0",
+      "__meta_kubernetes_pod_ip": "10.65.0.15",
+      "__meta_kubernetes_pod_node_name": "unfold-cp-1",
+      "__meta_kubernetes_pod_phase": "Pending",
+      "__meta_kubernetes_pod_container_name": "c",
+      "__meta_kubernetes_pod_container_port_name": "http",
+      "__meta_kubernetes_pod_container_port_number": "8428",
+      "__meta_kubernetes_pod_label_app_kubernetes_io_name": "vmsingle"
+    }
+  ],
+  "expect": [
+    {
+      "labels": {
+        "job": "node-exporter",
+        "node": "unfold-cp-1",
+        "__address__": "10.64.0.11:9100"
+      },
+      "namespace": "observability",
+      "pod": "node-exporter-a",
+      "port": "9100"
+    },
+    {
+      "labels": {
+        "job": "alloy-logs",
+        "node": "unfold-app-1"
+      },
+      "namespace": "observability",
+      "pod": "alloy-logs-a",
+      "port": "9598"
+    },
+    {
+      "labels": {
+        "job": "vlsingle-logs"
+      },
+      "namespace": "observability",
+      "pod": "vlsingle-logs-0",
+      "port": "9428"
+    },
+    {
+      "labels": {
+        "job": "grafana"
+      },
+      "namespace": "observability",
+      "pod": "grafana-abc",
+      "port": "3000"
+    },
+    {
+      "dropped": true,
+      "port": "9094",
+      "namespace": "observability",
+      "pod": "grafana-abc"
+    },
+    {
+      "labels": {
+        "job": "cilium",
+        "component": "agent"
+      },
+      "namespace": "kube-system",
+      "pod": "cilium-a",
+      "port": "9962"
+    },
+    {
+      "labels": {
+        "job": "cilium",
+        "component": "hubble"
+      },
+      "namespace": "kube-system",
+      "pod": "cilium-a",
+      "port": "9965"
+    },
+    {
+      "labels": {
+        "job": "cilium-operator"
+      },
+      "namespace": "kube-system",
+      "pod": "cilium-operator-a",
+      "port": "9963"
+    },
+    {
+      "labels": {
+        "job": "coredns"
+      },
+      "namespace": "kube-system",
+      "pod": "coredns-a",
+      "port": "9153"
+    },
+    {
+      "labels": {
+        "job": "tetragon",
+        "__address__": "10.64.0.21:2112",
+        "node": "unfold-app-1"
+      },
+      "namespace": "kube-system",
+      "pod": "tetragon-a",
+      "port": ""
+    },
+    {
+      "labels": {
+        "job": "flux",
+        "controller": "manager"
+      },
+      "namespace": "flux-system",
+      "pod": "source-controller-a",
+      "port": "8080"
+    },
+    {
+      "labels": {
+        "job": "trivy-operator"
+      },
+      "namespace": "trivy-system",
+      "pod": "trivy-operator-a",
+      "port": "8080"
+    },
+    {
+      "labels": {
+        "job": "trivy-report-shipper"
+      },
+      "namespace": "trivy-system",
+      "pod": "trivy-report-shipper-a",
+      "port": "9598"
+    },
+    {
+      "labels": {
+        "job": "kyverno",
+        "component": "admission-controller"
+      },
+      "namespace": "kyverno",
+      "pod": "kyverno-admission-controller-a",
+      "port": "8000"
+    },
+    {
+      "labels": {
+        "job": "keda"
+      },
+      "namespace": "keda",
+      "pod": "keda-operator-a",
+      "port": "8080"
+    },
+    {
+      "labels": {
+        "job": "cluster-autoscaler"
+      },
+      "namespace": "cluster-autoscaler",
+      "pod": "ca-a",
+      "port": "8085"
+    },
+    {
+      "labels": {
+        "job": "cert-manager"
+      },
+      "namespace": "cert-manager",
+      "pod": "cert-manager-a",
+      "port": "9402"
+    },
+    {
+      "dropped": true,
+      "namespace": "observability",
+      "pod": "kube-state-metrics-a",
+      "port": "8080"
+    },
+    {
+      "dropped": true,
+      "namespace": "zot",
+      "pod": "zot-0",
+      "port": "5000"
+    },
+    {
+      "dropped": true,
+      "namespace": "ci",
+      "pod": "runner-a",
+      "port": "9100"
+    },
+    {
+      "dropped": true,
+      "namespace": "observability",
+      "pod": "vmsingle-0",
+      "port": "8428"
+    }
+  ]
+}

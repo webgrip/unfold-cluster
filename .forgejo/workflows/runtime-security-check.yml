@@ -8,8 +8,6 @@ on:
       - main
     paths:
       - kubernetes/platform/runtime-security/**
-      - kubernetes/platform/observability/vector/**
-      - tests/runtime-security/**
       - scripts/test-runtime-security.sh
       - .forgejo/workflows/runtime-security-check.yml
   workflow_dispatch:
@@ -22,5 +20,5 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Check the chart digest, the policies against the CRD schema, every policy's mode and the Vector records, and prove each check fails when broken
+      - name: Check the chart digest, the policies against the CRD schema and every policy's mode, and prove each check fails when broken
         run: ./scripts/test-runtime-security.sh --mutation-test

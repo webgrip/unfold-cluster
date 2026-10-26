@@ -1,0 +1,343 @@
+{
+  "records": [
+    {
+      "name": "a kubectl exec arrives as an exec outside the container's init tree",
+      "store": "logs",
+      "query": "source:=tetragon event:=process_exec binary:=\"/bin/sh\" namespace:=zot",
+      "fields": {
+        "cluster": "unfold",
+        "event": "process_exec",
+        "namespace": "zot",
+        "pod": "zot-0",
+        "container": "zot",
+        "workload": "zot",
+        "in_init_tree": "false",
+        "parent_binary": "/usr/bin/runc",
+        "node": "unfold-app-1",
+        "_time": "2026-10-25T21:00:01.123456789Z",
+        "_msg": "process_exec zot/zot-0 /bin/sh",
+        "cluster_name": "unfold",
+        "node_labels.kubernetes.io/hostname": ""
+      }
+    },
+    {
+      "name": "a credential read names its policy, hook and path",
+      "store": "logs",
+      "query": "source:=tetragon policy:=runtime-kubernetes-credentials binary:=\"/bin/cat\" namespace:=zot",
+      "fields": {
+        "event": "process_kprobe",
+        "function": "security_file_open",
+        "path": "/var/run/secrets/kubernetes.io/serviceaccount/..2026_10_25_21_00_00.1/token",
+        "in_init_tree": "true",
+        "action": "KPROBE_ACTION_POST",
+        "daddr": ""
+      }
+    },
+    {
+      "name": "a TCP connect carries its destination address and port",
+      "store": "logs",
+      "query": "source:=tetragon policy:=runtime-outbound-connects namespace:=zot",
+      "fields": {
+        "daddr": "192.0.2.10",
+        "dport": "3333",
+        "path": "",
+        "_msg": "process_kprobe zot/zot-0 /usr/bin/nc runtime-outbound-connects 192.0.2.10:3333"
+      }
+    },
+    {
+      "name": "a module request from the host keeps its string argument and no pod",
+      "store": "logs",
+      "query": "source:=tetragon policy:=runtime-kernel-modules",
+      "fields": {
+        "string_args": "net-pf-38",
+        "namespace": "",
+        "pod": "",
+        "_msg": "process_kprobe host /usr/sbin/modprobe runtime-kernel-modules net-pf-38"
+      }
+    },
+    {
+      "name": "a host exec has no namespace",
+      "store": "logs",
+      "query": "source:=tetragon binary:=\"/usr/bin/containerd-shim-runc-v2\"",
+      "fields": {
+        "event": "process_exec",
+        "namespace": "",
+        "_msg": "process_exec host /usr/bin/containerd-shim-runc-v2"
+      }
+    },
+    {
+      "name": "a setuid exec reports the privilege change and the pod's isolation class",
+      "store": "logs",
+      "query": "source:=tetragon binary:=\"/usr/bin/sudo\"",
+      "fields": {
+        "privileges_changed": "PRIVILEGES_RAISED_EXEC_FILE_SETUID",
+        "isolation_class": "hardened"
+      }
+    },
+    {
+      "name": "a rate-limit notice keeps its node",
+      "store": "logs",
+      "query": "source:=tetragon event:=rate_limit_info",
+      "fields": {
+        "node": "unfold-cp-1",
+        "binary": ""
+      }
+    },
+    {
+      "name": "lines that are not JSON are dropped from every JSON source",
+      "store": "logs",
+      "query": "\"not json\"",
+      "count": 0
+    },
+    {
+      "name": "a pod log line keeps its pod, container, app and stream",
+      "store": "logs",
+      "query": "source:=pod \"cannot push blob\"",
+      "fields": {
+        "cluster": "unfold",
+        "namespace": "zot",
+        "pod": "zot-0",
+        "container": "zot",
+        "app": "zot",
+        "stream": "stdout",
+        "node": "unfold-app-1",
+        "_time": "2026-10-25T21:00:04Z",
+        "_msg": "level=error msg=\"cannot push blob\" repo=webgrip/unfold"
+      }
+    },
+    {
+      "name": "a partial CRI line is joined with its continuation",
+      "store": "logs",
+      "query": "source:=pod stream:=stderr",
+      "fields": {
+        "_msg": "partial line one joined"
+      }
+    },
+    {
+      "name": "a Talos service line keeps its service, level and time",
+      "store": "logs",
+      "query": "source:=talos talos_service:=etcd",
+      "fields": {
+        "level": "error",
+        "node": "unfold-cp-1",
+        "_time": "2026-10-25T21:00:03.6Z",
+        "_msg": "etcd member is unhealthy"
+      }
+    },
+    {
+      "name": "a kernel line without a service is the kernel's",
+      "store": "logs",
+      "query": "source:=talos talos_service:=kernel",
+      "fields": {
+        "level": "warning",
+        "_time": "2026-10-25T21:00:03.7Z"
+      }
+    },
+    {
+      "name": "an egress flow carries its flat query fields and the flow itself",
+      "store": "logs",
+      "query": "source:=hubble-egress verdict:=FORWARDED",
+      "fields": {
+        "source_namespace": "flux-system",
+        "source_workload": "source-controller",
+        "destination_name": "github.com",
+        "destination_port": "443",
+        "allowed_by": "CiliumNetworkPolicy/flux-system/flux-system-egress,NetworkPolicy/flux-system/allow-egress",
+        "denied_by": "",
+        "source.namespace": "flux-system",
+        "IP.destination": "140.82.121.4",
+        "node": "unfold-cp-1",
+        "_time": "2026-10-25T21:00:05.000000001Z",
+        "_msg": "flux-system/source-controller -> github.com:443 FORWARDED"
+      }
+    },
+    {
+      "name": "a dropped flow without names falls back to the address and the pod",
+      "store": "logs",
+      "query": "source:=hubble-egress verdict:=DROPPED",
+      "fields": {
+        "source_workload": "kube-state-metrics-6c-xyz",
+        "destination_name": "10.64.0.21",
+        "destination_port": "10250",
+        "denied_by": "CiliumClusterwideNetworkPolicy//default-deny",
+        "_msg": "observability/kube-state-metrics-6c-xyz -> 10.64.0.21:10250 DROPPED"
+      }
+    },
+    {
+      "name": "routine reads and status writes by system users stay out of the audit store",
+      "store": "audit",
+      "query": "auditID:in(a1, a4)",
+      "count": 0
+    },
+    {
+      "name": "a system user's Secret read, a person's exec and an RBAC write are kept",
+      "store": "audit",
+      "query": "auditID:in(a2, a3, a5)",
+      "count": 3
+    },
+    {
+      "name": "an audit event keeps its fields, its request URI as the message and its own time",
+      "store": "audit",
+      "query": "auditID:=a3",
+      "fields": {
+        "cluster": "unfold",
+        "job": "kube-audit",
+        "node": "unfold-cp-1",
+        "objectRef.subresource": "exec",
+        "user.username": "oidc:ryan",
+        "_msg": "/api/v1/namespaces/zot/pods/zot-0/exec?command=sh",
+        "_time": "2026-10-25T21:00:09Z"
+      }
+    },
+    {
+      "name": "audit events never land in the general log store",
+      "store": "logs",
+      "query": "job:=kube-audit",
+      "count": 0
+    },
+    {
+      "name": "the homelab copy carries the same Tetragon fields while both stores are fed",
+      "store": "homelab",
+      "query": "source:=tetragon event:=process_exec binary:=\"/bin/sh\" namespace:=zot",
+      "fields": {
+        "cluster": "unfold",
+        "in_init_tree": "false",
+        "parent_binary": "/usr/bin/runc"
+      }
+    },
+    {
+      "name": "a client-certificate call by the local Talos health check is kept for the break-glass rule to judge",
+      "store": "audit",
+      "query": "auditID:=b2",
+      "fields": {
+        "user.username": "talos-health",
+        "sourceIPs": "[\"127.0.0.1\"]",
+        "userAgent": "Go-http-client/2.0"
+      }
+    }
+  ],
+  "rules": {
+    "UnfoldPodExecOutsideInitTree": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "namespace": "zot",
+        "binary": "/bin/sh",
+        "parent_binary": "/usr/bin/runc"
+      },
+      "mutation": "s/in_init_tree:=false/in_init_tree:=true/"
+    },
+    "UnfoldPodRanAttackTool": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "namespace": "zot",
+        "binary": "/usr/bin/nmap"
+      },
+      "mutation": "s/|nmap|/|/"
+    },
+    "UnfoldPodWroteHostPath": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "namespace": "zot",
+        "path": "/var/lib/kubelet/config.yaml"
+      },
+      "mutation": "s/policy:=\"runtime-sensitive-host-writes\"/policy:=\"runtime-sensitive-host-write\"/"
+    },
+    "UnfoldCredentialReadByTool": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "namespace": "zot",
+        "binary": "/bin/cat"
+      },
+      "mutation": "s/|cat|/|/"
+    },
+    "UnfoldPrivilegeEscalation": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "namespace": "zot",
+        "binary": "/usr/bin/sudo",
+        "privileges_changed": "PRIVILEGES_RAISED_EXEC_FILE_SETUID"
+      },
+      "mutation": "s/privileges_changed:\\*/privileges_changed:=\"\"/"
+    },
+    "UnfoldKernelModuleLoad": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "string_args": "net-pf-38"
+      },
+      "mutation": "s/policy:=\"runtime-kernel-modules\"/policy:=\"runtime-kernel-module\"/"
+    },
+    "UnfoldCryptoMinerPattern": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "daddr": "192.0.2.10",
+        "dport": "3333"
+      },
+      "mutation": "s/dport:in(\"3333\", /dport:in(/"
+    },
+    "UnfoldToolConnectedOutside": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "binary": "/usr/bin/nc",
+        "daddr": "192.0.2.10"
+      },
+      "mutation": "s/|nc|ncat|/|ncat|/"
+    },
+    "UnfoldSandboxedPodHostProcess": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "binary": "/usr/bin/sudo"
+      },
+      "mutation": "s/isolation_class:in(\"hardened\", \"isolated\")/isolation_class:in(\"isolated\")/"
+    },
+    "UnfoldHostShell": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "binary": "/bin/sh",
+        "parent_binary": "/sbin/init"
+      },
+      "mutation": "s/namespace:=\"\" binary/namespace:=\"zot\" binary/"
+    },
+    "UnfoldPodNamespaceEscapeCall": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "binary": "/usr/bin/nsenter",
+        "function": "__x64_sys_setns"
+      },
+      "mutation": "s/policy:=\"runtime-namespace-escape\"/policy:=\"runtime-namespace-escapes\"/"
+    },
+    "UnfoldRuntimeDetectionCanarySilent": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "quiet_at": "2026-10-25T18:30:00Z",
+      "labels": {
+        "cluster": "unfold"
+      },
+      "mutation": "s/filter credential_reads:=0 or connects:=0/filter credential_reads:=99 or connects:=99/"
+    },
+    "UnfoldRuntimeDetectionCanaryOverreach": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "path": "/etc/hostname"
+      },
+      "mutation": "s/path:=\"\\/etc\\/hostname\"/path:=\"\\/etc\\/hosts\"/"
+    },
+    "UnfoldTetragonEventsDropped": {
+      "fires_at": "2026-10-25T21:02:00Z",
+      "labels": {
+        "node": "unfold-cp-1"
+      },
+      "mutation": "s/event:=rate_limit_info/event:=rate_limit/"
+    },
+    "UnfoldBreakGlassCertificateUsed": {
+      "store": "audit",
+      "fires_at": "2026-10-25T21:05:00Z",
+      "labels": {
+        "user": "admin",
+        "sourceIPs": "[\"100.64.0.5\"]"
+      },
+      "absent_labels": {
+        "user": "talos-health"
+      },
+      "mutation": "s/filter NOT user:~\"^(system:|oidc:)\"/filter NOT user:~\"^(system:|oidc:|admin)\"/"
+    }
+  }
+}

@@ -1,0 +1,807 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: authentik-relay
+  namespace: ops-auth
+  labels:
+    app.kubernetes.io/name: authentik-relay
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+  automountServiceAccountToken: false
+  containers:
+  - args:
+    - -c
+    - /etc/envoy/authentik-relay.yaml
+    - --log-level
+    - warn
+    - --disable-hot-restart
+    image: docker.io/envoyproxy/envoy:distroless-v1.40.1@sha256:6cf314259a0adde2386baafeeeb041ed37a30f6bdd935cff36cd38a1e15acab1
+    name: envoy
+    ports:
+    - containerPort: 3128
+      name: connect
+    readinessProbe:
+      periodSeconds: 10
+      tcpSocket:
+        port: connect
+    resources:
+      limits:
+        ephemeral-storage: 16Mi
+        memory: 64Mi
+      requests:
+        cpu: 5m
+        memory: 24Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /etc/envoy
+      name: config
+      readOnly: true
+  enableServiceLinks: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  serviceAccountName: authentik-relay
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  volumes:
+  - configMap:
+      name: authentik-relay-cm65h425gt
+    name: config
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oauth2-proxy-hubble
+  namespace: ops-auth
+  labels:
+    app.kubernetes.io/component: oauth2-proxy
+    app.kubernetes.io/name: oauth2-proxy-hubble
+spec:
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  automountServiceAccountToken: false
+  containers:
+  - args:
+    - --http-address=0.0.0.0:4180
+    - --reverse-proxy=true
+    - --provider=oidc
+    - --provider-display-name=Authentik
+    - --oidc-issuer-url=https://authentik.webgrip.dev/application/o/unfold-consoles/
+    - --client-id=unfold-consoles
+    - --client-secret-file=/etc/oauth2-proxy/oidc/client_secret
+    - --code-challenge-method=S256
+    - --scope=openid profile offline_access unfold_kubernetes
+    - --oidc-email-claim=preferred_username
+    - --oidc-groups-claim=unfold_groups
+    - --allowed-group=unfold-admins
+    - --allowed-group=unfold-viewers
+    - --email-domain=*
+    - --redirect-url=https://hubble.ops.unfoldhq.dev/oauth2/callback
+    - --upstream=http://hubble-ui.kube-system.svc.cluster.local:80
+    - --cookie-name=__Host-ops-hubble
+    - --cookie-secret-file=/etc/oauth2-proxy/cookie/cookie_secret
+    - --cookie-secure=true
+    - --cookie-samesite=lax
+    - --cookie-expire=12h
+    - --cookie-refresh=10m
+    - --skip-provider-button=true
+    - --silence-ping-logging=true
+    - --pass-access-token=false
+    - --pass-authorization-header=false
+    env:
+    - name: HTTPS_PROXY
+      value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+    - name: NO_PROXY
+      value: .cluster.local,.svc,10.65.0.0/16,10.66.0.0/16
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    livenessProbe:
+      httpGet:
+        path: /ping
+        port: http
+      periodSeconds: 30
+    name: oauth2-proxy
+    ports:
+    - containerPort: 4180
+      name: http
+    readinessProbe:
+      httpGet:
+        path: /ping
+        port: http
+      periodSeconds: 10
+    resources:
+      limits:
+        ephemeral-storage: 16Mi
+        memory: 64Mi
+      requests:
+        cpu: 5m
+        memory: 24Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /etc/oauth2-proxy/oidc
+      name: oidc
+      readOnly: true
+    - mountPath: /etc/oauth2-proxy/cookie
+      name: cookie
+      readOnly: true
+  enableServiceLinks: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  serviceAccountName: oauth2-proxy-hubble
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+  volumes:
+  - name: oidc
+    secret:
+      secretName: ops-consoles-oidc
+  - name: cookie
+    secret:
+      secretName: oauth2-proxy-hubble-cookie
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oauth2-proxy-policy-reporter
+  namespace: ops-auth
+  labels:
+    app.kubernetes.io/component: oauth2-proxy
+    app.kubernetes.io/name: oauth2-proxy-policy-reporter
+spec:
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  automountServiceAccountToken: false
+  containers:
+  - args:
+    - --http-address=0.0.0.0:4180
+    - --reverse-proxy=true
+    - --provider=oidc
+    - --provider-display-name=Authentik
+    - --oidc-issuer-url=https://authentik.webgrip.dev/application/o/unfold-consoles/
+    - --client-id=unfold-consoles
+    - --client-secret-file=/etc/oauth2-proxy/oidc/client_secret
+    - --code-challenge-method=S256
+    - --scope=openid profile offline_access unfold_kubernetes
+    - --oidc-email-claim=preferred_username
+    - --oidc-groups-claim=unfold_groups
+    - --allowed-group=unfold-admins
+    - --allowed-group=unfold-viewers
+    - --email-domain=*
+    - --redirect-url=https://policy-reporter.ops.unfoldhq.dev/oauth2/callback
+    - --upstream=http://policy-reporter-ui.policy-reporter.svc.cluster.local:8080
+    - --cookie-name=__Host-ops-policy-reporter
+    - --cookie-secret-file=/etc/oauth2-proxy/cookie/cookie_secret
+    - --cookie-secure=true
+    - --cookie-samesite=lax
+    - --cookie-expire=12h
+    - --cookie-refresh=10m
+    - --skip-provider-button=true
+    - --silence-ping-logging=true
+    - --pass-access-token=false
+    - --pass-authorization-header=false
+    env:
+    - name: HTTPS_PROXY
+      value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+    - name: NO_PROXY
+      value: .cluster.local,.svc,10.65.0.0/16,10.66.0.0/16
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    livenessProbe:
+      httpGet:
+        path: /ping
+        port: http
+      periodSeconds: 30
+    name: oauth2-proxy
+    ports:
+    - containerPort: 4180
+      name: http
+    readinessProbe:
+      httpGet:
+        path: /ping
+        port: http
+      periodSeconds: 10
+    resources:
+      limits:
+        ephemeral-storage: 16Mi
+        memory: 64Mi
+      requests:
+        cpu: 5m
+        memory: 24Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /etc/oauth2-proxy/oidc
+      name: oidc
+      readOnly: true
+    - mountPath: /etc/oauth2-proxy/cookie
+      name: cookie
+      readOnly: true
+  enableServiceLinks: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  serviceAccountName: oauth2-proxy-policy-reporter
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+  volumes:
+  - name: oidc
+    secret:
+      secretName: ops-consoles-oidc
+  - name: cookie
+    secret:
+      secretName: oauth2-proxy-policy-reporter-cookie
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: headlamp
+  namespace: headlamp
+  labels:
+    app.kubernetes.io/name: headlamp
+spec:
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  containers:
+  - args:
+    - -in-cluster
+    - -in-cluster-context-name=unfold-main
+    - -port=4466
+    - -watch-plugins-changes=false
+    - -oidc-idp-issuer-url=https://authentik.webgrip.dev/application/o/unfold-kubernetes/
+    - -oidc-client-id=unfold-kubernetes
+    - -oidc-use-pkce
+    - -oidc-scopes=profile,offline_access,unfold_kubernetes
+    - -oidc-callback-url=https://headlamp.ops.unfoldhq.dev/oidc-callback
+    - -me-groups-path=unfold_groups
+    env:
+    - name: HOME
+      value: /home/headlamp
+    - name: HTTPS_PROXY
+      value: http://authentik-relay.ops-auth.svc.cluster.local:3128
+    - name: NO_PROXY
+      value: .cluster.local,.svc,10.65.0.0/16,10.66.0.0/16
+    image: ghcr.io/headlamp-k8s/headlamp:v0.46.0@sha256:8a0ef97527544baa2b35825940ddf4db6e2d09c30cd5aa31fd269ff604cc8b75
+    livenessProbe:
+      httpGet:
+        path: /
+        port: http
+      periodSeconds: 30
+    name: headlamp
+    ports:
+    - containerPort: 4466
+      name: http
+    readinessProbe:
+      httpGet:
+        path: /
+        port: http
+      periodSeconds: 10
+    resources:
+      limits:
+        ephemeral-storage: 64Mi
+        memory: 192Mi
+      requests:
+        cpu: 10m
+        memory: 48Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /home/headlamp
+      name: home
+    - mountPath: /tmp
+      name: tmp
+  enableServiceLinks: false
+  securityContext:
+    fsGroup: 101
+    runAsGroup: 101
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  serviceAccountName: headlamp
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+  volumes:
+  - emptyDir:
+      sizeLimit: 32Mi
+    name: home
+  - emptyDir:
+      sizeLimit: 32Mi
+    name: tmp
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: policy-reporter
+  namespace: policy-reporter
+  labels:
+    app.kubernetes.io/name: policy-reporter
+    app.kubernetes.io/instance: policy-reporter
+    app.kubernetes.io/version: 3.11.2
+    app.kubernetes.io/part-of: policy-reporter
+    helm.sh/chart: policy-reporter-3.11.2
+spec:
+  serviceAccountName: policy-reporter
+  automountServiceAccountToken: true
+  securityContext:
+    fsGroup: 1234
+  containers:
+  - name: policy-reporter
+    image: ghcr.io/kyverno/policy-reporter:3.11.2@sha256:2b33409d34be3195f16d9ed2c89f8b58001aeec986b254ba6bb45323d6d1e884
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1234
+      seccompProfile:
+        type: RuntimeDefault
+    args:
+    - --port=8080
+    - --config=/app/config.yaml
+    - --dbfile=/sqlite/database.db
+    - --metrics-enabled=false
+    - --rest-enabled=true
+    - --profile=false
+    - --lease-name=policy-reporter
+    - --template-dir=/app/templates
+    ports:
+    - name: http
+      containerPort: 8080
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: http
+    resources:
+      limits:
+        ephemeral-storage: 64Mi
+        memory: 160Mi
+      requests:
+        cpu: 10m
+        memory: 48Mi
+    volumeMounts:
+    - name: sqlite
+      mountPath: /sqlite
+    - name: config-file
+      mountPath: /app/config.yaml
+      subPath: config.yaml
+      readOnly: true
+    - name: tmp
+      mountPath: /tmp
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  volumes:
+  - name: sqlite
+    emptyDir:
+      sizeLimit: 64Mi
+  - name: config-file
+    secret:
+      secretName: policy-reporter-config
+      optional: true
+  - name: tmp
+    emptyDir:
+      sizeLimit: 16Mi
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: policy-reporter-ui
+  namespace: policy-reporter
+  labels:
+    app.kubernetes.io/name: policy-reporter-ui
+    app.kubernetes.io/instance: policy-reporter
+    app.kubernetes.io/version: 3.11.2
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: policy-reporter-3.11.2
+spec:
+  serviceAccountName: policy-reporter-ui
+  automountServiceAccountToken: true
+  securityContext:
+    runAsGroup: 1234
+    runAsUser: 1234
+  containers:
+  - name: policy-reporter-ui
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1234
+      seccompProfile:
+        type: RuntimeDefault
+    image: ghcr.io/kyverno/policy-reporter-ui:2.9.1@sha256:642762427ef5bc941b22f51f6e7c5c8f116a0635132239d11fc89826edbd3eaf
+    imagePullPolicy: IfNotPresent
+    args:
+    - run
+    - --config=/app/config.yaml
+    - --port=8080
+    ports:
+    - name: http
+      containerPort: 8080
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+    resources:
+      limits:
+        ephemeral-storage: 32Mi
+        memory: 96Mi
+      requests:
+        cpu: 5m
+        memory: 32Mi
+    volumeMounts:
+    - name: config-file
+      mountPath: /app/config.yaml
+      subPath: config.yaml
+      readOnly: true
+    - name: tmp
+      mountPath: /tmp
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  volumes:
+  - name: config-file
+    secret:
+      secretName: policy-reporter-ui-config
+      optional: true
+  - name: tmp
+    emptyDir:
+      sizeLimit: 16Mi
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trivy-operator-polr-adapter
+  namespace: policy-reporter
+  labels:
+    app.kubernetes.io/name: trivy-operator-polr-adapter
+    app.kubernetes.io/instance: trivy-operator-polr-adapter
+spec:
+  serviceAccountName: trivy-operator-polr-adapter
+  automountServiceAccountToken: true
+  securityContext:
+    fsGroup: 1234
+    runAsNonRoot: true
+    runAsUser: 1234
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: trivy-operator-polr-adapter
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1234
+      seccompProfile:
+        type: RuntimeDefault
+    image: ghcr.io/fjogeleit/trivy-operator-polr-adapter:0.11.5@sha256:37029b4d464f2b6a0076129a34b06a39385237f679abe4daf25c4b93d7f01218
+    imagePullPolicy: IfNotPresent
+    args:
+    - run
+    - --config
+    - /app/config.yaml
+    ports:
+    - name: http
+      containerPort: 8080
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /ready
+        port: http
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+    resources:
+      limits:
+        ephemeral-storage: 32Mi
+        memory: 192Mi
+      requests:
+        cpu: 10m
+        memory: 48Mi
+    volumeMounts:
+    - name: config-file
+      mountPath: /app/config.yaml
+      subPath: config.yaml
+      readOnly: true
+  volumes:
+  - name: config-file
+    configMap:
+      name: trivy-operator-polr-adapter-config
+      optional: false
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+        weight: 100
+      - preference:
+          matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - unfold
+        weight: 50
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.webgrip.io/pool
+            operator: In
+            values:
+            - system
+            - unfold
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  tolerations:
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: system
+  - effect: NoSchedule
+    key: node.webgrip.io/pool
+    operator: Equal
+    value: unfold
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists

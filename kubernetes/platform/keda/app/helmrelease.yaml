@@ -26,6 +26,10 @@ spec:
       strategy: uninstall
       remediateLastFailure: true
   values:
+    priorityClassName: platform-critical
+    prometheus:
+      operator:
+        enabled: true
     crds:
       install: true
     affinity:

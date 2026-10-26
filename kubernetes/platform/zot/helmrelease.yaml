@@ -17,6 +17,7 @@ spec:
     strategy:
       name: RetryOnFailure
   values:
+    priorityClassName: platform-critical
     image:
       repository: ghcr.io/project-zot/zot
       # renovate: datasource=docker depName=ghcr.io/project-zot/zot

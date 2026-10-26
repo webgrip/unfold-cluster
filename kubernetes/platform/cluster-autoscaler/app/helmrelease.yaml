@@ -50,7 +50,7 @@ spec:
       balance-similar-node-groups: false
     podAnnotations:
       checksum/hcloud-config: ${CLUSTER_AUTOSCALER_REVISION:=unseeded}
-    priorityClassName: system-cluster-critical
+    priorityClassName: platform-critical
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

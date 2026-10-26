@@ -1,0 +1,362 @@
+prometheus.exporter.self "alloy_metrics" { }
+
+prometheus.scrape "alloy_metrics" {
+	targets         = prometheus.exporter.self.alloy_metrics.targets
+	job_name        = "alloy-metrics"
+	scrape_interval = "30s"
+	forward_to      = [prometheus.remote_write.unfold.receiver]
+}
+
+discovery.kubernetes "apiserver" {
+	role = "endpoints"
+
+	namespaces {
+		names = ["default"]
+	}
+}
+
+discovery.relabel "apiserver" {
+	targets = discovery.kubernetes.apiserver.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_service_name", "__meta_kubernetes_endpoint_port_name"]
+		regex         = "kubernetes;https"
+		action        = "keep"
+	}
+}
+
+prometheus.scrape "apiserver" {
+	targets           = discovery.relabel.apiserver.output
+	job_name          = "apiserver"
+	scheme            = "https"
+	scrape_interval   = "30s"
+	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+	tls_config {
+		ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	}
+	forward_to = [prometheus.relabel.apiserver.receiver]
+}
+
+prometheus.relabel "apiserver" {
+	forward_to = [prometheus.remote_write.unfold.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket"
+		action        = "drop"
+	}
+}
+
+discovery.kubernetes "nodes" {
+	role = "node"
+}
+
+discovery.relabel "kubelet" {
+	targets = discovery.kubernetes.nodes.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		target_label  = "node"
+	}
+}
+
+prometheus.scrape "kubelet" {
+	targets           = discovery.relabel.kubelet.output
+	job_name          = "kubelet"
+	scheme            = "https"
+	scrape_interval   = "30s"
+	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+	tls_config {
+		insecure_skip_verify = true
+	}
+	forward_to = [prometheus.remote_write.unfold.receiver]
+}
+
+prometheus.scrape "cadvisor" {
+	targets           = discovery.relabel.kubelet.output
+	job_name          = "cadvisor"
+	scheme            = "https"
+	metrics_path      = "/metrics/cadvisor"
+	scrape_interval   = "30s"
+	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+	tls_config {
+		insecure_skip_verify = true
+	}
+	forward_to = [prometheus.relabel.cadvisor.receiver]
+}
+
+prometheus.relabel "cadvisor" {
+	forward_to = [prometheus.remote_write.unfold.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "container_(blkio_device_usage_total|tasks_state|memory_failures_total)"
+		action        = "drop"
+	}
+}
+
+discovery.relabel "etcd" {
+	targets = discovery.kubernetes.nodes.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_labelpresent_node_role_kubernetes_io_control_plane"]
+		regex         = "true"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_address_InternalIP"]
+		regex         = "(.+)"
+		replacement   = "$1:2383"
+		target_label  = "__address__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		target_label  = "node"
+	}
+}
+
+prometheus.scrape "etcd" {
+	targets         = discovery.relabel.etcd.output
+	job_name        = "etcd"
+	scrape_interval = "30s"
+	forward_to      = [prometheus.remote_write.unfold.receiver]
+}
+
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.relabel "pod_metrics" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_phase"]
+		regex         = "Running"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+		separator     = ";"
+		regex         = "observability;prometheus-node-exporter;9100"
+		replacement   = "node-exporter"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "observability;(alloy-logs|vmsingle|vlsingle-logs|vlsingle-audit|vmalert-metrics|vmalert-logs|alertmanager|vmauth-query|grafana-operator);(http|metrics)"
+		replacement   = "$1"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "observability;grafana;grafana-http"
+		replacement   = "grafana"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_k8s_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;cilium;(prometheus|hubble-metrics)"
+		replacement   = "cilium"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_k8s_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;cilium;prometheus"
+		replacement   = "agent"
+		target_label  = "component"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_k8s_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;cilium;hubble-metrics"
+		replacement   = "hubble"
+		target_label  = "component"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_io_cilium_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;operator;prometheus"
+		replacement   = "cilium-operator"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_k8s_app", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;kube-dns;metrics"
+		replacement   = "coredns"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_name", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "kube-system;tetragon;tetragon;"
+		replacement   = "tetragon"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["job", "__meta_kubernetes_pod_ip"]
+		separator     = ";"
+		regex         = "tetragon;(.+)"
+		replacement   = "$1:2112"
+		target_label  = "__address__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "flux-system;(http-prom|http-metrics)"
+		replacement   = "flux"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+		separator     = ";"
+		regex         = "flux-system;(.+)"
+		replacement   = "$1"
+		target_label  = "controller"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+		separator     = ";"
+		regex         = "trivy-system;trivy-operator;8080"
+		replacement   = "trivy-operator"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "trivy-system;trivy-report-shipper;metrics"
+		replacement   = "trivy-report-shipper"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_part_of", "__meta_kubernetes_pod_container_port_number"]
+		separator     = ";"
+		regex         = "kyverno;kyverno;8000"
+		replacement   = "kyverno"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_part_of", "__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+		separator     = ";"
+		regex         = "kyverno;kyverno;(.+)"
+		replacement   = "$1"
+		target_label  = "component"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "keda;keda-operator;metrics"
+		replacement   = "keda"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+		separator     = ";"
+		regex         = "cluster-autoscaler;hetzner-cluster-autoscaler;8085"
+		replacement   = "cluster-autoscaler"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_component", "__meta_kubernetes_pod_container_port_name"]
+		separator     = ";"
+		regex         = "cert-manager;controller;http-metrics"
+		replacement   = "cert-manager"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["job"]
+		regex         = ".+"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_node_name"]
+		target_label  = "node"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+}
+
+prometheus.scrape "pods" {
+	targets         = discovery.relabel.pod_metrics.output
+	job_name        = "pods"
+	scrape_interval = "30s"
+	forward_to      = [prometheus.remote_write.unfold.receiver]
+}
+
+discovery.relabel "kube_state_metrics" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name", "__meta_kubernetes_pod_phase"]
+		separator     = ";"
+		regex         = "observability;kube-state-metrics;http;Running"
+		action        = "keep"
+	}
+}
+
+prometheus.scrape "kube_state_metrics" {
+	targets         = discovery.relabel.kube_state_metrics.output
+	job_name        = "kube-state-metrics"
+	scrape_interval = "30s"
+	honor_labels    = true
+	forward_to      = [prometheus.remote_write.unfold.receiver]
+}
+
+prometheus.remote_write "unfold" {
+	external_labels = {
+		cluster = "unfold",
+	}
+
+	endpoint {
+		name = "vmsingle"
+		url  = "http://vmsingle.observability.svc.cluster.local:8428/api/v1/write"
+	}
+
+	endpoint {
+		name = "homelab"
+		url  = "http://unfold-gateway.webgrip.dev:8427/api/v1/write"
+	}
+
+	wal {
+		truncate_frequency = "15m"
+		max_keepalive_time = "2h"
+	}
+}

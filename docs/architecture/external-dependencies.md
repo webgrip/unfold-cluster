@@ -105,6 +105,8 @@ monthly change the target adds.
 | E43 | Google Workspace | U→X | Upstream of Authentik today; the operators' IdP and an alert mail relay in the target | No human OIDC login | **Partly:** an operator identity, as E13 | Workspace 2-step verification | a | Stays (ADR 0014) | – | 0,00 |
 | E44 | Model providers | U→X | LiteLLM's calls (ADR 0007) | Runs and the decider stop | No infrastructure change | Budgets per key | a | Stays | – | usage |
 | E45 | The owner's password manager and offline copy (the T0 seed) | – | Break-glass for everything; the rebuild | – | It opens everything | Holds the passphrase, the age key, the tokens and the Talos bundle. **Gap:** not the disk KMS master key or the `hcloud-luks` passphrase, both only in the homelab OpenBao (and the state) | a | Add both now ([break-glass](../runbooks/break-glass.md#the-offline-seed)) | S | 0,00 |
+| E46 | Grafana plugin source (`grafana.com`, redirecting to `storage.googleapis.com`) | U→X | Grafana downloads its one plugin, the VictoriaLogs data source, when its pod starts | A new Grafana pod starts without the logs data source; metrics and alerting are untouched | **No:** it can only serve a plugin to Grafana, which reads but cannot change the cluster | Egress allowed by name for Grafana only | c | Bake the plugin into a mirrored image or serve it from Zot | S | 0,00 |
+| E47 | Off-site uptime-kuma (`uptime.webgrip.dev`, on garage-fsn1) | U→X | The dead-man's switch: Alertmanager pushes `Watchdog` every two minutes | Nothing pages when Unfold's alerting itself dies | **No:** it only receives pushes | The homelab's blackbox exporter also reads `Watchdog` through `query.ops.unfoldhq.dev` | a | Keep; its push monitor becomes declarative | S | 0,00 |
 
 ## Classification
 
@@ -159,5 +161,12 @@ at its row.
 | `factory.talos.dev` | E38 |
 | `pkgs.tailscale.com` | E41 |
 | `dl.k8s.io` | E42 |
+| `ntfy.webgrip.dev` | E14, E15 |
+| `grafana.ops.unfoldhq.dev`, `query.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own Grafana and its read-only query endpoint behind the ops Gateway; the homelab Grafana reads `query` over the tailnet |
+| `grafana.com`, `storage.googleapis.com` | E46 |
+| `uptime.webgrip.dev` | E47 |
 | `slsa.dev`, `spdx.dev` | none: predicate type identifiers in attestations, never contacted |
+| `ops.unfoldhq.dev`, `hubble.ops.unfoldhq.dev`, `headlamp.ops.unfoldhq.dev`, `policy-reporter.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own consoles behind its Gateway on the tailnet; login goes through Authentik, the certificate through Cloudflare DNS-01 and Let's Encrypt |
+| `grafana.webgrip.dev` | none: a dashboard link a viewer follows to the homelab FinOps dashboard, never contacted by the cluster |
+| `kubernetes.io`, `git.k8s.io`, `datatracker.ietf.org`, `tools.ietf.org`, `www.rfc-editor.org`, `fetch.spec.whatwg.org` | none: specification links in the Gateway API CRD descriptions, never contacted |
 | `ploeg.webgrip.dev` | none: a label and annotation prefix, never contacted |

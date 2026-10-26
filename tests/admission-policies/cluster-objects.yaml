@@ -80,6 +80,34 @@ metadata:
 value: -5
 preemptionPolicy: Never
 ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ops-gateway
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ops-auth
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: headlamp
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: policy-reporter
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
 apiVersion: apps/v1
 kind: ReplicaSet
 metadata:

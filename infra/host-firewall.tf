@@ -24,6 +24,7 @@ locals {
       { name = "trustd", protocol = "tcp", ports = [50001], sources = [local.network_range] },
       { name = "etcd", protocol = "tcp", ports = ["2379-2380"], sources = local.control_plane_host_addresses },
       { name = "etcd-metrics", protocol = "tcp", ports = [local.etcd_metrics_port], sources = [local.pod_subnet] },
+      { name = "ops-gateway", protocol = "tcp", ports = [443], sources = concat(local.tailnet_prefixes, [local.network_range]) },
     ])
   }
 

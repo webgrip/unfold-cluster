@@ -1,0 +1,83 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-operator
+spec:
+  interval: 1h
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: grafana-operator
+  install:
+    crds: Create
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: grafana-operator
+    namespaceScope: true
+    watchNamespaces: observability
+    leaderElect: true
+    image:
+      registry: ghcr.io
+      repository: grafana/grafana-operator
+      # renovate: datasource=docker depName=ghcr.io/grafana/grafana-operator
+      tag: v5.25.0@sha256:bc572995823fcfc32d2e960a47324a87baae8e4c9f821b8564026243e73624f3
+    env:
+      - name: RELATED_IMAGE_GRAFANA
+        value: docker.io/grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: 20m
+        memory: 96Mi
+      limits:
+        memory: 256Mi
+        ephemeral-storage: 128Mi
+    volumes:
+      dashboards:
+        sizeLimit: 64Mi
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
+        effect: NoSchedule
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
+        effect: NoSchedule
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+                    - unfold
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+    serviceMonitor:
+      enabled: false

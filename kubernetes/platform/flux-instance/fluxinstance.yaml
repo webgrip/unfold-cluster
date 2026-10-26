@@ -126,6 +126,7 @@ spec:
           spec:
             template:
               spec:
+                priorityClassName: system-cluster-critical
                 containers:
                   - name: manager
                     resources:
