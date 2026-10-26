@@ -58,6 +58,7 @@ readonly homelab_port="$((base_port + 2))"
 readonly alloy_port="$((base_port + 3))"
 readonly talos_services_port=6050
 readonly talos_kernel_port=6051
+readonly ready_timeout_seconds=120
 
 readonly pipeline_mutations=(
   's/to_string(process.in_init_tree || `false`)/to_string(`true`)/'
@@ -153,10 +154,9 @@ store_url() {
 }
 
 wait_for_http() {
-  local url="$1" waited=0
-  until curl -fs -o /dev/null "${url}"; do
-    waited=$((waited + 1))
-    [ "${waited}" -lt 60 ] || return 1
+  local url="$1" deadline=$((SECONDS + ready_timeout_seconds))
+  until curl -fs --max-time 5 -o /dev/null "${url}"; do
+    [ "${SECONDS}" -lt "${deadline}" ] || return 1
     sleep 0.5
   done
 }
@@ -172,7 +172,7 @@ start_stores() {
     background_pids+=("$!")
   done
   for name in logs audit homelab; do
-    wait_for_http "$(store_url "${name}")/health" || { echo "VictoriaLogs ${name} did not start" >&2; exit 1; }
+    wait_for_http "$(store_url "${name}")/health" || { echo "VictoriaLogs ${name} did not start within ${ready_timeout_seconds}s; its log:" >&2; tail -n 30 "${work_dir}/vl-${name}.log" >&2; exit 1; }
   done
 }
 
