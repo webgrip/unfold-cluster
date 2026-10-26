@@ -17,6 +17,7 @@ resources:
   - ../../platform/cloudnative-pg
   - ../../platform/etcd-backup
   - ../../platform/kube-proxy-removal
+  - ../../platform/coredns
   - ../../platform/human-access
   - ../../platform/keda
   - ../../platform/cluster-autoscaler
