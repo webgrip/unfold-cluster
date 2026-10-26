@@ -251,6 +251,8 @@ That admin kubeconfig is break-glass: it is in `system:masters` and cannot be re
 
 The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md). The confidential class and the next tier of measures are in [RFC 0002](docs/rfc/0002-confidential-class-and-next-tier.md).
 
+Everything production depends on outside the cluster, what each stops when it is down and what it can change when it is compromised, is in [docs/architecture/external-dependencies.md](docs/architecture/external-dependencies.md), checked against the code on every pull request; the target that keeps production operable without the homelab is [ADR 0015](docs/adr/0015-production-stays-operable-without-the-homelab.md), and what to do meanwhile is the [break-glass runbook](docs/runbooks/break-glass.md).
+
 ## Open
 
 * **First boot to verify.** That Talos applies the Flux instance after the operator's CRDs exist, that Cilium's MTU is right on the vSwitch path, and that the `private0` alias lands on the private NIC so the API VIP comes up, are proven only by the first apply.
