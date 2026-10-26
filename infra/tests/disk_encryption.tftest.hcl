@@ -301,6 +301,91 @@ run "an_apply_without_a_master_key_is_refused" {
   expect_failures = [hcloud_server.headscale]
 }
 
+run "an_apply_accepts_a_master_key_of_random_bytes_that_are_not_text" {
+  command = plan
+
+  variables {
+    talos_snapshot_required = true
+  }
+
+  override_data {
+    target = data.hcloud_images.talos
+    values = {
+      images = [{
+        id                    = 4242
+        name                  = ""
+        type                  = "snapshot"
+        description           = "Talos"
+        architecture          = "x86"
+        os_flavor             = "unknown"
+        os_version            = ""
+        rapid_deploy          = false
+        deprecated            = ""
+        deprecation_announced = ""
+        unavailable_after     = ""
+        is_deprecated         = false
+        labels                = {}
+        created               = ""
+      }]
+    }
+  }
+
+  override_data {
+    target = data.external.disk_kms_master_key
+    values = {
+      result = {
+        master_key = "//////////////////////////////////////////8="
+      }
+    }
+  }
+
+  assert {
+    condition     = strcontains(hcloud_server.headscale.user_data, "content: \"//////////////////////////////////////////8=\"")
+    error_message = "a 32-byte key minted from random bytes is not valid UTF-8 once decoded, and the apply must still accept it"
+  }
+}
+
+run "an_apply_with_a_master_key_of_the_wrong_length_is_refused" {
+  command = plan
+
+  variables {
+    talos_snapshot_required = true
+  }
+
+  override_data {
+    target = data.hcloud_images.talos
+    values = {
+      images = [{
+        id                    = 4242
+        name                  = ""
+        type                  = "snapshot"
+        description           = "Talos"
+        architecture          = "x86"
+        os_flavor             = "unknown"
+        os_version            = ""
+        rapid_deploy          = false
+        deprecated            = ""
+        deprecation_announced = ""
+        unavailable_after     = ""
+        is_deprecated         = false
+        labels                = {}
+        created               = ""
+      }]
+    }
+  }
+
+  override_data {
+    target = data.external.disk_kms_master_key
+    values = {
+      result = {
+        master_key = "q83vEjRWeJCrze8SNFZ4kA=="
+      }
+    }
+  }
+
+  expect_failures = [hcloud_server.headscale]
+}
+
 run "a_plaintext_key_server_is_refused" {
   command = plan
 

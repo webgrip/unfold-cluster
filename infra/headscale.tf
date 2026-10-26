@@ -149,7 +149,7 @@ resource "hcloud_server" "headscale" {
     replace_triggered_by = [terraform_data.headscale_generation]
 
     precondition {
-      condition     = !var.talos_snapshot_required || length(base64decode(local.disk_kms_master_key)) == 32
+      condition     = !var.talos_snapshot_required || can(regex("^[A-Za-z0-9+/]{43}=$", local.disk_kms_master_key))
       error_message = "OpenBao secret/unfold-cluster/disk-kms holds no 32-byte disk KMS master key; scripts/disk-kms-key.sh mints it on apply runs."
     }
   }
