@@ -176,9 +176,27 @@ read_state_outputs() {
   [ "${#control_plane_ips[@]}" -gt 0 ] || fail "the state holds no control planes"
 }
 
+talos_answers() {
+  local node="$1"
+  local failures_before="${#failed_checks[@]}"
+  check "${node}: talosctl version" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" version
+  [ "${#failed_checks[@]}" -eq "$failures_before" ] && return 0
+  echo "${node} does not answer its Talos API; skipping its other Talos checks"
+  unreachable_nodes+=("$node")
+  return 1
+}
+
+is_unreachable() {
+  local node="$1" unreachable
+  for unreachable in "${unreachable_nodes[@]}"; do
+    [ "$unreachable" = "$node" ] && return 0
+  done
+  return 1
+}
+
 report_node() {
   local node="$1"
-  check "${node}: talosctl version" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" version
+  talos_answers "$node" || return 0
   check "${node}: cluster members (discovery)" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" get members
   check "${node}: services" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" service
   check "${node}: ext-tailscale log, last 50 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs ext-tailscale --tail 50
@@ -206,6 +224,7 @@ report_etcd() {
   local node
   local failures_before
   for node in "${control_plane_ips[@]}"; do
+    is_unreachable "$node" && continue
     failures_before="${#failed_checks[@]}"
     check "etcd members, asked through ${node}" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" etcd members
     [ "${#failed_checks[@]}" -gt "$failures_before" ] || return 0
@@ -222,6 +241,7 @@ kube_system_containers() {
 report_kube_system_via_talos() {
   local node container
   for node in "${control_plane_ips[@]}" "${worker_ips[@]}" "${metal_ips[@]}"; do
+    is_unreachable "$node" && continue
     check "${node}: Kubernetes containers" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" containers -k
     while IFS= read -r container; do
       check "${node}: log of ${container}, last 100 lines" "${talosctl_cmd[@]}" --endpoints "$node" --nodes "$node" logs -k "$container" --tail 100
@@ -233,9 +253,22 @@ report_kubernetes() {
   local configured_server kube_server kube_tls_name
   configured_server="$(kubectl --kubeconfig "${state_dir}/kubeconfig" config view -o jsonpath='{.clusters[0].cluster.server}')"
   kube_tls_name="$(printf '%s' "$configured_server" | sed -E 's#^https://([^:/]+).*#\1#')"
-  kube_server="https://${control_plane_ips[0]}:6443"
   section "Kubernetes API"
   echo "The kubeconfig points at ${configured_server}, the private VIP, reachable only inside the network or over the tailnet."
+  local node
+  kube_server=""
+  for node in "${control_plane_ips[@]}"; do
+    if [ "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${node}:6443/livez" || true)" != "000" ]; then
+      kube_server="https://${node}:6443"
+      break
+    fi
+    echo "${node}:6443 does not complete a TLS handshake within 10s; trying the next control plane"
+  done
+  if [ -z "$kube_server" ]; then
+    echo "no control plane's API server completes a TLS handshake; skipping the Kubernetes checks"
+    failed_checks+=("Kubernetes API on every control plane")
+    return
+  fi
   echo "Asking ${kube_server} instead, the firewall's 6443 rule for ADMIN_CIDRS, and checking the certificate against ${kube_tls_name}, a name it is issued for."
   local kube=(kubectl --kubeconfig "${state_dir}/kubeconfig" --server "$kube_server" --tls-server-name "$kube_tls_name" --request-timeout=20s)
   check "kubectl get nodes" "${kube[@]}" get nodes -o wide
@@ -336,6 +369,7 @@ main() {
 
   ensure_tools
   talosctl_cmd=(talosctl --talosconfig "${state_dir}/talosconfig")
+  unreachable_nodes=()
   report_rate_limit
   read_state_outputs
 
