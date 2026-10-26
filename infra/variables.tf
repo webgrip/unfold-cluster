@@ -58,7 +58,7 @@ variable "worker_pools" {
     system = {
       server_type = "cpx32"
       location    = "fsn1"
-      node_count  = 1
+      node_count  = 0
       name_prefix = "unfold-system"
       first_host  = 51
       labels      = { "node.webgrip.io/pool" = "system" }
