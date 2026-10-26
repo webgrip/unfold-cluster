@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-26
 ---
 
-# ADR 0015: Unfold observes itself: Alloy collects, VictoriaMetrics and VictoriaLogs store, vmalert and Alertmanager page, Grafana shows, and the homelab only reads
+# ADR 0016: Unfold observes itself: Alloy collects, VictoriaMetrics and VictoriaLogs store, vmalert and Alertmanager page, Grafana shows, and the homelab only reads
 
 ## Context and problem statement
 
@@ -19,8 +19,8 @@ same: "the cluster watches itself; nothing about production alerting passes thro
 This record decides how: the collector, the stores, the alerting path and where it pages, Grafana,
 how the homelab reads, and how the old path is retired without a gap.
 
-ADR 0013 (proposed) already decides *where* the stack runs: on a `system` node, which this change
-builds behind `node_count = 0`.
+ADR 0013 (proposed) already decides *where* the stack runs: on a `system` node, which #106 declares
+behind `node_count = 0`. Until it exists the stack runs on the hub.
 
 ## Facts the decision rests on
 

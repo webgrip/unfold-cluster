@@ -1,6 +1,6 @@
 # Observability runbook
 
-How the stack is built: [observability](../observability.md). Why: [ADR 0015](../adr/0015-unfold-observes-itself.md).
+How the stack is built: [observability](../observability.md). Why: [ADR 0016](../adr/0016-unfold-observes-itself.md).
 
 ## After the merge
 
@@ -79,6 +79,6 @@ on it for that one reconcile. `hcloud-luks` grows the volume online.
 ## Moving the stack to the system node
 
 The stack prefers the `system` pool and falls back to the hub. Raising `node_count` of the `system`
-pool in `infra/variables.tf` (ADR 0013) adds the node; pods move to it the next time they are
+pool in `infra/variables.tf` (ADR 0013, declared by #106) adds the node; pods move to it the next time they are
 scheduled. The three volumes were created in fsn1 with the hub; a `system` node in nbg1 cannot
 attach them, so the stores start empty there: delete the three PVCs in the same reviewed change.

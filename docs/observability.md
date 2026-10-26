@@ -1,7 +1,7 @@
 # Observability
 
 Unfold collects, stores and alerts on its own metrics and logs, in the `observability` namespace,
-and keeps doing so when the homelab is down ([ADR 0015](adr/0015-unfold-observes-itself.md)). The
+and keeps doing so when the homelab is down ([ADR 0016](adr/0016-unfold-observes-itself.md)). The
 homelab's Grafana reads Unfold's stores through one read-only endpoint. Firefighting is in the
 [observability runbook](runbooks/observability.md).
 
@@ -23,7 +23,7 @@ homelab's Grafana reads Unfold's stores through one read-only endpoint. Firefigh
 
 Every central piece prefers the `system` pool and falls back to the hub (`node.webgrip.io/pool`
 `system`, then `unfold`; `app/placement.yaml`), as [ADR 0013](adr/0013-control-planes-stay-small-and-a-system-pool-carries-the-platform.md)
-decides. The `system` pool is declared in `infra/variables.tf` with `node_count = 0`.
+decides; #106 declares that pool with `node_count = 0`.
 
 ### Fields
 
