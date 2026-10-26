@@ -22,6 +22,8 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 
 The policies match Pods and the pod templates in Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs, so Flux's apply sees the warning before a controller creates the Pod.
 
+`host-access`, `immutable-image-references`, `pod-security-restricted` and `resource-limits` judge an update of a workload only when its pod template changes (the `creates-or-changes-the-pod-template` match condition). A rollout ends with the deployment controller setting the old ReplicaSet's `spec.replicas` to 0, an update of a ReplicaSet made before its Deployment complied. On 2026-10-26 `resource-limits` refused exactly that, so the old pods of the Flux operator and controllers, External Secrets and kube-state-metrics kept running beside the new ones and their HelmReleases failed on `ProgressDeadlineExceeded`. Pods are judged on every create and update, so scaling an old ReplicaSet up still cannot start a pod the policies refuse. The fixtures `*-replicaset-that-predates-it.yaml` prove both directions.
+
 ### Isolation classes and RuntimeClasses
 
 `sandboxed-workloads` reads the class from the pod's `ploeg.webgrip.dev/isolation-class` label (Ploeg ADR-0106) and from the same label on its namespace, and the stricter of the two wins. A pod cannot label itself down from its namespace's class.

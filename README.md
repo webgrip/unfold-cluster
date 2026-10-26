@@ -76,6 +76,8 @@ To rotate the cloud controller's token or the backup key, put the new value in O
 
 Since Talos 1.13 the seed is tracked in the ConfigMap `kube-system/talos-bootstrap-manifests-inventory`. Talos itself only creates seeded objects that are missing from it, so it never undoes what Flux changed. `talosctl upgrade-k8s` is different: it server-side applies every inline manifest again, and by default it deletes inventory objects that are no longer in the machine config. Because the seed is rendered from the files Flux applies, an upgrade with machine configs from current `main` re-applies what Flux already has. Never run it with machine configs older than `main`, which rolls components back to the old seed until Flux next upgrades them. Never remove an object from `inline_manifests` without passing `--manifests-no-prune` to every later upgrade: the prune would delete it, even the Flux operator or the `etcd-backup` namespace.
 
+Kubernetes itself is no longer upgraded that way: the command rewrites the control-plane static pods to tags without a digest, which `immutable-image-references` refuses in `kube-system`. A Kubernetes upgrade moves the pinned references in `talos/talenv.yaml` and reaches the nodes with an `infra` apply ([kubernetes-upgrades](docs/runbooks/kubernetes-upgrades.md)).
+
 ## No kube-proxy
 
 Cilium replaces kube-proxy (`kubeProxyReplacement: true`) and reaches the API server through KubePrism on `localhost:7445`, Talos's local load balancer, so nothing needs a Service before Cilium is up. The control planes' machine config therefore carries `KubeProxyConfig` with `enabled: false`. Deleting that document with `$patch: delete`, as the first configs did, does not work: Talos then falls back to the v1alpha1 default and deploys kube-proxy, which is why the first cluster came up with both. The OpenTofu test in `infra/tests/kube_proxy.tftest.hcl` fails on a `$patch: delete`, on a missing `enabled: false`, and on Cilium values that would need kube-proxy.
@@ -98,6 +100,8 @@ A refused commit leaves the cluster on the last verified one and marks the GitRe
 Trusting the instance key is a deliberate trade-off (owner decision, 2026-10-25). The key signs merges and web edits in every repository on the instance, so someone who can create a repository there can get an arbitrary tree signed. That commit still has to reach the GitHub mirror's `main`, which only Forgejo's mirror push and the protected Forgejo `main` feed; the mirror's own branch protection, below, closes the direct route. Adding a person or bot is a pull request that adds their public key as a `.sshpub` file in that directory and lists it under the `trusted-signers` `secretGenerator` in its `kustomization.yaml`; removing one deletes both. The merge commit is signed by a key the cluster already trusts, so Flux verifies it and then applies the new Secret; the next commit is checked against the new set. A key file the generator does not list fails `infra-check`. The Talos seed reads the same files, so the next `infra` apply gives a rebuilt cluster the same set. Never merge a change that leaves out the key the next merge will be signed with: Flux would refuse every later commit, including the one that puts the key back, until someone writes the Secret by hand with the admin kubeconfig.
 
 Verification checks only the newest commit, so it does not stop a rollback: a force-push of an older signed commit to the mirror would deploy. The GitHub mirror's `main` therefore needs branch protection that refuses force-pushes and deletion and allows pushes only from the mirror's token. That setting lives in GitHub, not here.
+
+A second GitRepository, `flux-system/unfold-cluster-forgejo` (`kubernetes/platform/flux-fallback-source`), fetches the same `main` from Forgejo every 10 minutes with the same signature check and applies nothing: no Kustomization names it, and `infra/tests/flux_fallback_source.tftest.hcl` fails if one does, if it stops verifying, or if `source-controller-egress` stops naming Forgejo. It proves the fallback works before it is needed, and shows when the mirror falls behind: its revision moves ahead of `flux-system`'s, for example when the mirror's token has expired. When GitHub is down, the break-glass in [docs/runbooks/break-glass.md](docs/runbooks/break-glass.md#the-github-mirror-is-down-or-stuck) points `flux-system` at Forgejo for one fetch.
 
 ## Security floor from the first boot
 
@@ -250,6 +254,8 @@ That admin kubeconfig is break-glass: it is in `system:masters` and cannot be re
 ## Security architecture
 
 The target design for every layer, its threat model, the residual risks and the delivery order are in [RFC 0001](docs/rfc/0001-security-architecture.md). The confidential class and the next tier of measures are in [RFC 0002](docs/rfc/0002-confidential-class-and-next-tier.md).
+
+Everything production depends on outside the cluster, what each stops when it is down and what it can change when it is compromised, is in [docs/architecture/external-dependencies.md](docs/architecture/external-dependencies.md), checked against the code on every pull request; the target that keeps production operable without the homelab is [ADR 0015](docs/adr/0015-production-stays-operable-without-the-homelab.md), and what to do meanwhile is the [break-glass runbook](docs/runbooks/break-glass.md).
 
 ## Open
 

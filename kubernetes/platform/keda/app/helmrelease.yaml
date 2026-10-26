@@ -31,9 +31,32 @@ spec:
         enabled: true
     crds:
       install: true
-    nodeSelector:
-      node-role.kubernetes.io/control-plane: ""
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+            - matchExpressions:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+
     tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: system
+        effect: NoSchedule
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
@@ -66,21 +89,24 @@ spec:
       operator:
         requests:
           cpu: 50m
-          memory: 128Mi
+          memory: 192Mi
         limits:
+          cpu: null
           memory: 512Mi
           ephemeral-storage: 256Mi
       metricServer:
         requests:
-          cpu: 50m
-          memory: 128Mi
+          cpu: 20m
+          memory: 96Mi
         limits:
-          memory: 512Mi
+          cpu: null
+          memory: 256Mi
           ephemeral-storage: 256Mi
       webhooks:
         requests:
           cpu: 10m
-          memory: 64Mi
+          memory: 48Mi
         limits:
-          memory: 256Mi
+          cpu: null
+          memory: 128Mi
           ephemeral-storage: 256Mi

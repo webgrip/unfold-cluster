@@ -101,13 +101,14 @@ Every node joins with the tag of its role, and the Headscale policy (`infra/temp
 
 | Tag | Nodes | Gateway ports | Why |
 | --- | --- | --- | --- |
-| `tag:cp` | the control planes | 8200, 8427, 9150 | External Secrets (OpenBao, 8200) and KEDA (the CI job count, 9150) run only there; both charts pin every pod to `node-role.kubernetes.io/control-plane` |
+| `tag:cp` | the control planes | 8200, 8427, 9150 | External Secrets (OpenBao, 8200) runs only there, pinned to `node-role.kubernetes.io/control-plane`; KEDA (the CI job count, 9150) runs there until the system pool has a node |
+| `tag:system` | pool `system` (ADR 0013, `node_count` 0 until stage S1) | 8427, 9150 | KEDA prefers this pool and reads the CI job count from here; no CI job or Run tolerates its taint, and it never reaches OpenBao |
 | `tag:hub` | pool `unfold` (`unfold-app-1`) | 8427 | it runs untrusted CI jobs under gVisor, so it must not reach OpenBao |
 | `tag:ci` | pool `ci` | 8427 | untrusted CI jobs |
 | `tag:runs` | a future `runs` pool | 8427 | untrusted Runs |
 | `tag:metal` | the metal node | 8427 | untrusted Runs under Kata and gVisor |
 
-alloy-logs runs on every node's host network and, until the homelab copy is retired, ships that node's logs to 8427 as well as to the cluster's own VictoriaLogs, so every role keeps 8427 and no role but `tag:cp` gets 8200 or 9150. Nodes the cluster-autoscaler adds carry no Tailscale extension and are not on the tailnet at all. `tag:node`, the single tag every worker had before, is no longer defined: no key is minted with it, Headscale refuses to set it, and a node still carrying it reaches nothing. A new pool needs a line in `tailnet_tag_by_pool`, or the plan fails; the tag then gets its owner and port 8427 from the template. `infra/tests/tailnet_roles.tftest.hcl` pins all of this; `scripts/test-headscale-config.sh` runs the pinned Headscale against the rendered policy.
+alloy-logs runs on every node's host network and, until the homelab copy is retired, ships that node's logs to 8427 as well as to the cluster's own VictoriaLogs, so every role keeps 8427; no role but `tag:cp` gets 8200, and only `tag:cp` and `tag:system`, where KEDA runs, get 9150. Nodes the cluster-autoscaler adds carry no Tailscale extension and are not on the tailnet at all. `tag:node`, the single tag every worker had before, is no longer defined: no key is minted with it, Headscale refuses to set it, and a node still carrying it reaches nothing. A new pool needs a line in `tailnet_tag_by_pool`, or the plan fails; the tag then gets its owner and port 8427 from the template. `infra/tests/tailnet_roles.tftest.hcl` pins all of this; `scripts/test-headscale-config.sh` runs the pinned Headscale against the rendered policy.
 
 ### How a running node takes its role
 

@@ -32,8 +32,6 @@ jobs:
     # Host mode on the unfold-infra pool: the steps run in its toolchain image, infra-runner from
     # webgrip/infrastructure, which carries age and the etcd tools pinned and checksum-verified.
     runs-on: unfold-infra
-    # The read key and the age key come from OpenBao, which gives them only to this repository's
-    # main branch (role ci-unfold-cluster); they are not Forgejo secrets.
     enable-openid-connect: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -41,7 +39,7 @@ jobs:
       - name: Read the restore credentials from OpenBao
         uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
         with:
-          role: ci-unfold-cluster
+          role: ${{ github.event_name == 'schedule' && 'ci-unfold-cluster-etcd-check' || 'ci-unfold-cluster' }}
           secrets: |
             S3_ACCESS_KEY=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_READ_ACCESS_KEY
             S3_SECRET_KEY=secret/data/unfold-cluster/etcd-backup#ETCD_BACKUP_READ_SECRET_KEY

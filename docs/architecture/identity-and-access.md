@@ -300,6 +300,27 @@ read-only principal (`oidc:agent-<name>` or a kubernetes-mcp ServiceAccount with
 
 Severity is what an attacker or an outage gains today. Effort: S hours, M days, L a week or more.
 
+### Closed on 2026-10-26
+
+The owner decided that the colleague (`yon`) is a developer with fewer rights than the owner.
+These changes landed in homelab-cluster `main` (commits `7b326b6b` to `40941d99`) and in this
+repository's pull request that adds this section.
+
+| Gap | Now |
+| --- | --- |
+| G-01 | `unfold-cluster` `main`: push and merge `[ryangr0]`. Required checks: `infra-check / check`, `infra-check / token-mask-canary`, `infra-check / token-mask-proof`, `admission-policies-check / fixtures`, `runtime-security-check / checks`, `supply-chain-check / image-signatures`, `supply-chain-check / trivy-report-shipper`, all `(pull_request)`. They run on every pull request now, because Forgejo holds a pull request whose required check never reports. `validate-repo-config-model.sh` refuses any other name on the lists and an empty check list. The colleague keeps write through the `Developers` team, so he still pushes branches and opens pull requests. |
+| G-02 | Role `ci-unfold-cluster`: actor `ryangr0`, events `push` and `workflow_dispatch`, `run_attempt` `1`. `forgejo-actions` left the role: any job with write on the repository can dispatch a workflow with its own token, and Forgejo names that dispatch's actor `forgejo-actions`. A re-run keeps the first actor, and `run_attempt` `1` refuses it. The scheduled etcd backup check uses the new role `ci-unfold-cluster-etcd-check`: event `schedule`, actor `forgejo-actions`, workflow `etcd-backup-check.yml`, and it reads only `secret/unfold-cluster/etcd-backup`. |
+| G-03 | `unfold-admin` binds the new group `unfold-app-admins` (the owner only), and the Unfold app maps only that group to `admin`. |
+| G-04 | `cosign-signer` binds `ref` to `refs/tags/*` and `refs/heads/main`, so a branch can no longer sign. Tags are still writable by everyone with write, see below. |
+| G-09 | `UnfoldBreakGlassCertificateUsed` (homelab `vmalert-audit`) pages on any Unfold API call by a user that is neither `system:` nor `oidc:`. The only exception is Talos's own calls from the control planes. Infra apply and diagnose runs fire it too, on purpose: they read the admin kubeconfig. Talos API use is still not audited, because apid writes no per-call log to ship. |
+| G-10 | A declarative `stdout` audit device in the homelab OpenBao server config. It starts at the next `openbao-0` restart. The alert on human reads of `unfold-*` paths is still open. |
+| G-16 | The homelab Grafana audit data source goes through `victorialogs-audit-reader`, which adds `extra_stream_filters={cluster="homelab-cluster"}`, so no Grafana user reads Unfold audit records there. Unfold metrics and logs in the homelab Grafana stay readable to Editors until Unfold's own Grafana exists. |
+
+Still open from this list: tags can be pushed by every member of `Developers`, and a release or a
+tag dispatch runs that tag's workflow file, so signing needs protected tags as well (G-04).
+`unfold-viewers` still cannot reach the API until G-13. Neither the grant nor the merge list
+comes from a rendered `unfold-admins` group yet.
+
 | # | Gap | Severity | Follow-up | Effort |
 | --- | --- | --- | --- | --- |
 | G-01 | The colleague can merge to `unfold-cluster` `main` (Forgejo's instance key signs the merge, Flux trusts it and applies with cluster-admin), and the model requires no status checks there | High | Merge list from the model's `unfold-admins`; add the repository's `*-check` contexts to `status_checks` in `hl:repos.yaml` | S |

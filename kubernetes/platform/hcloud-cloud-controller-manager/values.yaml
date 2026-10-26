@@ -1,6 +1,12 @@
 image:
   # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-cloud-controller-manager
   tag: v1.39.0@sha256:d6fee56987598cddb01121ebc1566e6513048cf6c66cba29d5d7a3025f3c2085
+resources:
+  requests:
+    cpu: 10m
+    memory: 48Mi
+  limits:
+    memory: 128Mi
 networking:
   enabled: false
 env:
