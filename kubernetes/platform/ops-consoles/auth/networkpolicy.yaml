@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: authentik-relay
 spec:
-  description: The relay carries the consoles' OIDC calls (discovery, keys, the code and refresh exchanges) to Authentik through the homelab gateway, which only the hub's tailnet tag may open on 443. Only the oauth2-proxy pods here and Headlamp may use it. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
+  description: The relay carries the consoles' OIDC calls (discovery, keys, the code and refresh exchanges) to Authentik through the homelab gateway, which only the hub's tailnet tag may open on 443. Only the oauth2-proxy pods here, Headlamp and the observability Grafana may use it. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: authentik-relay
@@ -15,6 +15,9 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: headlamp
             app.kubernetes.io/name: headlamp
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app: grafana
       toPorts:
         - ports:
             - port: "3128"

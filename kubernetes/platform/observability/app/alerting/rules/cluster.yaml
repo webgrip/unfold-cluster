@@ -1,0 +1,291 @@
+groups:
+  - name: unfold-delivery
+    interval: 1m
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Unfold's alerting pipeline is alive"
+          description: "Always firing. Alertmanager sends it every two minutes to the dead-man's switch outside both clusters (uptime-kuma on the off-site box), which pages when the beat stops, and the homelab probes it through the query endpoint. It goes silent when vmalert, Alertmanager or VictoriaMetrics on Unfold stops. Runbook: docs/runbooks/observability.md#watchdog."
+      - alert: UnfoldMetricsAbsent
+        expr: absent_over_time(up{cluster="unfold",job="apiserver"}[10m]) and on() count(last_over_time(up{cluster="unfold"}[7d])) > 0
+        for: 5m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "VictoriaMetrics on Unfold has received no API server samples for 15 minutes"
+          description: "vmalert still runs and VictoriaMetrics still answers, but nothing has written an API server scrape for 15 minutes after doing so in the last 7 days. The cause is alloy-metrics in observability (not running, or its remote write to vmsingle failing). Runbook: docs/runbooks/observability.md#no-metrics."
+      - alert: UnfoldEtcdMetricsAbsent
+        expr: absent(etcd_server_has_leader{cluster="unfold"}) and on() count(up{cluster="unfold"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Unfold collects metrics but none from etcd"
+          description: "etcd serves metrics on port 2383 of each control plane (infra/metrics-ports.tf). Without them the etcd alerts below cannot fire."
+      - alert: UnfoldLogShipperDropping
+        expr: sum by (node, component_id) (increase(loki_write_dropped_entries_total{cluster="unfold",component_id=~"loki.write.(logs|audit)"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "alloy-logs on {{ $labels.node }} dropped {{ $value }} log lines in 15 minutes ({{ $labels.component_id }})"
+          description: "Alloy gave up on a batch after its retries, so those lines never reached VictoriaLogs on Unfold. Look at the vlsingle-logs or vlsingle-audit pod and the alloy-logs log on that node. Runbook: docs/runbooks/observability.md#logs-dropped."
+      - alert: UnfoldLogsNotArriving
+        expr: (sum(rate(vl_rows_ingested_total{cluster="unfold",job="vlsingle-logs"}[15m])) or vector(0)) == 0 and on() count(up{cluster="unfold",job="vlsingle-logs"} == 1) > 0
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "VictoriaLogs on Unfold has stored no log line for 30 minutes"
+          description: "vlsingle-logs answers its scrape but ingests nothing, so every pod, Talos, Hubble and Tetragon log is missing and the runtime-detection rules see nothing. The cause is alloy-logs (not running on any node, or not reaching vlsingle-logs). Runbook: docs/runbooks/observability.md#logs-dropped."
+      - alert: UnfoldRemoteWriteBacklog
+        expr: sum(prometheus_remote_storage_samples_pending{cluster="unfold",job="alloy-metrics",url=~".*vmsingle.*"}) > 500000
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "alloy-metrics holds {{ $value }} unsent samples for vmsingle"
+          description: "Samples reach VictoriaMetrics late or not at all. alloy-metrics keeps them in its write-ahead log on an emptyDir; a restart loses what it held. Runbook: docs/runbooks/observability.md#no-metrics."
+      - alert: UnfoldObservabilityVolumeFilling
+        expr: max by (persistentvolumeclaim) (kubelet_volume_stats_used_bytes{cluster="unfold",namespace="observability"} / kubelet_volume_stats_capacity_bytes{cluster="unfold",namespace="observability"}) > 0.85
+        for: 30m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Observability volume {{ $labels.persistentvolumeclaim }} on Unfold is {{ $value | humanizePercentage }} full"
+          description: "VictoriaMetrics and VictoriaLogs delete the oldest data at their disk limit, so a full volume shortens history before it breaks anything. Grow the claim (hcloud-luks expands online) or lower the retention. Runbook: docs/runbooks/observability.md#volumes."
+      - alert: UnfoldAlertNotificationsFailing
+        expr: sum by (integration, receiver) (increase(alertmanager_notifications_failed_total{cluster="unfold"}[15m])) > 0
+        for: 15m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Alertmanager on Unfold fails to deliver to {{ $labels.receiver }} ({{ $labels.integration }})"
+          description: "Alerts are not reaching that receiver. If the receiver is the one that would carry this alert, only the dead-man's switch notices; check the ntfy token and URL files mounted from OpenBao. Runbook: docs/runbooks/observability.md#notifications."
+  - name: unfold-platform
+    interval: 1m
+    rules:
+      - alert: UnfoldNodeNotReady
+        expr: max by (node) (kube_node_status_condition{cluster="unfold",condition="Ready",status="true"}) == 0
+        for: 10m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Unfold node {{ $labels.node }} is not Ready"
+          description: "The kubelet on {{ $labels.node }} has not reported Ready for 10 minutes."
+      - alert: UnfoldAPIServerDown
+        expr: (sum(up{cluster="unfold",job="apiserver"}) or vector(0)) == 0 and on() count(up{cluster="unfold"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "No Unfold API server answers its metrics scrape"
+          description: "alloy-metrics still scrapes other targets, but none of the API servers behind the kubernetes Service answers."
+      - alert: UnfoldAPIServerReplicaDown
+        expr: count(up{cluster="unfold",job="apiserver"} == 0) > 0
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "{{ $value }} Unfold API server(s) do not answer"
+          description: "At least one control plane's API server has failed its scrape for 15 minutes."
+      - alert: UnfoldEtcdNoLeader
+        expr: etcd_server_has_leader{cluster="unfold"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "etcd member on {{ $labels.node }} has no leader"
+          description: "An etcd member without a leader cannot serve writes."
+      - alert: UnfoldEtcdDatabaseNearQuota
+        expr: max by (node) (etcd_mvcc_db_total_size_in_bytes{cluster="unfold"} / etcd_server_quota_backend_bytes{cluster="unfold"}) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "etcd on {{ $labels.node }} uses {{ $value | humanizePercentage }} of its quota"
+          description: "At the quota etcd raises a NOSPACE alarm and the cluster goes read-only. Defragment, or find what writes so much."
+      - alert: UnfoldEtcdDatabaseFragmented
+        expr: max by (node) (1 - etcd_mvcc_db_total_size_in_use_in_bytes{cluster="unfold"} / etcd_mvcc_db_total_size_in_bytes{cluster="unfold"}) > 0.5 and max by (node) (etcd_mvcc_db_total_size_in_bytes{cluster="unfold"}) > 104857600
+        for: 1h
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "etcd on {{ $labels.node }} is {{ $value | humanizePercentage }} free space"
+          description: "More than half of the etcd database file is free pages. A defragment returns them."
+      - alert: UnfoldFluxReconcileFailing
+        expr: max by (kind, namespace, name, reason) (flux_resource_info{cluster="unfold",ready="False",suspended="False"}) == 1
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Flux {{ $labels.kind }} {{ $labels.namespace }}/{{ $labels.name }} is not Ready ({{ $labels.reason }})"
+          description: "The resource has failed to reconcile for 15 minutes; the cluster no longer matches Git for it."
+      - alert: UnfoldFluxMetricsAbsent
+        expr: absent(flux_resource_info{cluster="unfold"}) and on() count(up{cluster="unfold"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Unfold sends metrics but none from the Flux operator"
+          description: "Without flux_resource_info the Flux alert above cannot fire."
+      - alert: UnfoldKubeletCertificateExpiring
+        expr: min by (node) (kubelet_certificate_manager_client_ttl_seconds{cluster="unfold"}) < 604800
+        for: 1h
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Kubelet client certificate on {{ $labels.node }} expires in {{ $value | humanizeDuration }}"
+          description: "The kubelet rotates its client certificate itself; one this close to expiry did not rotate."
+      - alert: UnfoldAPIServerClientCertificateExpiring
+        expr: histogram_quantile(0.01, sum by (instance, le) (rate(apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold"}[10m]))) < 604800
+        for: 1h
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "A client presents a certificate to the Unfold API server that expires within 7 days"
+          description: "Some client of {{ $labels.instance }} authenticates with a certificate that is about to expire. Talos-issued admin and kubelet certificates rotate; anything else must be renewed."
+      - alert: UnfoldCertificateExpiring
+        expr: min by (namespace, name) (certmanager_certificate_expiration_timestamp_seconds{cluster="unfold"}) - time() < 1209600
+        for: 1h
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} on Unfold expires in {{ $value | humanizeDuration }}"
+          description: "cert-manager renews 30 days ahead by default, so 14 days left means renewal has failed."
+      - alert: UnfoldEtcdBackupStale
+        expr: time() - max(kube_cronjob_status_last_successful_time{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}) > 25200
+        for: 5m
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "No successful Unfold etcd backup for {{ $value | humanizeDuration }}"
+          description: "The etcd-backup CronJob runs every 6 hours; 7 hours without a success means at least one run failed or did not start."
+      - alert: UnfoldEtcdBackupNeverSucceeded
+        expr: absent(kube_cronjob_status_last_successful_time{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}) and on() count(kube_cronjob_info{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}) > 0
+        for: 7h
+        labels:
+          severity: critical
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "The Unfold etcd-backup CronJob has no successful run on record"
+          description: "kube-state-metrics sees the CronJob but no last successful time for 7 hours."
+      - alert: UnfoldTetragonNotOnEveryNode
+        expr: max by (daemonset) (kube_daemonset_status_desired_number_scheduled{cluster="unfold",namespace="kube-system",daemonset="tetragon"}) - max by (daemonset) (kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Tetragon is not ready on {{ $value }} Unfold node(s)"
+          description: "The tetragon DaemonSet in kube-system has fewer ready pods than nodes it should run on. Pods on those nodes run without runtime detection. The agent has no PriorityClass and reserves its memory, so a full node keeps it Pending rather than evicting anything. Runbook: unfold-cluster docs/runbooks/runtime-security.md."
+      - alert: UnfoldTetragonGone
+        expr: absent_over_time(kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}[10m]) and on() count(last_over_time(kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}[7d])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "The Tetragon DaemonSet disappeared from Unfold"
+          description: "kube-state-metrics reported the tetragon DaemonSet in the last 7 days and has not for 15 minutes. Without it nothing on Unfold records process, file or network events. Runbook: unfold-cluster docs/runbooks/runtime-security.md."
+  - name: unfold-ci-autoscaler
+    interval: 1m
+    rules:
+      - alert: UnfoldAutoscaledNodeRunningLong
+        expr: (time() - max by (node) (kube_node_created{cluster="unfold"} * on (node) group_left () (max by (node) (kube_node_labels{cluster="unfold",label_node_webgrip_io_pool="ci"})))) > 4 * 3600
+        for: 5m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+          service: ci-autoscaler
+        annotations:
+          summary: "CI node {{ $labels.node }} has run for more than four hours"
+          description: |
+            What's happening:
+            - {{ $labels.node }} in the ci pool, which the cluster-autoscaler adds from zero when CI overflows the hub, has been a node for more than four hours.
+
+            Impact/risk:
+            - It bills every hour (a CPX42 is about EUR 0.11 an hour, EUR 2.69 a day). A CI job lasts at most 90 minutes and an idle overflow node is removed after about 10, so four hours means a queue that never drains or a node the autoscaler lost track of.
+
+            First actions:
+            - kubectl -n ci get jobs; kubectl -n cluster-autoscaler logs deploy/cluster-autoscaler-hetzner-cluster-autoscaler
+          runbook_url: "https://forgejo.webgrip.dev/webgrip/unfold-cluster/src/branch/main/docs/runbooks/ci-autoscaler.md"
+      - alert: UnfoldAutoscalerUnregisteredNode
+        expr: max(cluster_autoscaler_unregistered_nodes_count{cluster="unfold"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+          service: ci-autoscaler
+        annotations:
+          summary: "The cluster-autoscaler has created {{ $value }} server(s) that never joined Unfold"
+          description: |
+            What's happening:
+            - A server the autoscaler created for the ci pool has not registered as a node for 30 minutes. It bills every hour and runs nothing.
+
+            Likely causes:
+            - The Talos user data of the ci pool no longer boots (infra/ci-autoscaler.tf), or the server cannot reach the API address.
+
+            First actions:
+            - kubectl -n cluster-autoscaler logs deploy/cluster-autoscaler-hetzner-cluster-autoscaler; the autoscaler deletes an unregistered server after its own timeout, so a lasting count means it cannot.
+          runbook_url: "https://forgejo.webgrip.dev/webgrip/unfold-cluster/src/branch/main/docs/runbooks/ci-autoscaler.md"
+      - alert: UnfoldAutoscalerAbsent
+        expr: (sum(up{cluster="unfold",job="cluster-autoscaler"}) or vector(0)) == 0 and on() count(last_over_time(up{cluster="unfold",job="cluster-autoscaler"}[7d])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+          service: ci-autoscaler
+        annotations:
+          summary: "The cluster-autoscaler on Unfold has not answered its metrics scrape for 15 minutes"
+          description: "Without it no CI overflow node is added, and none it added is removed, so a stuck CPX42 keeps billing. kubectl -n cluster-autoscaler get pods,events."
+          runbook_url: "https://forgejo.webgrip.dev/webgrip/unfold-cluster/src/branch/main/docs/runbooks/ci-autoscaler.md"

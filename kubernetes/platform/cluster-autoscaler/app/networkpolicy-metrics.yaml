@@ -1,0 +1,19 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cluster-autoscaler-metrics
+spec:
+  description: The cluster-autoscaler's metrics answer alloy-metrics in observability on 8085, and nothing else reaches that port.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hetzner-cluster-autoscaler
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alloy-metrics
+      toPorts:
+        - ports:
+            - port: "8085"
+              protocol: TCP

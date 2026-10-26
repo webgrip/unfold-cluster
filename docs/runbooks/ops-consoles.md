@@ -117,9 +117,9 @@ Six GrafanaDashboard CRs, folder `unfold` of the Grafana with label
 image-signature audits, admission denials from the API audit log, Hubble egress verdicts, and cost
 (this cluster's requests, with a link to the homelab's **Executive / FinOps & Cost**). They name
 their datasources by UID: `unfold-prometheus`, `victorialogs` and `victorialogs-audit`, which the
-in-cluster observability stack defines. The directory is not yet in `kubernetes/clusters/main`:
-add it to the observability stack's Kustomization (or a Flux Kustomization that depends on it)
-once the Grafana operator and its CRDs run here.
+in-cluster observability stack defines ([observability](../observability.md#grafana)). The Flux
+Kustomization `grafana` applies the directory with the Grafana instance, at
+`https://grafana.ops.unfoldhq.dev`.
 
 ## After the merge
 

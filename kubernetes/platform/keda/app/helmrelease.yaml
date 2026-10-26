@@ -26,6 +26,9 @@ spec:
       strategy: uninstall
       remediateLastFailure: true
   values:
+    prometheus:
+      operator:
+        enabled: true
     crds:
       install: true
     affinity:

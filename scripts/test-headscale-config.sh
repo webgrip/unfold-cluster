@@ -85,7 +85,7 @@ render() {
 templates="${repo}/infra/templates"
 worker_tags="$(sed -n '/^  tailnet_tag_by_pool = {$/,/^  }$/s/^ *[a-z0-9_]* *= *"\(tag:[a-z0-9-]*\)"$/\1/p' "${repo}/infra/headscale.tf" | sort -u | jq -R . | jq -sc .)"
 [ "$worker_tags" != "[]" ] || fail "no tailnet_tag_by_pool in infra/headscale.tf"
-render "jsonencode(templatefile(\"${templates}/headscale-acl.hujson\", { admin_user = \"ryan\", node_route = \"10.64.0.0/24\", worker_tags = ${worker_tags}, ci_job_count_sources = [\"tag:cp\", \"tag:system\"] }))" >"${work}/acl.hujson"
+render "jsonencode(templatefile(\"${templates}/headscale-acl.hujson\", { admin_user = \"ryan\", node_route = \"10.64.0.0/24\", worker_tags = ${worker_tags}, ci_job_count_sources = [\"tag:cp\", \"tag:system\"], ops_gateway = \"10.64.0.10\" }))" >"${work}/acl.hujson"
 render "jsonencode(templatefile(\"${templates}/headscale-config.yaml.tftpl\", {
   hostname                = \"headscale.invalid\"
   ipv4                    = \"198.51.100.23\"

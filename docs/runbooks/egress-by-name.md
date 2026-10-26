@@ -82,7 +82,7 @@ Until 2026-10-26 the export kept every egress packet. Host traffic was 65% of it
 - the port
 - `egress_allowed_by` and `egress_denied_by`: the policies that allowed or refused the flow
 
-Vector reads the file through its existing read-only `/var/log` mount and sends it to the homelab VictoriaLogs as `source:=hubble-egress`. Besides the flow itself, each record carries flat fields for queries: `source_namespace`, `source_workload`, `destination_name` (the DNS names, or the address when there is none), `destination_port`, `allowed_by` and `denied_by` (`kind/namespace/name` of each policy). The message reads `<namespace>/<workload> -> <destination>:<port> <verdict>`.
+alloy-logs reads the file through its read-only `/var/log` mount and writes it to the cluster's own VictoriaLogs (`vlsingle-logs`, [observability](../observability.md)) as `source:=hubble-egress`. The flow itself becomes the record's fields (`verdict`, `IP.destination`, `source.namespace` and so on); besides it, each record carries flat fields for queries: `source_namespace`, `source_workload`, `destination_name` (the DNS names, or the address when there is none), `destination_port`, `allowed_by` and `denied_by` (`kind/namespace/name` of each policy). The message reads `<namespace>/<workload> -> <destination>:<port> <verdict>`.
 
 The policy names are the evidence a flip needs: a flow is covered only if `allowed_by` names this namespace's CiliumNetworkPolicy.
 

@@ -56,9 +56,9 @@ spec:
           'observability/DaemonSet/node-exporter': [
             'hostNetwork', 'hostPID', 'hostPort:9100',
             'readOnlyHostPath:/', 'readOnlyHostPath:/proc', 'readOnlyHostPath:/sys'],
-          'observability/DaemonSet/vector': [
+          'observability/DaemonSet/alloy-logs': [
             'hostNetwork', 'hostPort:9598',
-            'readOnlyHostPath:/var/log', 'writableHostPath:/var/lib/vector']
+            'readOnlyHostPath:/var/log', 'writableHostPath:/var/lib/alloy']
         }
     - name: granted
       expression: variables.hostAccessGrants[?variables.workload].orValue([])

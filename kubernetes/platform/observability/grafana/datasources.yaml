@@ -1,0 +1,80 @@
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victoriametrics
+spec:
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  datasource:
+    name: unfold-prometheus
+    type: prometheus
+    uid: unfold-prometheus
+    access: proxy
+    url: http://vmsingle.observability.svc.cluster.local:8428
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+      prometheusType: Prometheus
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victorialogs
+spec:
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  plugins:
+    - name: victoriametrics-logs-datasource
+      version: 0.33.1
+  datasource:
+    name: victorialogs
+    type: victoriametrics-logs-datasource
+    uid: victorialogs
+    access: proxy
+    url: http://vlsingle-logs.observability.svc.cluster.local:9428
+    isDefault: false
+    editable: false
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victorialogs-audit
+spec:
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  plugins:
+    - name: victoriametrics-logs-datasource
+      version: 0.33.1
+  datasource:
+    name: victorialogs-audit
+    type: victoriametrics-logs-datasource
+    uid: victorialogs-audit
+    access: proxy
+    url: http://vlsingle-audit.observability.svc.cluster.local:9428
+    isDefault: false
+    editable: false
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: alertmanager
+spec:
+  instanceSelector:
+    matchLabels:
+      grafana.webgrip.io/instance: unfold
+  datasource:
+    name: Alertmanager
+    type: alertmanager
+    uid: alertmanager
+    access: proxy
+    url: http://alertmanager.observability.svc.cluster.local:9093
+    isDefault: false
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

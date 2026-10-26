@@ -1,0 +1,272 @@
+rule_files:
+  - cluster.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_status_condition{cluster="unfold",condition="Ready",status="true",node="unfold-app-1"}'
+        values: "0x30"
+      - series: 'kube_node_status_condition{cluster="unfold",condition="Ready",status="true",node="unfold-cp-1"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldNodeNotReady
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, node: unfold-app-1}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_status_condition{cluster="unfold",condition="Ready",status="true",node="unfold-app-1"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldNodeNotReady
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="apiserver",instance="10.64.0.11:6443"}'
+        values: "0x30"
+      - series: 'up{cluster="unfold",job="apiserver",instance="10.64.0.12:6443"}'
+        values: "0x30"
+      - series: 'up{cluster="unfold",job="kubelet",instance="unfold-cp-1"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldAPIServerDown
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform}
+      - eval_time: 20m
+        alertname: UnfoldAPIServerReplicaDown
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="apiserver",instance="10.64.0.11:6443"}'
+        values: "1x30"
+      - series: 'up{cluster="unfold",job="apiserver",instance="10.64.0.12:6443"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldAPIServerDown
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: UnfoldAPIServerReplicaDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'etcd_server_has_leader{cluster="unfold",node="unfold-cp-2"}'
+        values: "0x10"
+      - series: 'etcd_mvcc_db_total_size_in_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "1800000000x90"
+      - series: 'etcd_server_quota_backend_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "2147483648x90"
+      - series: 'etcd_mvcc_db_total_size_in_use_in_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "300000000x90"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UnfoldEtcdNoLeader
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, node: unfold-cp-2}
+      - eval_time: 30m
+        alertname: UnfoldEtcdDatabaseNearQuota
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, node: unfold-cp-2}
+      - eval_time: 80m
+        alertname: UnfoldEtcdDatabaseFragmented
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, node: unfold-cp-2}
+
+  - interval: 1m
+    input_series:
+      - series: 'etcd_server_has_leader{cluster="unfold",node="unfold-cp-2"}'
+        values: "1x10"
+      - series: 'etcd_mvcc_db_total_size_in_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "200000000x90"
+      - series: 'etcd_server_quota_backend_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "2147483648x90"
+      - series: 'etcd_mvcc_db_total_size_in_use_in_bytes{cluster="unfold",node="unfold-cp-2"}'
+        values: "190000000x90"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UnfoldEtcdNoLeader
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: UnfoldEtcdDatabaseNearQuota
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: UnfoldEtcdDatabaseFragmented
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'flux_resource_info{cluster="unfold",kind="Kustomization",namespace="flux-system",name="grafana",reason="DependencyNotReady",ready="False",suspended="False"}'
+        values: "1x30"
+      - series: 'flux_resource_info{cluster="unfold",kind="Kustomization",namespace="flux-system",name="zot",reason="ReconciliationSucceeded",ready="True",suspended="False"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldFluxReconcileFailing
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, kind: Kustomization, namespace: flux-system, name: grafana, reason: DependencyNotReady}
+
+  - interval: 1m
+    input_series:
+      - series: 'flux_resource_info{cluster="unfold",kind="Kustomization",namespace="flux-system",name="zot",reason="ReconciliationSucceeded",ready="True",suspended="False"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldFluxReconcileFailing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="kubelet"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldFluxMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="unfold",job="kubelet"}'
+        values: "1x60"
+      - series: 'flux_resource_info{cluster="unfold",kind="Kustomization",namespace="flux-system",name="zot",reason="ReconciliationSucceeded",ready="True",suspended="False"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldFluxMetricsAbsent
+        exp_alerts: []
+
+  - interval: 5m
+    input_series:
+      - series: 'kubelet_certificate_manager_client_ttl_seconds{cluster="unfold",node="unfold-app-1"}'
+        values: "86400x30"
+      - series: 'apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold",instance="10.64.0.11:6443",le="86400"}'
+        values: "0+10x30"
+      - series: 'apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold",instance="10.64.0.11:6443",le="+Inf"}'
+        values: "0+10x30"
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{cluster="unfold",namespace="cert-manager",name="dns01-canary"}'
+        values: "947898000x200"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: UnfoldKubeletCertificateExpiring
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, node: unfold-app-1}
+      - eval_time: 2h
+        alertname: UnfoldAPIServerClientCertificateExpiring
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, instance: "10.64.0.11:6443"}
+      - eval_time: 3h
+        alertname: UnfoldCertificateExpiring
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, namespace: cert-manager, name: dns01-canary}
+
+  - interval: 5m
+    input_series:
+      - series: 'kubelet_certificate_manager_client_ttl_seconds{cluster="unfold",node="unfold-app-1"}'
+        values: "2592000x30"
+      - series: 'apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold",instance="10.64.0.11:6443",le="604800"}'
+        values: "0x30"
+      - series: 'apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold",instance="10.64.0.11:6443",le="2592000"}'
+        values: "0+10x30"
+      - series: 'apiserver_client_certificate_expiration_seconds_bucket{cluster="unfold",instance="10.64.0.11:6443",le="+Inf"}'
+        values: "0+10x30"
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{cluster="unfold",namespace="cert-manager",name="dns01-canary"}'
+        values: "1046684800x200"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: UnfoldKubeletCertificateExpiring
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: UnfoldAPIServerClientCertificateExpiring
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: UnfoldCertificateExpiring
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}'
+        values: "946684800x600"
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: UnfoldEtcdBackupStale
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}'
+        values: "946684800+60x600"
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: UnfoldEtcdBackupStale
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_cronjob_info{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup",schedule="0 */6 * * *"}'
+        values: "1x600"
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: UnfoldEtcdBackupNeverSucceeded
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: unfold, team: platform, namespace: etcd-backup, cronjob: etcd-backup}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_cronjob_info{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup",schedule="0 */6 * * *"}'
+        values: "1x600"
+      - series: 'kube_cronjob_status_last_successful_time{cluster="unfold",namespace="etcd-backup",cronjob="etcd-backup"}'
+        values: "100x60"
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: UnfoldEtcdBackupNeverSucceeded
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_desired_number_scheduled{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "4x30"
+      - series: 'kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "3x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldTetragonNotOnEveryNode
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, daemonset: tetragon}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_desired_number_scheduled{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "4x30"
+      - series: 'kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "4x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UnfoldTetragonNotOnEveryNode
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "4x20 _x40"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: UnfoldTetragonGone
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, namespace: kube-system, daemonset: tetragon}
+
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_number_ready{cluster="unfold",namespace="kube-system",daemonset="tetragon"}'
+        values: "4x60"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: UnfoldTetragonGone
+        exp_alerts: []

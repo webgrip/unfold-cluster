@@ -23,6 +23,7 @@ locals {
     node_route           = local.cloud_subnet_range
     worker_tags          = sort(distinct(values(local.tailnet_tag_by_pool)))
     ci_job_count_sources = ["tag:cp", local.tailnet_tag_by_pool.system]
+    ops_gateway          = local.api_vip
   })
 }
 

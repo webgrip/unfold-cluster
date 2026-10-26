@@ -1,0 +1,1 @@
+{"msg":"audit: type=1400 audit(1761426003.700:42): avc:  denied  { read } for comm=\"cat\"","talos-level":"warning","talos-time":"2026-10-25T21:00:03.700000000Z","facility":"kern","priority":"warning","clock":12345}

@@ -1,0 +1,38 @@
+---
+name: observability-check
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/platform/observability/**
+      - tests/observability/**
+      - scripts/test-observability-logs.sh
+      - scripts/test-observability-metrics.sh
+      - .forgejo/workflows/observability-check.yml
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/platform/observability/**
+      - tests/observability/**
+      - scripts/test-observability-logs.sh
+      - scripts/test-observability-metrics.sh
+      - .forgejo/workflows/observability-check.yml
+  workflow_dispatch:
+
+jobs:
+  logs:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Feed every log fixture through the real Alloy pipeline into real VictoriaLogs, check each record and each LogsQL alert, and prove each check fails when broken
+        run: ./scripts/test-observability-logs.sh --mutation-test
+
+  metrics:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Unit-test every PromQL alert, load every rule, the Alertmanager and query configurations, check the scrape relabelling, and prove each check fails when broken
+        run: ./scripts/test-observability-metrics.sh --mutation-test
