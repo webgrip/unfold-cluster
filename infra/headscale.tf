@@ -14,7 +14,6 @@ locals {
     unfold = "tag:hub"
     ci     = "tag:ci"
     runs   = "tag:runs"
-    system = "tag:system"
     metal  = "tag:metal"
   }
 
