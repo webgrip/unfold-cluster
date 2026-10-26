@@ -102,7 +102,7 @@ Every node joins with the tag of its role, and the Headscale policy (`infra/temp
 | Tag | Nodes | Gateway ports | Why |
 | --- | --- | --- | --- |
 | `tag:cp` | the control planes | 8200, 8427, 9150 | External Secrets (OpenBao, 8200) runs only there, pinned to `node-role.kubernetes.io/control-plane`; KEDA (the CI job count, 9150) runs there until the system pool has a node |
-| `tag:system` | pool `system` (ADR 0013, `node_count` 0 until stage S1) | 8427, 9150 | KEDA prefers this pool and reads the CI job count from here; no CI job or Run tolerates its taint, and it never reaches OpenBao |
+| `tag:system` | pool `system` (ADR 0013, one CPX32 in fsn1 from stage S1) | 8427, 9150 | KEDA prefers this pool and reads the CI job count from here; no CI job or Run tolerates its taint, and it never reaches OpenBao |
 | `tag:hub` | pool `unfold` (`unfold-app-1`) | 8427 | it runs untrusted CI jobs under gVisor, so it must not reach OpenBao |
 | `tag:ci` | pool `ci` | 8427 | untrusted CI jobs |
 | `tag:runs` | a future `runs` pool | 8427 | untrusted Runs |

@@ -73,25 +73,20 @@ variables {
   admin_cidrs          = ["203.0.113.7/32"]
 }
 
-run "the_system_pool_is_declared_and_holds_no_node_until_the_owner_raises_its_count" {
+run "the_system_pool_is_one_cpx32_in_fsn1_beside_the_hub" {
   command = plan
 
   assert {
     condition = alltrue([
       var.worker_pools.system.server_type == "cpx32",
-      var.worker_pools.system.location == "nbg1",
-      var.worker_pools.system.node_count == 0,
+      var.worker_pools.system.location == "fsn1",
+      var.worker_pools.system.node_count == 1,
       var.worker_pools.system.name_prefix == "unfold-system",
       var.worker_pools.system.first_host == 51,
       var.worker_pools.system.labels == tomap({ "node.webgrip.io/pool" = "system" }),
       var.worker_pools.system.taints == tomap({ "node.webgrip.io/pool" = "system:NoSchedule" }),
     ])
-    error_message = "the system pool of ADR 0013 is one CPX32 in nbg1 at stage S1, labelled and tainted node.webgrip.io/pool=system, in the address block from 10.64.0.51, and holds no node until node_count is raised"
-  }
-
-  assert {
-    condition     = length([for name in keys(hcloud_server.worker) : name if startswith(name, "unfold-system-")]) == 0
-    error_message = "at node_count 0 the plan creates no system server, so declaring the pool costs nothing"
+    error_message = "the system pool of ADR 0013 is one CPX32 in fsn1 at stage S1, beside the hub and its volumes, labelled and tainted node.webgrip.io/pool=system, in the address block from 10.64.0.51"
   }
 
   assert {
@@ -105,54 +100,23 @@ run "the_system_pool_is_declared_and_holds_no_node_until_the_owner_raises_its_co
   }
 }
 
-run "raising_the_count_to_one_adds_one_cpx32_in_its_role_and_changes_no_other_node" {
+run "the_plan_adds_one_cpx32_in_its_role_and_changes_no_other_node" {
   command = plan
-
-  variables {
-    worker_pools = {
-      unfold = {
-        server_type = "cx33"
-        node_count  = 1
-        name_prefix = "unfold-app"
-        first_host  = 21
-        labels      = { "node.webgrip.io/pool" = "unfold", "runtime.webgrip.io/gvisor" = "true" }
-        taints      = { "node.webgrip.io/pool" = "unfold:NoSchedule" }
-      }
-      ci = {
-        server_type = "cx43"
-        location    = "nbg1"
-        node_count  = 0
-        name_prefix = "unfold-ci"
-        first_host  = 31
-        labels      = { "node.webgrip.io/pool" = "ci", "runtime.webgrip.io/gvisor" = "true" }
-        taints      = { "node.webgrip.io/pool" = "ci:NoSchedule" }
-      }
-      system = {
-        server_type = "cpx32"
-        location    = "nbg1"
-        node_count  = 1
-        name_prefix = "unfold-system"
-        first_host  = 51
-        labels      = { "node.webgrip.io/pool" = "system" }
-        taints      = { "node.webgrip.io/pool" = "system:NoSchedule" }
-      }
-    }
-  }
 
   assert {
     condition = alltrue([
       hcloud_server.worker["unfold-system-1"].server_type == "cpx32",
-      hcloud_server.worker["unfold-system-1"].location == "nbg1",
+      hcloud_server.worker["unfold-system-1"].location == "fsn1",
       one(hcloud_server.worker["unfold-system-1"].network).ip == "10.64.0.51",
       hcloud_server.worker["unfold-system-1"].labels.pool == "system",
       hcloud_server.worker["unfold-system-1"].delete_protection,
     ])
-    error_message = "node_count 1 gives exactly one CPX32, unfold-system-1, in nbg1 at 10.64.0.51, delete-protected like every fixed node"
+    error_message = "the pool gives exactly one CPX32, unfold-system-1, in fsn1 at 10.64.0.51, delete-protected like every fixed node"
   }
 
   assert {
     condition     = sort(keys(hcloud_server.worker)) == sort(["unfold-app-1", "unfold-system-1"]) && hcloud_server.worker["unfold-app-1"].server_type == "cx33"
-    error_message = "the switch adds the system node and leaves the hub worker as it is"
+    error_message = "the system node joins the hub worker, which stays as it is"
   }
 
   assert {
