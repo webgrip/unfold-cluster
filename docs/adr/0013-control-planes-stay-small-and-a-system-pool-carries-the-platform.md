@@ -69,7 +69,7 @@ Checked on 2026-10-26 unless stated.
    * **Trigger to grow,** to three CPX32 one node at a time: any of the API server above 1.5 GiB working set at p95 over 7 days, a control plane under 15% available memory for 30 minutes, etcd's database above 1 GiB, or etcd WAL fsync p99 above 25 ms for an hour. If it fires before the first client, it is an owner decision to exceed the cap or delay S3.
    * A lost control plane is replaced with a CPX22 while CX is sold out (`control_plane_server_type` per node, +€14).
 2. **System pool: option B, at S1, one CPX32.**
-   * Pool `system`, label and taint `node.webgrip.io/pool=system`, tailnet tag `tag:system` with port 8427 only.
+   * Pool `system`, label and taint `node.webgrip.io/pool=system`, tailnet tag `tag:system` with ports 8427 and 9150: KEDA reads the CI job count on 9150 from wherever it runs, so the pool it moves to needs that port; it never gets OpenBao (8200).
    * It takes KEDA, the cluster-autoscaler, the CNPG operator and its plugin, cert-manager, Zot, Trivy, the Kyverno reports controller, kube-state-metrics, hubble-relay and the package cache.
    * KEDA and the autoscaler leave the control planes. ADR 0004 put them there so they run with no worker at all; the system node is always on, and neither is needed to recover the cluster. KEDA's scaler credential (RFC 0003 R6) moves off the nodes that run etcd.
    * At S3 the pool folds into the three-node hub: `node_count = 0`, and the workloads' affinity (`system` preferred, `unfold` allowed) moves them with no manifest change. A separate system node at S3 would leave €2.12 under the cap.
@@ -88,7 +88,7 @@ PriorityClasses, disruption budgets and spread follow [Capacity and scale](../ar
 * Bad, because the system node is a single point of failure from S1 to S3 for observability, KEDA (so new Runs and CI scaling) and Zot. That is the same exposure the single hub already has under RFC 0003 D4; both end at S3.
 * Bad, because ADR 0004's "KEDA and the autoscaler run with no worker at all" no longer holds. ADR 0004 gets a history line when this record is accepted.
 * Bad, because S4 cannot stay under the cap: each dedicated cell adds €97.30.
-* Neutral: a new tailnet tag, `tag:system`, joins ADR 0006's table with 8427 only.
+* Neutral: a new tailnet tag, `tag:system`, joins ADR 0006's table with 8427 and 9150.
 
 ## Confirmation
 

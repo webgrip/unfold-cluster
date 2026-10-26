@@ -45,13 +45,33 @@ spec:
       limits:
         memory: 256Mi
         ephemeral-storage: 256Mi
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+                    - unfold
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node.webgrip.io/pool
+                  operator: In
+                  values:
+                    - system
+
     tolerations:
       - key: node.webgrip.io/pool
         operator: Equal
-        value: unfold
+        value: system
         effect: NoSchedule
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
         effect: NoSchedule
     metricLabelsAllowlist:
       - nodes=[node.webgrip.io/pool]
