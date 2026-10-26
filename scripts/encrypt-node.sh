@@ -67,7 +67,7 @@ talos_at() {
 }
 
 in_maintenance() {
-  talosctl --insecure --endpoints "$NODE_IP" --nodes "$NODE_IP" get disks >/dev/null 2>&1
+  talosctl --endpoints "$NODE_IP" --nodes "$NODE_IP" get disks --insecure >/dev/null 2>&1
 }
 
 volume_encryption() {
