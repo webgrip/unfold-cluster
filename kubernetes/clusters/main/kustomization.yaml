@@ -9,6 +9,7 @@ resources:
   - ../../platform/hetzner-charts
   - ../../platform/hcloud-cloud-controller-manager
   - ../../platform/hcloud-csi
+  - ../../platform/coredns
   - ../../platform/network-policy
   - ../../platform/admission-policies
   - ../../platform/external-secrets

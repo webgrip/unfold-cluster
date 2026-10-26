@@ -75,6 +75,12 @@ locals {
 
   etcd_backup_namespace = yamldecode(file("${local.flux_platform_dir}/etcd-backup/namespace.yaml"))
 
+  coredns_dir   = "${local.flux_platform_dir}/coredns"
+  coredns_files = yamldecode(file("${local.coredns_dir}/kustomization.yaml")).resources
+  coredns_manifest = join("\n", [
+    for coredns_file in local.coredns_files : file("${local.coredns_dir}/${coredns_file}")
+  ])
+
   flux_namespace_manifest = yamlencode({
     apiVersion = "v1"
     kind       = "Namespace"
@@ -115,6 +121,7 @@ locals {
     { name = "cilium", contents = data.helm_template.cilium.manifest },
     { name = "hcloud-secret", contents = local.cluster_secret_manifests["hcloud"] },
     { name = "hcloud-cloud-controller-manager", contents = data.helm_template.hcloud_ccm.manifest },
+    { name = "coredns", contents = local.coredns_manifest },
     { name = "flux-system-namespace", contents = local.flux_namespace_manifest },
     { name = "flux-operator", contents = data.helm_template.flux_operator.manifest },
     { name = "flux-instance", contents = local.flux_instance_manifest },

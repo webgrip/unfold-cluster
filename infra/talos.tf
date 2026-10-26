@@ -63,9 +63,16 @@ locals {
     local.pod_security_patch,
     local.etcd_backup_access_patch,
     local.kube_proxy_disabled_patch,
+    local.talos_coredns_disabled_patch,
     local.kube_authentication_patch,
     local.kube_audit_policy_patch,
   ]
+
+  talos_coredns_disabled_patch = yamlencode({
+    apiVersion = "v1alpha1"
+    kind       = "KubeCoreDNSConfig"
+    enabled    = false
+  })
 
   kube_proxy_disabled_patch = yamlencode({
     apiVersion = "v1alpha1"

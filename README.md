@@ -44,6 +44,7 @@ Talos applies its inline manifests when the cluster is bootstrapped and never ag
 | Secret `flux-system/trusted-signers` | Flux, generated from `kubernetes/clusters/main/flux-system/trusted-signers/*.sshpub` | a merged pull request (see [Only signed commits deploy](#only-signed-commits-deploy)) |
 | Namespace `flux-system` | the FluxInstance | with the FluxInstance |
 | Namespace `etcd-backup` | Flux, `kubernetes/platform/etcd-backup/namespace.yaml` | a merged pull request |
+| CoreDNS (Deployment `coredns`, Service `kube-dns`, its ConfigMap, ServiceAccount, ClusterRole and binding, PodDisruptionBudget) | Flux, the plain manifests in `kubernetes/platform/coredns`; Talos's own CoreDNS is off (`KubeCoreDNSConfig` `enabled: false`) | a merged pull request |
 | Secret `kube-system/hcloud`: the cloud controller's and CSI driver's token, the network id | OpenTofu, `terraform_data.cluster_secrets` | a new value in OpenBao, then an `infra` apply |
 | Secret `etcd-backup/etcd-backup`: the Garage write key, the age recipient | OpenTofu, `terraform_data.cluster_secrets` | a new value in OpenBao, then an `infra` apply |
 
@@ -56,6 +57,7 @@ Each Flux-owned component has one set of files, read by both installers:
 | `ocirepository.yaml` (Cilium) | the chart and version | the chart and version |
 | `helmrepository.yaml` (`hetzner-charts`, `flux-operator`) | the chart repository | the same repository |
 | `fluxinstance.yaml`, `gitrepository.yaml`, `sync.yaml`, `etcd-backup/namespace.yaml` | the object | the same object, in its namespace |
+| `coredns/*.yaml`, in the order `coredns/kustomization.yaml` lists them | the objects | the same objects, as one inline manifest |
 | `trusted-signers/*.sshpub` | the `trusted-signers` Secret, through the `secretGenerator` | the same keys |
 
 So the seed a new cluster boots with is what Flux then reconciles, and Flux's first apply changes nothing. The OpenTofu tests `the_talos_seed_*`, run by `infra-check` on every pull request that touches these files, fail when the two could differ: a HelmRelease with inline values or a second `valuesFrom`, a `helm_template` with other values, another release name, namespace, chart, repository or version, a key file the `secretGenerator` leaves out, a source that stops verifying signatures, a component missing from `kubernetes/clusters/main`, or an object Flux needs to keep running without `kustomize.toolkit.fluxcd.io/prune: disabled`. The Cilium identity in `values.yaml` must stay `unfold-main` with ID 2; the plan refuses anything else.
