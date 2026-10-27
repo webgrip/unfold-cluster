@@ -163,6 +163,10 @@ at its row.
 | `dl.k8s.io` | E42 |
 | `ntfy.webgrip.dev` | E14, E15 |
 | `grafana.ops.unfoldhq.dev`, `query.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own Grafana and its read-only query endpoint behind the ops Gateway; the homelab Grafana reads `query` over the tailnet |
+| `staging.app.unfoldhq.dev` | E27: Unfold staging's public name, served by the Cloudflare Tunnel ([unfold-staging](../runbooks/unfold-staging.md)) |
+| `region1.v2.argotunnel.com`, `region2.v2.argotunnel.com`, `*.v2.argotunnel.com` | E27: the tunnel edge staging's `cloudflared` dials out to |
+| `vikunja.webgrip.dev` | E20, E11: staging's ploegd and Unfold reach Vikunja's API through `vikunja-relay` and the homelab gateway's 443 |
+| `api.fireworks.ai`, `inference.hetzner.com` | E44: staging's LiteLLM |
 | `grafana.com`, `storage.googleapis.com` | E46 |
 | `uptime.webgrip.dev` | E47 |
 | `slsa.dev`, `spdx.dev` | none: predicate type identifiers in attestations, never contacted |
