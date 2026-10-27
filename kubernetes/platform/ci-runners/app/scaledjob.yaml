@@ -218,6 +218,9 @@ spec:
               capabilities:
                 drop:
                   - ALL
+              seccompProfile:
+                type: Localhost
+                localhostProfile: profiles/ci-runner.json
             readinessProbe:
               exec:
                 command:

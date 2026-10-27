@@ -90,6 +90,18 @@ What that costs, and what to check:
   calls, `pivot_root`, `sethostname`, `setdomainname`, `keyctl`, `add_key` and `request_key`.
   Everything else the default refuses stays refused. Pod Security `baseline` allows Localhost;
   Unconfined it does not, and is not needed.
+- The `runner` container, where the job's steps run, cannot use `RuntimeDefault` either. That
+  profile answers `clone3` with `ENOSYS` so glibc falls back to `clone`, but runsc up to and
+  including the release Talos 1.14 ships (gVisor 20260831.0) discards a rule's `errnoRet` and
+  answers `EPERM` ([gVisor issue 14688](https://github.com/google/gvisor/issues/14688)). glibc 2.34
+  and later on amd64 treat that as fatal, so no thread starts: `git clone` fails with
+  `getaddrinfo() thread failed to start`, and so does anything else that starts a thread. The
+  container therefore runs under the Localhost profile `ci-runner.json`, which is
+  `buildkit-rootless.json` without its namespace, mount and keyring additions, plus moby's
+  flag-filtered `clone` rule and `clone3` allowed. The cost is that `clone3` can request a new namespace that `clone` and `unshare` cannot;
+  without capabilities that reaches only an unprivileged user namespace inside gVisor's kernel.
+  Once Talos ships a gVisor release with the fix (merged 2026-10-12), the container goes back to
+  `RuntimeDefault` and the profile is removed.
 - The snapshotter is left to BuildKit's own detection. The smoke workflow prints which one it chose
   (`buildctl debug workers --verbose`); `native` works everywhere but copies every layer.
 

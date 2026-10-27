@@ -253,6 +253,27 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
   }
 
   assert {
+    condition = anytrue([
+      for patch in local.gvisor_runtime_patches.systrap :
+      contains([for profile in try(yamldecode(patch).machine.seccompProfiles, []) : profile.name], local.runner_seccomp_name)
+    ])
+    error_message = "every gVisor node installs the ci-runner seccomp profile; runsc without gVisor's errnoRet fix (merged 2026-10-12) turns RuntimeDefault's clone3 ENOSYS into EPERM, and glibc then cannot start a thread in the runner container"
+  }
+
+  assert {
+    condition     = strcontains(file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"), "localhostProfile: profiles/${local.runner_seccomp_name}")
+    error_message = "the runner container names the same Localhost seccomp profile the gVisor nodes install"
+  }
+
+  assert {
+    condition = alltrue([
+      for rule in jsondecode(file("${path.module}/templates/seccomp/${local.runner_seccomp_name}")).syscalls :
+      length(setintersection(rule.names, ["unshare", "setns", "mount", "keyctl", "pivot_root"])) == 0
+    ])
+    error_message = "the ci-runner profile adds clone3 to RuntimeDefault and nothing else; the namespace, mount and keyring calls stay with buildkitd's profile"
+  }
+
+  assert {
     condition     = var.worker_pools["unfold"].node_count == 1 && var.worker_pools["ci"].node_count == 0 && contains(var.autoscaled_worker_pools, "ci")
     error_message = "the baseline is the one hub worker; the CI pool has no fixed node and grows only through the autoscaler"
   }
