@@ -253,24 +253,16 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
   }
 
   assert {
-    condition = anytrue([
-      for patch in local.gvisor_runtime_patches.systrap :
-      contains([for profile in try(yamldecode(patch).machine.seccompProfiles, []) : profile.name], local.runner_seccomp_name)
-    ])
-    error_message = "every gVisor node installs the ci-runner seccomp profile; runsc without gVisor's errnoRet fix (merged 2026-10-12) turns RuntimeDefault's clone3 ENOSYS into EPERM, and glibc then cannot start a thread in the runner container"
-  }
-
-  assert {
-    condition     = strcontains(file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"), "localhostProfile: profiles/${local.runner_seccomp_name}")
-    error_message = "the runner container names the same Localhost seccomp profile the gVisor nodes install"
+    condition     = length(regexall("localhostProfile: profiles/${local.buildkit_seccomp_name}", file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"))) == 2
+    error_message = "the runner container shares buildkitd's Localhost profile; runsc without gVisor's errnoRet fix (merged 2026-10-12) turns RuntimeDefault's clone3 ENOSYS into EPERM, and glibc then cannot start a thread"
   }
 
   assert {
     condition = alltrue([
-      for rule in jsondecode(file("${path.module}/templates/seccomp/${local.runner_seccomp_name}")).syscalls :
-      length(setintersection(rule.names, ["unshare", "setns", "mount", "keyctl", "pivot_root"])) == 0
+      for patch in local.gvisor_runtime_patches.systrap :
+      length(try(yamldecode(patch).machine.seccompProfiles, [])) <= 1
     ])
-    error_message = "the ci-runner profile adds clone3 to RuntimeDefault and nothing else; the namespace, mount and keyring calls stay with buildkitd's profile"
+    error_message = "a gVisor node installs one seccomp profile; each adds about 15 KiB to the autoscaled CI node's config, which is Hetzner user data and may not exceed 32 KiB"
   }
 
   assert {

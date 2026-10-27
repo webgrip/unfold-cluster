@@ -220,7 +220,7 @@ spec:
                   - ALL
               seccompProfile:
                 type: Localhost
-                localhostProfile: profiles/ci-runner.json
+                localhostProfile: profiles/buildkit-rootless.json
             readinessProbe:
               exec:
                 command:
