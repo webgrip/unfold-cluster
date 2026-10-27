@@ -195,7 +195,6 @@ spec:
               - /run/buildkit/server/cert.pem
               - --tlskey
               - /run/buildkit/server/key.pem
-              - --oci-worker-no-process-sandbox
               - --config
               - /etc/buildkit/buildkitd.toml
             securityContext:
