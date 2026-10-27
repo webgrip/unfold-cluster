@@ -24,6 +24,15 @@ jobs:
       - name: Show the BuildKit worker
         run: buildctl debug workers --verbose
 
+      - name: Refuse a build step that reaches for buildkitd
+        run: |
+          buildctl build \
+            --progress plain \
+            --no-cache \
+            --frontend dockerfile.v0 \
+            --local context=tests/ci-smoke/build-step-reaches-buildkitd \
+            --local dockerfile=tests/ci-smoke/build-step-reaches-buildkitd
+
       - name: Build, push with an SBOM and provenance attestation, and export the layer cache
         run: |
           buildctl build \

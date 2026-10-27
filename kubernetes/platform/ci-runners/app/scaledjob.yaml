@@ -115,9 +115,13 @@ spec:
           - name: buildctl
             image: docker.io/moby/buildkit:v0.34.0-rootless@sha256:65eca3c01cd1180c8f64565c4e3c5983af5145818b0e6fa863385d099eb73855
             command:
-              - cp
-              - /usr/bin/buildctl
-              - /opt/ci/bin/buildctl
+              - sh
+              - -ec
+            args:
+              - |
+                cp /usr/bin/buildctl /opt/ci/bin/buildctl.real
+                printf '#!/bin/sh\nexec /opt/ci/bin/buildctl.real --tlsdir /run/buildkit/client "$@"\n' > /opt/ci/bin/buildctl
+                chmod 0555 /opt/ci/bin/buildctl /opt/ci/bin/buildctl.real
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
@@ -134,12 +138,63 @@ spec:
             volumeMounts:
               - name: tools
                 mountPath: /opt/ci/bin
+          - name: buildkit-tls
+            image: docker.io/library/node:24.21.0-bookworm@sha256:3d27e5c11e5786e309ec3e03f93ae536eb36e6e5eb3714d5eb3300a36157add0
+            command:
+              - sh
+              - -ec
+            args:
+              - |
+                umask 077
+                server=/run/buildkit/server
+                client=/run/buildkit/client
+                issue() {
+                  openssl req -x509 -new -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 \
+                    -CA "$server/ca.pem" -CAkey "$server/ca-key.pem" \
+                    -subj "/CN=$1" -addext "basicConstraints=critical,CA:FALSE" \
+                    -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=$2" $3 \
+                    -keyout "$4/key.pem" -out "$4/cert.pem"
+                }
+                openssl req -x509 -new -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 \
+                  -subj /CN=buildkit-pod-ca -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+                  -addext "keyUsage=critical,keyCertSign" \
+                  -keyout "$server/ca-key.pem" -out "$server/ca.pem"
+                issue buildkitd serverAuth "-addext subjectAltName=IP:127.0.0.1" "$server"
+                issue runner clientAuth "" "$client"
+                cp "$server/ca.pem" "$client/ca.pem"
+                rm "$server/ca-key.pem"
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                  - ALL
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+                ephemeral-storage: 64Mi
+            volumeMounts:
+              - name: buildkit-server-tls
+                mountPath: /run/buildkit/server
+              - name: buildkit-client-tls
+                mountPath: /run/buildkit/client
           - name: buildkitd
             image: docker.io/moby/buildkit:v0.34.0-rootless@sha256:65eca3c01cd1180c8f64565c4e3c5983af5145818b0e6fa863385d099eb73855
             restartPolicy: Always
             args:
               - --addr
+              - unix:///run/user/1000/buildkit/buildkitd.sock
+              - --addr
               - tcp://127.0.0.1:1234
+              - --tlscacert
+              - /run/buildkit/server/ca.pem
+              - --tlscert
+              - /run/buildkit/server/cert.pem
+              - --tlskey
+              - /run/buildkit/server/key.pem
               - --oci-worker-no-process-sandbox
               - --config
               - /etc/buildkit/buildkitd.toml
@@ -152,8 +207,6 @@ spec:
               exec:
                 command:
                   - buildctl
-                  - --addr
-                  - tcp://127.0.0.1:1234
                   - debug
                   - workers
               periodSeconds: 2
@@ -163,8 +216,6 @@ spec:
               exec:
                 command:
                   - buildctl
-                  - --addr
-                  - tcp://127.0.0.1:1234
                   - debug
                   - workers
               periodSeconds: 30
@@ -183,6 +234,9 @@ spec:
                 mountPath: /home/user/.local/share/buildkit
               - name: buildkitd-config
                 mountPath: /etc/buildkit
+                readOnly: true
+              - name: buildkit-server-tls
+                mountPath: /run/buildkit/server
                 readOnly: true
         containers:
           - name: runner
@@ -244,6 +298,9 @@ spec:
                 readOnly: true
               - name: runner-state
                 mountPath: /run/forgejo-runner/state
+              - name: buildkit-client-tls
+                mountPath: /run/buildkit/client
+                readOnly: true
               - name: work
                 mountPath: /work
               - name: zot-push
@@ -262,6 +319,12 @@ spec:
           - name: buildkit-state
             emptyDir:
               sizeLimit: 30Gi
+          - name: buildkit-server-tls
+            emptyDir:
+              sizeLimit: 1Mi
+          - name: buildkit-client-tls
+            emptyDir:
+              sizeLimit: 1Mi
           - name: runner-config
             configMap:
               name: forgejo-runner-config
