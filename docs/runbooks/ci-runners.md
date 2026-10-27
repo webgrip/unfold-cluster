@@ -100,14 +100,14 @@ What that costs, and what to check:
   answers `EPERM` ([gVisor issue 14688](https://github.com/google/gvisor/issues/14688)). glibc 2.34
   and later on amd64 treat that as fatal, so no thread starts: `git clone` fails with
   `getaddrinfo() thread failed to start`, and so does anything else that starts a thread. The
-  container therefore shares `buildkitd`'s profile `buildkit-rootless.json`, which allows `clone3`.
-  Every gVisor node also installs `ci-runner.json`, the runner's own narrower profile; the
-  autoscaled CI node gets its config gzipped, so both profiles fit in Hetzner's 32 KiB of user
-  data. The runner switches to it once every gVisor node has it. Sharing
-  grants the job's steps the namespace, mount and keyring calls `buildkitd` has, which a job could
-  already use through a `RUN` step of its own build; the container keeps no capabilities and cannot
-  escalate, and all of it stays inside gVisor's kernel. Once Talos ships a gVisor release with the
-  fix (merged 2026-10-12), the container goes back to `RuntimeDefault`.
+  container therefore runs under `ci-runner.json`: containerd 2.3.7's `RuntimeDefault` for amd64
+  with no capabilities, except that `clone3` hits `SCMP_ACT_TRACE`. Without a tracer the kernel
+  answers that with `ENOSYS`, gVisor's sentry included, so glibc falls back to `clone`, which stays
+  filtered on namespace flags. A job that traces its own child with `PTRACE_O_TRACESECCOMP` can
+  still pass `clone3`; `unshare`, `setns`, `mount` and the keyring calls stay refused. Every gVisor
+  node installs both profiles, and the autoscaled CI node gets its config gzipped so both fit in
+  Hetzner's 32 KiB of user data. Once Talos ships a gVisor release with the fix (merged
+  2026-10-12), the container goes back to `RuntimeDefault` and `ci-runner.json` goes.
 - `buildkitd` listens on `tcp://127.0.0.1:1234`, not on a Unix socket in a shared `emptyDir`. Under
   gVisor each container sees an `emptyDir` through its own mount, so a socket `buildkitd` creates in
   one is not there for the runner (`dial unix /run/buildkit/buildkitd.sock: connect: no such file or
