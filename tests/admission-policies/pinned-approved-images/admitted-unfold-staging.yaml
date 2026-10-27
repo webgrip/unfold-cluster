@@ -81,7 +81,7 @@ spec:
         - name: tmp
           mountPath: /tmp
     - name: litellm
-      image: ghcr.io/berriai/litellm-database:v1.105.3@sha256:4cdb31e3a61b26da6452845a68f214bb82805ba216635eb3d8029fa13a46dfb1
+      image: ghcr.io/berriai/litellm-non_root:v1.105.3@sha256:947fc7fe046a194d2a1f687089bf14cdc8b44a0f33c2cae6ec2eabeb2363493f
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

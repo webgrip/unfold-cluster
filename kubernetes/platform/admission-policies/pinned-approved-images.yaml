@@ -63,7 +63,7 @@ spec:
         'ghcr.io/webgrip/agent-runner:',
         'ghcr.io/ploeg-hq/ploegd:',
         'ghcr.io/ploeg-hq/ploeg-worker:',
-        'ghcr.io/berriai/litellm-database:',
+        'ghcr.io/berriai/litellm-non_root:',
         'docker.io/cloudflare/cloudflared:']
     - name: images
       expression: >-
