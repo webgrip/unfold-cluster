@@ -111,14 +111,20 @@ What that costs, and what to check:
   share one network stack, so loopback reaches `buildkitd` from the runner and from nothing outside
   the pod.
 - Loopback alone would also let a Dockerfile `RUN` step drive `buildkitd`: build steps share the
-  pod's network (`worker.network: host`). `buildkitd` therefore requires mutual TLS. The
-  `buildkit-tls` init container makes a P-256 CA valid for one day, issues a server certificate for
+  pod's network (`worker.network: host`). `buildkitd` therefore requires mutual TLS on TCP, as
+  BuildKit's own Kubernetes examples do. The `buildkit-tls` init container makes a P-256 CA valid
+  for one day that can sign only end certificates (`pathlen:0`), issues a server certificate for
   `127.0.0.1` and one client certificate, and deletes the CA key before `buildkitd` starts. The
   server files go into the `buildkit-server-tls` volume, which only `buildkitd` mounts. The
-  client files go into `buildkit-client-tls`, which `buildkitd` (for its probes) and the runner
-  mount, outside `/work`. A `RUN` step sees neither volume and cannot read them through
-  `/proc/<pid>/root` either. Its connection fails the handshake (`error reading server preface:
-  EOF`). It can still see and signal `buildkitd`'s processes, which ends only its own job. RFC
+  client files go into `buildkit-client-tls`, which only the runner mounts, outside `/work`.
+- The probes use a second listener, the image's default Unix socket
+  `/run/user/1000/buildkit/buildkitd.sock`, inside the `buildkitd` container. It is not in a
+  volume, so no other container and no build step has it, and the client key stays out of
+  `buildkitd`.
+- A `RUN` step sees neither TLS volume nor the socket, and cannot reach them through
+  `/proc/<pid>/root` either. Its TCP connection fails the handshake (`error reading server
+  preface: EOF`). It can still see and signal `buildkitd`'s processes, which ends only its own
+  job. The smoke workflow proves all three under gVisor. RFC
   [0004](../rfc/0004-ci-jobs-cannot-reach-past-their-own-repository.md) part 4.
 - `buildctl` has no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper
   that runs the real client, `/opt/ci/bin/buildctl.real`, with `--tlsdir /run/buildkit/client`.

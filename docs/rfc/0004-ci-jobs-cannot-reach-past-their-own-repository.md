@@ -88,14 +88,15 @@ Once every webgrip image in Zot is signed this way, the Kyverno policy `webgrip-
 
 ### 4. Mutual TLS on `buildkitd`
 
-- A new init container, `buildkit-tls`, runs before `buildkitd`. It uses the runner's `node` image, which is already approved and has `openssl`. It makes an ECDSA P-256 CA valid for one day, a server certificate for `127.0.0.1` and one client certificate.
+- A new init container, `buildkit-tls`, runs before `buildkitd`. It uses the runner's `node` image, which is already approved and has `openssl`. It makes an ECDSA P-256 CA valid for one day that can sign only end certificates (`pathlen:0`), a server certificate for `127.0.0.1` and one client certificate, each limited to its own use (`keyUsage`, `extendedKeyUsage`).
 - It writes them into two `emptyDir` volumes:
   - `buildkit-server-tls` holds the CA certificate, the server certificate and the server key, and is mounted only in `buildkitd`;
-  - `buildkit-client-tls` holds the CA certificate, the client certificate and the client key, and is mounted in the runner, outside `/work`, and in `buildkitd` for its probes.
+  - `buildkit-client-tls` holds the CA certificate, the client certificate and the client key, and is mounted only in the runner, outside `/work`.
 - The CA key is deleted before `buildkitd` starts, and everything dies with the pod. The volumes stay on disk because files on a disk `emptyDir` are proven to reach the other containers under gVisor, and a memory `emptyDir` is not.
 - `buildkitd` starts with `--tlscacert`, `--tlscert` and `--tlskey`.
-- `buildctl` reads no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper that adds `--tlsdir`. The probes pass `--tlsdir` themselves.
-- A `RUN` step sees neither volume, and with `--oci-worker-no-process-sandbox` it can see `buildkitd`'s processes but not read their files through `/proc/<pid>/root`. Its connection fails the TLS handshake. It can still signal those processes, which ends only its own job.
+- `buildctl` reads no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper that adds `--tlsdir`.
+- The probes use a second listener, the image's default Unix socket inside the `buildkitd` container, as in BuildKit's own Kubernetes examples. It is in no volume, so the client key stays out of `buildkitd`.
+- A `RUN` step sees neither volume nor the socket, and with `--oci-worker-no-process-sandbox` it can see `buildkitd`'s processes but not read their files through `/proc/<pid>/root`. Its connection fails the TLS handshake. It can still signal those processes, which ends only its own job.
 
 ## Rollout
 

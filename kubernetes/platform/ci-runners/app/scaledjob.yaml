@@ -151,11 +151,13 @@ spec:
                 issue() {
                   openssl req -x509 -new -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 \
                     -CA "$server/ca.pem" -CAkey "$server/ca-key.pem" \
-                    -subj "/CN=$1" -addext "basicConstraints=critical,CA:FALSE" -addext "extendedKeyUsage=$2" $3 \
+                    -subj "/CN=$1" -addext "basicConstraints=critical,CA:FALSE" \
+                    -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=$2" $3 \
                     -keyout "$4/key.pem" -out "$4/cert.pem"
                 }
                 openssl req -x509 -new -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 -days 1 \
-                  -subj /CN=buildkit-pod-ca -addext "keyUsage=critical,keyCertSign" \
+                  -subj /CN=buildkit-pod-ca -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+                  -addext "keyUsage=critical,keyCertSign" \
                   -keyout "$server/ca-key.pem" -out "$server/ca.pem"
                 issue buildkitd serverAuth "-addext subjectAltName=IP:127.0.0.1" "$server"
                 issue runner clientAuth "" "$client"
@@ -184,6 +186,8 @@ spec:
             restartPolicy: Always
             args:
               - --addr
+              - unix:///run/user/1000/buildkit/buildkitd.sock
+              - --addr
               - tcp://127.0.0.1:1234
               - --tlscacert
               - /run/buildkit/server/ca.pem
@@ -203,10 +207,6 @@ spec:
               exec:
                 command:
                   - buildctl
-                  - --addr
-                  - tcp://127.0.0.1:1234
-                  - --tlsdir
-                  - /run/buildkit/client
                   - debug
                   - workers
               periodSeconds: 2
@@ -216,10 +216,6 @@ spec:
               exec:
                 command:
                   - buildctl
-                  - --addr
-                  - tcp://127.0.0.1:1234
-                  - --tlsdir
-                  - /run/buildkit/client
                   - debug
                   - workers
               periodSeconds: 30
@@ -241,9 +237,6 @@ spec:
                 readOnly: true
               - name: buildkit-server-tls
                 mountPath: /run/buildkit/server
-                readOnly: true
-              - name: buildkit-client-tls
-                mountPath: /run/buildkit/client
                 readOnly: true
         containers:
           - name: runner
