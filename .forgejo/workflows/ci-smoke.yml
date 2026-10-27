@@ -44,7 +44,6 @@ jobs:
             --frontend dockerfile.v0 \
             --local context=tests/ci-smoke \
             --local dockerfile=tests/ci-smoke \
-            --output type=cacheonly \
             --import-cache "type=registry,ref=${IMAGE}:buildcache,registry.insecure=true" 2>&1 | tee rebuild.log
           grep -q "CACHED" rebuild.log
 
