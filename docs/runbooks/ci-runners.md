@@ -162,10 +162,13 @@ If rootless BuildKit cannot run under gVisor on the node at all, the fallback is
 ## Network
 
 A job pod reaches `forgejo.webgrip.dev:443` (its task, the checkout, the actions it uses) and Zot on
-5000, and nothing else. A pipeline that needs another host, such as a package registry, adds its own
-egress rule to `kubernetes/platform/ci-runners/app/networkpolicy.yaml` with the reason in the rule's
-description. KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on
-the internet.
+5000, and nothing else. DNS answers the same: names under `cluster.local`, which CoreDNS answers
+itself without forwarding, and `forgejo.webgrip.dev`. Any other lookup gets `REFUSED` from Cilium's
+DNS proxy, so a job cannot carry data out in the names it looks up. A pipeline that needs another
+host, such as a package registry, adds its own egress rule and its `matchName` in the DNS rule to
+`kubernetes/platform/ci-runners/app/networkpolicy.yaml`, with the reason in the rule's description.
+KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on the
+internet.
 
 Talos's host firewall (runbook `host-firewall.md`) filters only inbound connections to node
 addresses. Job pods open connections outward and receive nothing, and the API server reaches the

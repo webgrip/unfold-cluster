@@ -26,6 +26,15 @@ jobs:
           buildctl debug workers --verbose | tee "$RUNNER_TEMP/workers"
           grep -Eq 'process-mode:[[:space:]]+sandbox$' "$RUNNER_TEMP/workers"
 
+      - name: Refuse a DNS lookup of a host the pod may not reach
+        run: |
+          getent hosts forgejo.webgrip.dev
+          getent hosts "${ZOT_REGISTRY%%:*}"
+          if getent hosts example.com; then
+            echo "the job resolved example.com, so it can carry data out in DNS queries" >&2
+            exit 1
+          fi
+
       - name: Refuse a build step that reaches for buildkitd
         run: |
           buildctl build \
