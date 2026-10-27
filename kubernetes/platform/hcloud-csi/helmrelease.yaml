@@ -78,6 +78,21 @@ spec:
           effect: NoSchedule
     node:
       priorityClassName: system-node-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: instance.hetzner.cloud/is-root-server
+                    operator: NotIn
+                    values:
+                      - "true"
+                  - key: instance.hetzner.cloud/provided-by
+                    operator: NotIn
+                    values:
+                      - robot
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       image:
         hcloudCSIDriver:
           # renovate: datasource=docker depName=docker.io/hetznercloud/hcloud-csi-driver

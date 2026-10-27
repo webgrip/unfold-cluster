@@ -6,7 +6,7 @@ tailnet only, behind Authentik:
 | Console | URL | What it shows | Who gets in |
 | --- | --- | --- | --- |
 | Hubble UI | `https://hubble.ops.unfoldhq.dev` | live flows per namespace, every egress verdict, which policy allowed or dropped a connection | `unfold-admins`, `unfold-viewers` (oauth2-proxy, client `unfold-consoles`) |
-| Policy Reporter | `https://policy-reporter.ops.unfoldhq.dev` | Kyverno's PolicyReports (the webgrip image-signature audits) and Trivy's vulnerability, config-audit, RBAC and exposed-secret reports, converted to PolicyReports | `unfold-admins`, `unfold-viewers` (same) |
+| Policy Reporter | `https://policy-reporter.ops.unfoldhq.dev` | Trivy's vulnerability, config-audit, RBAC and exposed-secret reports, converted to PolicyReports | `unfold-admins`, `unfold-viewers` (same) |
 | Headlamp | `https://headlamp.ops.unfoldhq.dev` | the Kubernetes objects, as the signed-in person | anyone in the two groups; what they see and do is their own RBAC: `unfold-viewer` reads everything but Secrets, `unfold-operator` also deletes and evicts pods and cordons and drains ([kubernetes-login](kubernetes-login.md)) |
 
 The Grafana dashboards for the same features are in `kubernetes/platform/ops-consoles/dashboards/`

@@ -65,6 +65,18 @@ spec:
                 - kube-system
                 - flux-system
     features:
+      admissionReports:
+        enabled: false
+      aggregateReports:
+        enabled: false
+      policyReports:
+        enabled: false
+      reporting:
+        validate: false
+        mutate: false
+        mutateExisting: false
+        imageVerify: false
+        generate: false
       policyExceptions:
         enabled: false
       generateValidatingAdmissionPolicy:
@@ -117,6 +129,7 @@ spec:
             memory: 512Mi
             ephemeral-storage: 256Mi
     reportsController:
+      enabled: false
       priorityClassName: platform-background
       replicas: 1
       sigstoreVolume:

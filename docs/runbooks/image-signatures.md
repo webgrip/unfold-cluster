@@ -29,7 +29,9 @@ Both policies run with `validationActions: [Audit, Warn]` and `failurePolicy: Ig
 unsigned webgrip image is admitted, and:
 
 - the client that applied it gets a warning naming the policy (Flux shows it in its events);
-- the reports controller writes a PolicyReport: `kubectl get policyreports -A`;
+- Kyverno's admission controller logs the refusal it did not enforce, with the pod's namespace and
+  name: `kubectl -n kyverno logs deploy/kyverno-admission-controller | grep webgrip-image-signatures`
+  (no PolicyReport: the reports controller is off since 2026-10-26, ADR 0013);
 - `kyverno_image_validating_policy_results_total{result="fail"}` goes up, and the homelab alert
   `UnfoldUnsignedWebgripImage` fires.
 
