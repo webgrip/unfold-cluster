@@ -15,7 +15,7 @@ agent pull requests and anyone's branch. Everything below follows from that.
 | --- | --- | --- |
 | KEDA | namespace `keda`, Flux Kustomization `keda`, on the control planes | Every 15 s reads `GET http://unfold-gateway.webgrip.dev:9150/waiting-jobs/unfold-ci` (a `metrics-api` trigger, value `waiting`) and starts one Job per waiting CI job. Nothing runs when nothing waits. |
 | ScaledJob `forgejo-runner` | namespace `ci`, Flux Kustomization `ci-runners` | At most 6 job pods at once, RuntimeClass `gvisor`, which places them on a node labelled `runtime.webgrip.io/gvisor=true`. The pods also tolerate the `unfold` pool taint and prefer the hub worker (weight 100) over a `ci` node (weight 50). Their requests (1.55 CPU and 3 GiB with gVisor's overhead) let two fit beside the hub's own pods and not a third. PriorityClass `ci-runner` (-5, never preempts) lets any Unfold pod at the default priority preempt a runner on the hub, and `cluster-autoscaler.kubernetes.io/safe-to-evict: "false"` keeps the autoscaler from moving a running job. |
-| Job pod | `unfold-app-1`, or an autoscaled `ci-<hex>` node | `register` (init): registers an ephemeral runner. `buildctl` (init): copies the BuildKit client. `buildkitd` (sidecar): rootless BuildKit. `runner`: `forgejo-runner one-job`, steps run here. |
+| Job pod | `unfold-app-1`, or an autoscaled `ci-<hex>` node | `register` (init): registers an ephemeral runner. `buildctl` (init): copies the BuildKit client and a wrapper that adds the client certificate. `buildkit-tls` (init): makes the pod's own CA and the `buildkitd` and runner certificates. `buildkitd` (sidecar): rootless BuildKit. `runner`: `forgejo-runner one-job`, steps run here. |
 | Runner registration token | OpenBao `secret/unfold-main/ci/forgejo-runner`, key `registration-token` | Minted by the homelab's `unfold-ci-runner-provisioner` CronJob. Delivered as Secret `ci/forgejo-runner-registration`, mounted into the `register` init container only. |
 | Job count | homelab `forgejo/forgejo-runner-queue`, behind the homelab gateway's tailnet port 9150 | Answers `{"label":"unfold-ci","waiting":N}`: the `webgrip` jobs in status `waiting` whose `runs-on` is `unfold-ci`. It reads Forgejo with the homelab KEDA scaler's existing token, which never leaves the homelab. Any other label is a 404, any other method a 501, and an unreadable queue a 502, never a zero. |
 
@@ -110,6 +110,18 @@ What that costs, and what to check:
   annotations, which the `sandbox-annotations` admission policy refuses. The containers of a pod
   share one network stack, so loopback reaches `buildkitd` from the runner and from nothing outside
   the pod.
+- Loopback alone would also let a Dockerfile `RUN` step drive `buildkitd`: build steps share the
+  pod's network (`worker.network: host`). `buildkitd` therefore requires mutual TLS. The
+  `buildkit-tls` init container makes a P-256 CA valid for one day, issues a server certificate for
+  `127.0.0.1` and one client certificate, and deletes the CA key before `buildkitd` starts. The
+  server files go into the `buildkit-server-tls` volume, which only `buildkitd` mounts. The
+  client files go into `buildkit-client-tls`, which `buildkitd` (for its probes) and the runner
+  mount, outside `/work`. A `RUN` step sees neither volume and cannot read them through
+  `/proc/<pid>/root` either. Its connection fails the handshake (`error reading server preface:
+  EOF`). It can still see and signal `buildkitd`'s processes, which ends only its own job. RFC
+  [0004](../rfc/0004-ci-jobs-cannot-reach-past-their-own-repository.md) part 4.
+- `buildctl` has no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper
+  that runs the real client, `/opt/ci/bin/buildctl.real`, with `--tlsdir /run/buildkit/client`.
 - The snapshotter is left to BuildKit's own detection. The smoke workflow prints which one it chose
   (`buildctl debug workers --verbose`); `native` works everywhere but copies every layer.
 
@@ -161,8 +173,9 @@ there. Any other request under those prefixes meets Anubis.
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,
-  `curl` and `buildctl`; `BUILDKIT_HOST` already points at the job's own BuildKit. There is no
-  Docker daemon; build with `buildctl`.
+  `curl` and `buildctl`; `BUILDKIT_HOST` already points at the job's own BuildKit, and `buildctl`
+  brings its client certificate. There is no Docker daemon; build with `buildctl`. Another BuildKit
+  client needs the files in `/run/buildkit/client` (`ca.pem`, `cert.pem`, `key.pem`).
 - Name actions by full URL: `uses: https://forgejo.webgrip.dev/actions/checkout@<sha> # vX.Y.Z`.
   A bare `actions/checkout@...` resolves against the homelab's in-cluster Forgejo address, which this
   cluster cannot reach.
@@ -183,6 +196,7 @@ land on a new `ci-<hex>` node under gVisor, which is gone again about ten minute
 | Pod stuck `ContainerCreating` | `forgejo-runner-registration` Secret missing: the ExternalSecret, then the store. |
 | Push answers 401 | `kubectl -n ci get secret zot-push-credentials`; if missing, the Zot Job's log says `skipped ci` until the RoleBinding exists and `ci` is in its `CONSUMER_NAMESPACES`. |
 | `register` fails | Its log. A refused token means the org's registration token was reset; the next provisioner run publishes the new one within 30 minutes, ESO within the hour. |
-| `buildkitd` never ready | Its log; see the gVisor notes above. |
+| `buildkitd` never ready | Its log; see the gVisor notes above. A TLS error names a file: the `buildkit-tls` init container's log. |
+| `buildctl` answers `error reading server preface: EOF` | The client sent no certificate: a client other than `/opt/ci/bin/buildctl` needs `--tlsdir /run/buildkit/client`. |
 | Third job Pending, no new node | [ci-autoscaler](ci-autoscaler.md#when-no-node-comes): the autoscaler's log names why the `ci` group did not grow. |
 | Pods pile up waiting | Each waits at most 90 minutes (`activeDeadlineSeconds`), and KEDA starts a new one only for a job no pod is serving yet (`accurate`, with pods counted as pending until a job's workspace exists). |
