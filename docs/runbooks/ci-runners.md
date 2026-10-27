@@ -101,8 +101,9 @@ What that costs, and what to check:
   and later on amd64 treat that as fatal, so no thread starts: `git clone` fails with
   `getaddrinfo() thread failed to start`, and so does anything else that starts a thread. The
   container therefore shares `buildkitd`'s profile `buildkit-rootless.json`, which allows `clone3`.
-  A separate, narrower profile does not fit: each profile adds about 15 KiB to the machine config,
-  and an autoscaled CI node receives that config as Hetzner user data, limited to 32 KiB. Sharing
+  Every gVisor node also installs `ci-runner.json`, the runner's own narrower profile; the
+  autoscaled CI node gets its config gzipped, so both profiles fit in Hetzner's 32 KiB of user
+  data. The runner switches to it once every gVisor node has it. Sharing
   grants the job's steps the namespace, mount and keyring calls `buildkitd` has, which a job could
   already use through a `RUN` step of its own build; the container keeps no capabilities and cannot
   escalate, and all of it stays inside gVisor's kernel. Once Talos ships a gVisor release with the

@@ -258,12 +258,13 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
   }
 
   assert {
-    condition = alltrue([
+    condition = anytrue([
       for patch in local.gvisor_runtime_patches.systrap :
-      length(try(yamldecode(patch).machine.seccompProfiles, [])) <= 1
+      contains([for profile in try(yamldecode(patch).machine.seccompProfiles, []) : profile.name], local.runner_seccomp_name)
     ])
-    error_message = "a gVisor node installs one seccomp profile; each adds about 15 KiB to the autoscaled CI node's config, which is Hetzner user data and may not exceed 32 KiB"
+    error_message = "every gVisor node installs the ci-runner seccomp profile, RuntimeDefault with clone3 answered ENOSYS through SCMP_ACT_TRACE, ready for the runner container"
   }
+
 
   assert {
     condition     = var.worker_pools["unfold"].node_count == 1 && var.worker_pools["ci"].node_count == 0 && contains(var.autoscaled_worker_pools, "ci")

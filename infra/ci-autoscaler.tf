@@ -27,7 +27,7 @@ locals {
   })
 
   autoscaled_pool_user_data = {
-    for pool in var.autoscaled_worker_pools : pool => data.talos_machine_configuration.autoscaled_worker[pool].machine_configuration
+    for pool in var.autoscaled_worker_pools : pool => base64gzip(data.talos_machine_configuration.autoscaled_worker[pool].machine_configuration)
   }
 
   autoscaler_cluster_config = {
@@ -107,8 +107,8 @@ data "talos_machine_configuration" "autoscaled_worker" {
 
   lifecycle {
     postcondition {
-      condition     = length(self.machine_configuration) <= local.hetzner_user_data_limit_bytes
-      error_message = "The worker config of an autoscaled pool is Hetzner user data, which may not exceed 32 KiB."
+      condition     = length(base64gzip(self.machine_configuration)) <= local.hetzner_user_data_limit_bytes
+      error_message = "The worker config of an autoscaled pool, gzipped and base64-encoded, is Hetzner user data, which may not exceed 32 KiB."
     }
   }
 }
