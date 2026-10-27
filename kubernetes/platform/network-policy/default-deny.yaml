@@ -4,7 +4,7 @@ kind: CiliumClusterwideNetworkPolicy
 metadata:
   name: default-deny
 spec:
-  description: Every pod outside kube-system and flux-system denies all traffic except DNS until a policy in its own namespace allows more.
+  description: Every pod outside kube-system and flux-system denies all traffic until a policy allows more. DNS comes from default-dns, or for the ci namespace from its own filtered rule.
   endpointSelector:
     matchExpressions:
       - key: k8s:io.kubernetes.pod.namespace
@@ -15,6 +15,28 @@ spec:
   enableDefaultDeny:
     ingress: true
     egress: true
+  ingress:
+    - {}
+  egress:
+    - {}
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-dns
+spec:
+  description: Every pod outside kube-system, flux-system and ci reaches kube-dns. The ci namespace is left out because an unfiltered DNS rule here would widen the runner's own DNS rule to every name, and a job could carry data out in its lookups.
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: NotIn
+        values:
+          - kube-system
+          - flux-system
+          - ci
+  enableDefaultDeny:
+    ingress: false
+    egress: false
   egress:
     - toEndpoints:
         - matchLabels:
