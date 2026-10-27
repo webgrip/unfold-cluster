@@ -13,7 +13,7 @@ data:
       capacity: 1
       timeout: 1h
       envs:
-        BUILDKIT_HOST: unix:///run/buildkit/buildkitd.sock
+        BUILDKIT_HOST: tcp://127.0.0.1:1234
         ZOT_REGISTRY: zot.zot.svc.cluster.local:5000
       labels:
         - unfold-ci:host

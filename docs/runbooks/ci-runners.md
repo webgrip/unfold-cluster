@@ -103,6 +103,13 @@ What that costs, and what to check:
   already use through a `RUN` step of its own build; the container keeps no capabilities and cannot
   escalate, and all of it stays inside gVisor's kernel. Once Talos ships a gVisor release with the
   fix (merged 2026-10-12), the container goes back to `RuntimeDefault`.
+- `buildkitd` listens on `tcp://127.0.0.1:1234`, not on a Unix socket in a shared `emptyDir`. Under
+  gVisor each container sees an `emptyDir` through its own mount, so a socket `buildkitd` creates in
+  one is not there for the runner (`dial unix /run/buildkit/buildkitd.sock: connect: no such file or
+  directory`). gVisor can share the volume inside the sandbox, but only through `dev.gvisor.*` pod
+  annotations, which the `sandbox-annotations` admission policy refuses. The containers of a pod
+  share one network stack, so loopback reaches `buildkitd` from the runner and from nothing outside
+  the pod.
 - The snapshotter is left to BuildKit's own detection. The smoke workflow prints which one it chose
   (`buildctl debug workers --verbose`); `native` works everywhere but copies every layer.
 
