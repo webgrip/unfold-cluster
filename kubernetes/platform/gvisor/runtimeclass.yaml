@@ -20,3 +20,7 @@ scheduling:
       operator: Equal
       value: metal
       effect: NoSchedule
+    - key: node.webgrip.io/pool
+      operator: Equal
+      value: unfold
+      effect: NoSchedule
