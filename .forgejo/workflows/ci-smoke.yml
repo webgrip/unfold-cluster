@@ -21,8 +21,10 @@ jobs:
           cat /proc/version
           dmesg 2>/dev/null | head -n 5 || echo "dmesg not readable"
 
-      - name: Show the BuildKit worker
-        run: buildctl debug workers --verbose
+      - name: Show the BuildKit worker and refuse one without a process sandbox
+        run: |
+          buildctl debug workers --verbose | tee "$RUNNER_TEMP/workers"
+          grep -Eq 'process-mode:[[:space:]]+sandbox$' "$RUNNER_TEMP/workers"
 
       - name: Refuse a build step that reaches for buildkitd
         run: |

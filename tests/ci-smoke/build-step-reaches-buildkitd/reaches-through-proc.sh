@@ -1,5 +1,13 @@
 #!/bin/sh
 set -u
+for process in /proc/[0-9]*; do
+  case "$(cat "$process/comm" 2>/dev/null)" in
+    buildkitd | rootlesskit | exe)
+      echo "a build step saw buildkitd's process $process" >&2
+      exit 1
+      ;;
+  esac
+done
 for root in /proc/[0-9]*/root; do
   if head -c 1 "$root/run/buildkit/server/key.pem" >/dev/null 2>&1; then
     echo "a build step read the server key through $root" >&2

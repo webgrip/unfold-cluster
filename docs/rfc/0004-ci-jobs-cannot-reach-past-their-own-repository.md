@@ -96,7 +96,7 @@ Once every webgrip image in Zot is signed this way, the Kyverno policy `webgrip-
 - `buildkitd` starts with `--tlscacert`, `--tlscert` and `--tlskey`.
 - `buildctl` reads no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper that adds `--tlsdir`.
 - The probes use a second listener, the image's default Unix socket inside the `buildkitd` container, as in BuildKit's own Kubernetes examples. It is in no volume, so the client key stays out of `buildkitd`.
-- A `RUN` step sees neither volume nor the socket, and with `--oci-worker-no-process-sandbox` it can see `buildkitd`'s processes but not read their files through `/proc/<pid>/root`. Its connection fails the TLS handshake. It can still signal those processes, which ends only its own job.
+- A `RUN` step sees neither volume nor the socket. It runs in BuildKit's process sandbox, so it does not see `buildkitd`'s processes either. Its connection fails the TLS handshake.
 
 ## Rollout
 

@@ -79,8 +79,12 @@ What that costs, and what to check:
   escalation only reaches gVisor's own kernel. The `pod-security-restricted` admission policy will
   report this container; it needs a recorded exception for container `buildkitd` in `ci` with
   RuntimeClass `gvisor` before that policy moves to Deny.
-- `--oci-worker-no-process-sandbox` lets build steps see `buildkitd`'s processes. The pod holds one
-  job, so there is nobody else to see.
+- Build steps run in BuildKit's process sandbox: each `RUN` step gets its own PID namespace and
+  `/proc`, so it sees only its own processes and cannot signal `buildkitd`. Under runc that needs
+  an unmasked `/proc`, which is why BuildKit's Kubernetes examples pass
+  `--oci-worker-no-process-sandbox`; gVisor gives the pod its own `/proc` and lets runc mount
+  another. The smoke workflow fails when the worker reports any `process-mode` other than
+  `sandbox`.
 - Every gVisor node runs runsc with `--oci-seccomp`, so each pod's seccomp profile applies inside
   the sandbox. Under `RuntimeDefault`, rootlesskit's `unshare` is refused (`failed to start the
   child: fork/exec /proc/self/exe: operation not permitted`) and runc cannot make a build step's
@@ -123,8 +127,7 @@ What that costs, and what to check:
   `buildkitd`.
 - A `RUN` step sees neither TLS volume nor the socket, and cannot reach them through
   `/proc/<pid>/root` either. Its TCP connection fails the handshake (`error reading server
-  preface: EOF`). It can still see and signal `buildkitd`'s processes, which ends only its own
-  job. The smoke workflow proves all three under gVisor. RFC
+  preface: EOF`). The smoke workflow proves all three under gVisor. RFC
   [0004](../rfc/0004-ci-jobs-cannot-reach-past-their-own-repository.md) part 4.
 - `buildctl` has no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper
   that runs the real client, `/opt/ci/bin/buildctl.real`, with `--tlsdir /run/buildkit/client`.
