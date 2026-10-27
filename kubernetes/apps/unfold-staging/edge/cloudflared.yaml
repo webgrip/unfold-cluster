@@ -1,0 +1,181 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudflared
+automountServiceAccountToken: false
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudflare-tunnel
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao-homelab
+  target:
+    name: cloudflare-tunnel
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: token
+      remoteRef:
+        key: unfold-main/staging/cloudflare-tunnel
+        property: token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  labels:
+    app.kubernetes.io/name: cloudflared
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflared
+    spec:
+      serviceAccountName: cloudflared
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      priorityClassName: hub-critical
+      nodeSelector:
+        node.webgrip.io/pool: unfold
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflared
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudflared
+          # renovate: datasource=docker depName=docker.io/cloudflare/cloudflared
+          image: docker.io/cloudflare/cloudflared:2026.10.5@sha256:1b1d34d0a9c0bfca9de72db8460d328db3f19edd2b96169114e3e893a97bbe53
+          args:
+            - tunnel
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-tunnel
+                  key: token
+          ports:
+            - name: metrics
+              containerPort: 2000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+              ephemeral-storage: 16Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudflared
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cloudflared
+spec:
+  description: The tunnel connector dials out to Cloudflare's tunnel edge on 7844 (QUIC over UDP, HTTP/2 over TCP as the fallback) and to api.cloudflare.com, by name through Cilium's DNS proxy. It forwards requests to the Unfold workbench on 4080 and webhook posts to ploegd on 8080, and to nothing else. Nothing reaches it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchPattern: "*.v2.argotunnel.com"
+              - matchName: api.cloudflare.com
+    - toFQDNs:
+        - matchName: region1.v2.argotunnel.com
+        - matchName: region2.v2.argotunnel.com
+        - matchPattern: "*.v2.argotunnel.com"
+      toPorts:
+        - ports:
+            - port: "7844"
+              protocol: UDP
+            - port: "7844"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: api.cloudflare.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: unfold
+            app.kubernetes.io/instance: unfold
+      toPorts:
+        - ports:
+            - port: "4080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: ploeg
+            ploeg.webgrip.dev/component: daemon
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

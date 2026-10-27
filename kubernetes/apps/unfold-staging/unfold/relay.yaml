@@ -1,0 +1,99 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vikunja-relay
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vikunja-relay
+  labels:
+    app.kubernetes.io/name: vikunja-relay
+spec:
+  selector:
+    app.kubernetes.io/name: vikunja-relay
+  ports:
+    - name: connect
+      port: 3128
+      targetPort: connect
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vikunja-relay
+  labels:
+    app.kubernetes.io/name: vikunja-relay
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vikunja-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vikunja-relay
+    spec:
+      serviceAccountName: vikunja-relay
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - unfold
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: unfold
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: envoy
+          # renovate: datasource=docker depName=docker.io/envoyproxy/envoy
+          image: docker.io/envoyproxy/envoy:distroless-v1.40.1@sha256:6cf314259a0adde2386baafeeeb041ed37a30f6bdd935cff36cd38a1e15acab1
+          args:
+            - -c
+            - /etc/envoy/vikunja-relay.yaml
+            - --log-level
+            - warn
+            - --disable-hot-restart
+          ports:
+            - name: connect
+              containerPort: 3128
+          readinessProbe:
+            tcpSocket:
+              port: connect
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 5m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+              ephemeral-storage: 16Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/envoy
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: vikunja-relay

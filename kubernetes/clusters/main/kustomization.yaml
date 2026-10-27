@@ -35,3 +35,4 @@ resources:
   - ../../platform/trivy-operator
   - ../../platform/runtime-security
   - ../../platform/ops-consoles
+  - ../../apps/unfold-staging

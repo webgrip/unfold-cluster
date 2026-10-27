@@ -1,0 +1,52 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-workspaces
+spec:
+  description: Every agent workspace runs model-directed code under gVisor. Only the workbench reaches it. It reaches the workbench's relay on 4080, staging's LiteLLM on 4000 and Forgejo over HTTPS by name, and nothing else. DNS answers only names under cluster.local and Forgejo's, because this namespace is left out of default-dns, so a workspace cannot carry data out in its lookups.
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: unfold
+            app.kubernetes.io/instance: unfold
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: forgejo.webgrip.dev
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: unfold
+            app.kubernetes.io/instance: unfold
+      toPorts:
+        - ports:
+            - port: "4080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: litellm-staging
+            app.kubernetes.io/name: litellm
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,143 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unfold-staging-namespaces
+  namespace: flux-system
+spec:
+  interval: 1h
+  retryInterval: 2m
+  path: ./kubernetes/apps/unfold-staging/namespaces
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unfold-staging-ploeg-db
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: unfold-staging-namespaces
+    - name: plugin-barman-cloud
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  path: ./kubernetes/apps/unfold-staging/ploeg-db
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substitute:
+      CNPG_CLUSTER: ploeg-db
+      CNPG_NAMESPACE: unfold-staging
+      CNPG_DATABASE: app
+      CNPG_OWNER: ploeg
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: litellm-staging-db
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: unfold-staging-namespaces
+    - name: plugin-barman-cloud
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  path: ./kubernetes/apps/unfold-staging/litellm/db
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substitute:
+      CNPG_CLUSTER: litellm-db
+      CNPG_NAMESPACE: litellm-staging
+      CNPG_DATABASE: litellm
+      CNPG_OWNER: litellm
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: litellm-staging
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: external-secrets-stores
+    - name: litellm-staging-db
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  path: ./kubernetes/apps/unfold-staging/litellm/app
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unfold-staging-workspaces
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: unfold-staging-namespaces
+  interval: 1h
+  retryInterval: 2m
+  path: ./kubernetes/apps/unfold-staging/workspaces
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unfold-staging
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: external-secrets-stores
+    - name: unfold-staging-ploeg-db
+    - name: unfold-staging-workspaces
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  path: ./kubernetes/apps/unfold-staging/unfold
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substitute:
+      UNFOLD_STAGING_HOSTNAME: staging.app.unfoldhq.dev
+      UNFOLD_STAGING_VIKUNJA_PROJECT_ID: '"0"'
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unfold-staging-edge
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: external-secrets-stores
+    - name: unfold-staging-namespaces
+  interval: 1h
+  retryInterval: 2m
+  path: ./kubernetes/apps/unfold-staging/edge
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

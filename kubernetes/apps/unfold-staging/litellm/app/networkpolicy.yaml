@@ -1,0 +1,57 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: litellm
+spec:
+  description: Staging's LiteLLM answers on 4000 to Unfold, ploegd and Ploeg's worker pods in unfold-staging and to the agent workspaces. It reaches its own database and the two model providers by name, and nothing else; its lookups go through Cilium's DNS proxy so the FQDN rule learns the providers' addresses.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: litellm
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: unfold
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: ploeg
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging
+            app.kubernetes.io/name: ploeg-worker
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging-workspaces
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: api.fireworks.ai
+              - matchName: inference.hetzner.com
+    - toFQDNs:
+        - matchName: api.fireworks.ai
+        - matchName: inference.hetzner.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: litellm-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

@@ -1,0 +1,14 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: unfold
+spec:
+  interval: 1h
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  url: oci://ghcr.io/webgrip/charts/unfold
+  ref:
+    tag: 0.4.0-rc.119
+    digest: sha256:bf5490b21d6110abb27a40df3891cc5e573db85208b2c5ae94ed5b73867a2015

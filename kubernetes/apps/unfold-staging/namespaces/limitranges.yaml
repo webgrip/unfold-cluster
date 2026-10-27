@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ephemeral-storage
+  namespace: unfold-staging-workspaces
+spec:
+  limits:
+    - type: Container
+      default:
+        ephemeral-storage: 2Gi
+      defaultRequest:
+        ephemeral-storage: 256Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ephemeral-storage
+  namespace: unfold-staging
+spec:
+  limits:
+    - type: Container
+      default:
+        ephemeral-storage: 2Gi
+      defaultRequest:
+        ephemeral-storage: 64Mi

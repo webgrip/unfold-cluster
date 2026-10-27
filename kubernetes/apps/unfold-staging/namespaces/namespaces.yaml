@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unfold-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    external-secrets.webgrip.io/openbao-homelab: allowed
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unfold-staging-workspaces
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    ploeg.webgrip.dev/isolation-class: hardened
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: litellm-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    external-secrets.webgrip.io/openbao-homelab: allowed
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unfold-staging-edge
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    external-secrets.webgrip.io/openbao-homelab: allowed

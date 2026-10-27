@@ -1,0 +1,186 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unfold
+spec:
+  description: The workbench answers the tunnel connector and its own agent workspaces on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: unfold
+      app.kubernetes.io/instance: unfold
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging-edge
+            app.kubernetes.io/name: cloudflared
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging-workspaces
+      toPorts:
+        - ports:
+            - port: "4080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: forgejo.webgrip.dev
+    - toEntities:
+        - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: ploeg
+            ploeg.webgrip.dev/component: daemon
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: litellm-staging
+            app.kubernetes.io/name: litellm
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: vikunja-relay
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ploegd
+spec:
+  description: Adds to the chart's NetworkPolicy what it cannot express. The tunnel connector may only POST to /webhooks/, so Cloudflare Access and Unfold's sign-in are not bypassed through ploegd's other routes. ploegd reaches Forgejo over HTTPS by name, through Cilium's DNS proxy.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: ploeg
+      ploeg.webgrip.dev/component: daemon
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: unfold-staging-edge
+            app.kubernetes.io/name: cloudflared
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: POST
+                path: "/webhooks/.*"
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: forgejo.webgrip.dev
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vikunja-relay
+spec:
+  description: The relay carries ploegd's and the workbench's Vikunja API calls to the homelab gateway, which only the hub's tailnet tag may open on 443 (ADR 0006). It forwards one authority, vikunja.webgrip.dev:443. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vikunja-relay
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: unfold
+            app.kubernetes.io/instance: unfold
+        - matchLabels:
+            app.kubernetes.io/name: ploeg
+            ploeg.webgrip.dev/component: daemon
+      toPorts:
+        - ports:
+            - port: "3128"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: unfold-gateway.webgrip.dev
+    - toFQDNs:
+        - matchName: unfold-gateway.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ploeg-worker
+spec:
+  description: Adds to the chart's worker NetworkPolicy the one destination it cannot express, Forgejo over HTTPS by name, for clone and push. Nothing reaches a worker pod. None run while the executor is off.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: ploeg-worker
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: forgejo.webgrip.dev
+    - toFQDNs:
+        - matchName: forgejo.webgrip.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
