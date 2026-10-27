@@ -119,3 +119,7 @@ PriorityClasses, disruption budgets and spread follow [Capacity and scale](../ar
   The pods that prefer the system pool and had fallen back to the control planes before it
   existed (KEDA, CloudNativePG, the cluster-autoscaler) were rescheduled onto it by hand; a
   preference never moves a running pod.
+* 2026-10-28: [ADR 0017](0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md) puts
+  Unfold staging's agents under gVisor on the hub. Neither the Ploeg nor the Unfold chart lets
+  worker or workspace pods carry tolerations, so the `gvisor` RuntimeClass tolerates the `unfold`
+  pool taint until they do; part 5's "stops tolerating pool taints" waits for that.
