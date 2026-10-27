@@ -165,7 +165,9 @@ If rootless BuildKit cannot run under gVisor on the node at all, the fallback is
 A job pod reaches `forgejo.webgrip.dev:443` (its task, the checkout, the actions it uses) and Zot on
 5000, and nothing else. DNS answers the same: names under `cluster.local`, which CoreDNS answers
 itself without forwarding, and `forgejo.webgrip.dev`. Any other lookup gets `REFUSED` from Cilium's
-DNS proxy, so a job cannot carry data out in the names it looks up. A pipeline that needs another
+DNS proxy, so a job cannot carry data out in the names it looks up. Cilium adds up every rule
+that selects a pod, and a DNS rule without a name filter on the same port lets every name through,
+so the cluster-wide `default-dns` policy leaves the `ci` namespace out. A pipeline that needs another
 host, such as a package registry, adds its own egress rule and its `matchName` in the DNS rule to
 `kubernetes/platform/ci-runners/app/networkpolicy.yaml`, with the reason in the rule's description.
 KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on the
