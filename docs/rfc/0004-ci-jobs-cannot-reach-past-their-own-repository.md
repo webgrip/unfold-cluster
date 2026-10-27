@@ -88,16 +88,14 @@ Once every webgrip image in Zot is signed this way, the Kyverno policy `webgrip-
 
 ### 4. Mutual TLS on `buildkitd`
 
-- A new init container, `buildkit-tls`, runs before `buildkitd`. It makes an ECDSA P-256 CA, a server certificate for `127.0.0.1` and one client certificate.
-- It writes them into two `emptyDir` volumes in memory:
+- A new init container, `buildkit-tls`, runs before `buildkitd`. It uses the runner's `node` image, which is already approved and has `openssl`. It makes an ECDSA P-256 CA valid for one day, a server certificate for `127.0.0.1` and one client certificate.
+- It writes them into two `emptyDir` volumes:
   - `buildkit-server-tls` holds the CA certificate, the server certificate and the server key, and is mounted only in `buildkitd`;
-  - `buildkit-client-tls` holds the CA certificate, the client certificate and the client key, and is mounted only in the runner, outside `/work`.
-- The CA key is never written to disk, and everything dies with the pod.
+  - `buildkit-client-tls` holds the CA certificate, the client certificate and the client key, and is mounted in the runner, outside `/work`, and in `buildkitd` for its probes.
+- The CA key is deleted before `buildkitd` starts, and everything dies with the pod. The volumes stay on disk because files on a disk `emptyDir` are proven to reach the other containers under gVisor, and a memory `emptyDir` is not.
 - `buildkitd` starts with `--tlscacert`, `--tlscert` and `--tlskey`.
-- The probes and `buildctl` use the client certificate.
-- A `RUN` step sees neither volume, so its connection fails the TLS handshake.
-
-The image for `buildkit-tls` must be on the approved list and pinned by digest.
+- `buildctl` reads no environment variable for its TLS files, so `/opt/ci/bin/buildctl` is a wrapper that adds `--tlsdir`. The probes pass `--tlsdir` themselves.
+- A `RUN` step sees neither volume, and with `--oci-worker-no-process-sandbox` it can see `buildkitd`'s processes but not read their files through `/proc/<pid>/root`. Its connection fails the TLS handshake. It can still signal those processes, which ends only its own job.
 
 ## Rollout
 
