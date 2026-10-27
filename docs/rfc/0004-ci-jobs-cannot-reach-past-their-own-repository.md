@@ -6,7 +6,7 @@
 | Date | 2026-10-27 |
 | Owner | ryangr0 |
 | Builds on | RFC 0001, [ADR 0002](../adr/0002-ci-under-gvisor-on-the-metal-node.md), [ADR 0011](../adr/0011-kyverno-checks-webgrip-image-signatures.md), homelab-cluster ADR-0055 |
-| Facts checked | 2026-10-27: this repository's `main` 051e3a8, ci-smoke run 606 (green), Forgejo 15.0.10 and its Actions OIDC discovery document, Zot v2.1.22 as configured in `kubernetes/platform/zot/helmrelease.yaml` |
+| Facts checked | 2026-10-27: this repository's `main` 051e3a8, ci-smoke run 606 (green), Forgejo 15.0.10 and its Actions OIDC discovery document, Zot v2.1.22 as configured in `kubernetes/platform/zot/helmrelease.yaml`; the part 1 spike against Zot v2.1.22 and BuildKit v0.34.0 |
 
 ## Summary
 
@@ -14,7 +14,7 @@ Today one Zot user, `ci`, may create and overwrite anything under `webgrip/**`, 
 
 This RFC closes those paths. Every CI job is treated as untrusted code:
 
-1. **No standing push credential.** A job proves who it is with its Forgejo Actions OIDC token and receives a Zot token that lasts minutes and covers only its own repository.
+1. **No standing push credential.** A job proves who it is with its Forgejo Actions OIDC token, which Zot checks itself and which covers only its own repository.
 2. **Only protected refs write what others trust.** Releases and the shared build cache are written by protected refs only. Pull requests read the cache and write nothing others import. Fork pull requests get no token at all.
 3. **A release is built twice.** One build uses the cache and one starts from nothing, each in its own pod. Only when the image digests match is the release tagged and signed.
 4. **`buildkitd` answers only the runner.** It listens on loopback with mutual TLS and a CA that exists only for the life of the pod.
@@ -36,27 +36,45 @@ Out of scope: reading. Zot keeps anonymous read, because nodes pull through the 
 
 ## Design
 
-### 1. Short-lived, repository-scoped Zot tokens
+### 1. Zot checks the job's own OIDC token
 
-Forgejo 15 issues Actions OIDC tokens (`https://forgejo.webgrip.dev/api/actions`, RS256). They carry `repository`, `ref`, `ref_protected`, `ref_type`, `event_name`, `workflow_ref` and `run_id`. Forgejo never issues one to a pull request from a fork. The `openbao-read` composite action in `webgrip/workflows` already exchanges these tokens.
+Forgejo 15 issues Actions OIDC tokens (`https://forgejo.webgrip.dev/api/actions`, RS256), with the audience the job asks for. They carry `repository`, `repository_owner`, `ref`, `ref_protected` (the string `"true"` or `"false"`), `ref_type`, `event_name`, `workflow_ref` and `run_id`. Forgejo never issues one to a pull request from a fork.
 
-Zot switches from htpasswd to bearer authentication (the Docker registry token protocol): `http.auth.bearer` names a realm, a service and the certificate whose key signs the tokens. A small in-cluster token service, `zot-token`, is that realm:
+Zot v2.1.22 validates such tokens itself ([OIDC workload identity](https://github.com/project-zot/zot/blob/v2.1.22/examples/README-OIDC-WORKLOAD-IDENTITY.md)): `http.auth.bearer.oidc` names the issuer and audience, CEL maps the claims to a user and groups, and a CEL condition on each `accessControl` policy compares the request with the claims (`req.repository`, `req.claims`). No token service and no signing key of our own are needed. The job requests a token with audience `zot` and writes a Docker config with username `oidc` and the token as password. BuildKit trades it at Zot's `/zot/auth/token`, as the Docker token protocol does, and the secret mounted into the pod goes away.
 
-1. The job requests an OIDC token with audience `zot` and writes a Docker config with the username `oidc` and the JWT as the password. The secret mounted into the pod goes away.
-2. BuildKit receives a 401 from Zot, asks the realm for the scopes it needs and presents those credentials.
-3. `zot-token` verifies the JWT against Forgejo's JWKS: issuer, audience, expiry and `repository_owner == webgrip`. It then grants only the scopes the claims allow (table below) and signs a token that expires after 10 minutes.
+```yaml
+bearer:
+  realm: http://zot.zot.svc.cluster.local:5000/zot/auth/token
+  service: zot.zot.svc.cluster.local:5000
+  oidc:
+    - issuer: https://forgejo.webgrip.dev/api/actions
+      audiences: [zot]
+      claimMapping:
+        validations:
+          - expression: claims.repository_owner == 'webgrip'
+        username: "'forgejo-actions:' + claims.repository"
+        groups: "['forgejo-actions']"
+```
 
-| Caller | Pull | Push |
+| Caller | Pull | Push (policy condition on `webgrip/**`) |
 | --- | --- | --- |
-| Protected ref, push or tag event | everything | `webgrip/<repo>/release/*` create only, `webgrip/<repo>/cache/main` create and update, `webgrip/<repo>/candidate/*` create |
-| Unprotected ref or same-repository pull request | everything | `webgrip/<repo>/pr/*` create and update, with retention of 7 days |
+| Protected ref | everything | `<repo>/release/*` create only; `<repo>/cache/*` and `<repo>/candidate/*` create and update |
+| Unprotected ref or same-repository pull request | everything | `<repo>/pr/*` create and update, with retention of 7 days |
 | Fork pull request (no OIDC token) | anonymous read | nothing |
 
-`create` without `update` makes a release tag immutable: once a tag is pushed, nobody overwrites it. Zot's `accessControl` stays as a second gate, but with no named users: bearer scopes decide who may push.
+`<repo>` is `req.claims.repository`, so one set of policies covers every repository. `create` without `update` makes a release tag immutable.
 
-The signing key for the tokens lives in OpenBao and reaches `zot-token` through External Secrets, under its own policy. Zot reads only the public certificate.
+Zot fetches the discovery document and keys from `forgejo.webgrip.dev:443`, which its network policy has to allow.
 
-**Spike first.** OpenBao's identity tokens (`identity/oidc/token/<role>`) sign templated JWTs with a key OpenBao rotates. If Zot accepts such a token as a bearer token, OpenBao could be the realm and `zot-token` would not be needed. Two unknowns decide it: whether Zot accepts the `access` claim in the shape an OpenBao template can produce, and whether CI pods can reach OpenBao in the homelab. Today their network policy allows only Forgejo and Zot. If either answer is no, `zot-token` is built: about 200 lines, one Deployment, its own network policy.
+**Spike, 2026-10-27.** Zot v2.1.22 (the pinned digest), a mock issuer that signs tokens in Forgejo's claim shape, crane and BuildKit v0.34.0. Every row of the table held: a protected ref creates a release and cannot overwrite it, writes the cache and candidates; an unprotected ref writes only `pr/`; neither reaches another repository or a name that merely starts with its own (`webgrip/unfold-cluster-evil`). Zot refused a forged signature, a wrong audience, a wrong issuer, an expired token and another organisation. BuildKit pushed through the token exchange, and BuildKit and containerd still pulled anonymously.
+
+**What blocks it.** With a token realm advertised and policies that are partly anonymous, Zot answers an anonymous `GET /v2/` with a Bearer challenge and then refuses to mint an anonymous token ([zot#4373](https://github.com/project-zot/zot/issues/4373), open). containerd never asks `/v2/`, but go-containerregistry does, so in the spike crane's anonymous pull failed. Trivy (its database through Zot) and Kyverno (signature checks on Zot images) are such clients. Without the realm, `/v2/` stays open, but BuildKit then gets a Basic challenge and never presents the token. The htpasswd user `ci` stops working once the realm is on, because the token exchange accepts only OIDC tokens and API keys, so the switch is one cutover.
+
+The ways through, smallest first:
+
+1. Zot mints a token for an anonymous request that carries only the anonymous policy, the case #4373 asks for. That is an upstream change; the switch waits for it.
+2. Trivy and Kyverno authenticate as well, with their Kubernetes ServiceAccount tokens as a second `bearer.oidc` issuer.
+3. Jobs push with crane from an OCI layout BuildKit exports, sending the token directly (`registrytoken`). This needs no realm, but BuildKit can no longer export its cache to Zot.
 
 ### 2. The cache is written by protected refs only
 
@@ -102,10 +120,10 @@ Once every webgrip image in Zot is signed this way, the Kyverno policy `webgrip-
 
 Each step is one pull request. An admission policy change lands before the workload that needs it.
 
-1. mTLS on `buildkitd` (part 4). It needs nothing else.
-2. The spike: OpenBao identity tokens as Zot bearer tokens, yes or no.
+1. mTLS on `buildkitd` (part 4). Done: #137, #138 (process sandbox), proven by ci-smoke run 640.
+2. The spike. Done: Zot validates Forgejo tokens itself; anonymous `/v2/` under a token realm blocks the switch (part 1).
 3. Zot repository layout and retention for `release/`, `candidate/`, `cache/` and `pr/`. Existing tags stay readable.
-4. `zot-token`, or the OpenBao realm, and Zot on bearer authentication with ci-smoke switched over. The `zot-push-credentials` secret, job and mount are removed in the same step.
+4. Zot on `bearer.oidc` with ci-smoke switched over, once one of the ways through in part 1 is in place. The `zot-push-credentials` secret, job and mount are removed in the same step.
 5. The build workflow in `webgrip/workflows` with the scope rules, then each repository moved onto it.
 6. Reproducible builds and the release workflow (part 3), ci-smoke first.
 7. Kyverno `webgrip-image-signatures-zot` to Deny.
@@ -124,10 +142,10 @@ Each step ships with tests that are seen to fail before they pass:
 
 ## Costs
 
-- **Moving parts:** one service (`zot-token`, unless the spike removes it), one init container, one release workflow, and the reproducibility work per repository.
+- **Moving parts:** Zot configuration only, one init container, one release workflow, and the reproducibility work per repository.
 - **Time:** a release build takes about twice as long, because the witness starts from nothing. It runs in parallel, so wall-clock time is the slower of the two builds.
-- **Availability:** if `zot-token` is down, nothing can push. It runs two replicas on the system pool, and pulls are unaffected.
+- **Availability:** Zot fetches Forgejo's signing keys; while Forgejo is unreachable, no new token can be checked, so nothing can push. Pulls are unaffected.
 
 ## Open questions
 
-None for the owner. The spike in step 2 decides between OpenBao and `zot-token`.
+Which way through the anonymous `/v2/` challenge (part 1): wait for or contribute the anonymous token in Zot, give Trivy and Kyverno ServiceAccount identities, or push with crane.

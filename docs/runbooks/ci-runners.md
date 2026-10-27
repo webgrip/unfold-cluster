@@ -185,6 +185,24 @@ under `/api/actions/.well-known/`, and the artifact API under
 `/api/actions_pipeline/_apis/pipelines/workflows/<run>/artifacts` with the methods Forgejo serves
 there. Any other request under those prefixes meets Anubis.
 
+## What a job's credentials reach
+
+Checked against the Forgejo v15.0.10 source:
+
+- **The runner's own token.** It sits in `/run/forgejo-runner/state/.runner` in the `runner`
+  container, where the job's steps run, so a step can read it. The runner is ephemeral: Forgejo
+  hands an ephemeral runner no second task once it has one (`services/actions/task.go`,
+  `PickTask`) and deletes it when its task stops. The token therefore reaches only the job's own
+  task, logs and result, which the job's code decides anyway.
+- **The automatic token** (`GITHUB_TOKEN`, `FORGEJO_TOKEN`). It has write access to its own
+  repository for every event except a pull request from a fork, which gets read access
+  (`models/perm/access/repo_permission.go`, `GetActionRepoPermission`). That includes a pull
+  request from a branch of the same repository. Forgejo has no `permissions:` key to narrow it.
+  Branch protection bounds what it can do: `main` takes no pushes and merges only from the merge
+  list, tags only from `webgrip-ci`, and its review does not count as an approval, because the
+  Actions user has no write access of its own and is never an official reviewer. A branch
+  without protection, such as another open pull request's branch, it can still push to.
+
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,
