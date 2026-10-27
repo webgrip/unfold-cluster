@@ -92,6 +92,12 @@ printf 'hskey-auth-abc123\n' | "$tool" put authkey unfold/tailnet-homelab-gatewa
 expect "a pre-auth key is written and masked" bash -c 'grep -q "^::add-mask::hskey-auth-abc123$" "$1" && [ "$(jq -r .authkey "$2")" = hskey-auth-abc123 ]' _ "${work}/out" "${work}/kv/unfold_tailnet-homelab-gateway"
 expect "anything but a pre-auth key is refused" bash -c '! printf "tskey-auth-x\n" | "$1" put authkey unfold/tailnet-homelab-gateway authkey >/dev/null 2>&1' _ "$tool"
 
+tunnel_token="$(printf '{"a":"account","s":"c2VjcmV0","t":"tunnel-id"}' | base64 -w0)"
+printf '%s\n' "$tunnel_token" | "$tool" put tunnel-token unfold-main/staging/cloudflare-tunnel token >"${work}/tunnel-out" 2>&1
+expect "a tunnel token is written and masked" bash -c 'grep -qF "::add-mask::$1" "$2" && [ "$(jq -r .token "$3")" = "$1" ]' _ "$tunnel_token" "${work}/tunnel-out" "${work}/kv/unfold-main_staging_cloudflare-tunnel"
+expect "a tunnel token without a tunnel id is refused" bash -c '! printf "%s\n" "$(printf "{\"a\":\"x\",\"s\":\"y\"}" | base64 -w0)" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
+expect "a value that is not base64 JSON is refused as a tunnel token" bash -c '! printf "hskey-auth-abc\n" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
+
 bundle=$'cluster:\n  id: abc\ncerts:\n  k8sserviceaccount:\n    key: LS0t\n'
 printf '%s' "$bundle" | "$tool" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1
 expect "a secrets bundle is stored whole" test "$(stored unfold-cluster_talos-secrets bundle)" = "${bundle%$'\n'}"
