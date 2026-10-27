@@ -240,6 +240,19 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
   }
 
   assert {
+    condition = anytrue([
+      for patch in local.gvisor_runtime_patches.systrap :
+      contains([for profile in try(yamldecode(patch).machine.seccompProfiles, []) : profile.name], local.buildkit_seccomp_name)
+    ])
+    error_message = "every gVisor node installs the buildkit-rootless seccomp profile; runsc applies each pod's profile (oci-seccomp), and RuntimeDefault refuses the unshare and keyctl calls rootless BuildKit needs"
+  }
+
+  assert {
+    condition     = strcontains(file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"), "localhostProfile: profiles/${local.buildkit_seccomp_name}")
+    error_message = "buildkitd names the same Localhost seccomp profile the gVisor nodes install"
+  }
+
+  assert {
     condition     = var.worker_pools["unfold"].node_count == 1 && var.worker_pools["ci"].node_count == 0 && contains(var.autoscaled_worker_pools, "ci")
     error_message = "the baseline is the one hub worker; the CI pool has no fixed node and grows only through the autoscaler"
   }

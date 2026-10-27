@@ -145,6 +145,9 @@ spec:
               - /etc/buildkit/buildkitd.toml
             securityContext:
               allowPrivilegeEscalation: true
+              seccompProfile:
+                type: Localhost
+                localhostProfile: profiles/buildkit-rootless.json
             startupProbe:
               exec:
                 command:

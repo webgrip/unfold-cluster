@@ -81,9 +81,15 @@ What that costs, and what to check:
   RuntimeClass `gvisor` before that policy moves to Deny.
 - `--oci-worker-no-process-sandbox` lets build steps see `buildkitd`'s processes. The pod holds one
   job, so there is nobody else to see.
-- runsc ignores the pod's seccomp profile unless the node runs it with `--oci-seccomp`. If the CI
-  node ever enables that flag, rootless BuildKit's `unshare` calls are refused and the startup probe
-  fails; the fix is a Localhost seccomp profile for `buildkitd`, not Unconfined.
+- Every gVisor node runs runsc with `--oci-seccomp`, so each pod's seccomp profile applies inside
+  the sandbox. Under `RuntimeDefault`, rootlesskit's `unshare` is refused (`failed to start the
+  child: fork/exec /proc/self/exe: operation not permitted`) and runc cannot make a build step's
+  session keyring. `buildkitd` therefore runs under the Localhost profile `buildkit-rootless.json`
+  (`infra/templates/seccomp/`), which Talos installs on every gVisor node: moby's default profile,
+  rendered for amd64 without `CAP_SYS_ADMIN`, plus `unshare`, `clone`, `clone3`, `setns`, the mount
+  calls, `pivot_root`, `sethostname`, `setdomainname`, `keyctl`, `add_key` and `request_key`.
+  Everything else the default refuses stays refused. Pod Security `baseline` allows Localhost;
+  Unconfined it does not, and is not needed.
 - The snapshotter is left to BuildKit's own detection. The smoke workflow prints which one it chose
   (`buildctl debug workers --verbose`); `native` works everywhere but copies every layer.
 
