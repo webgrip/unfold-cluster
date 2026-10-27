@@ -253,8 +253,8 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
   }
 
   assert {
-    condition     = length(regexall("localhostProfile: profiles/${local.buildkit_seccomp_name}", file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"))) == 2
-    error_message = "the runner container shares buildkitd's Localhost profile; runsc without gVisor's errnoRet fix (merged 2026-10-12) turns RuntimeDefault's clone3 ENOSYS into EPERM, and glibc then cannot start a thread"
+    condition     = length(regexall("localhostProfile: profiles/${local.buildkit_seccomp_name}", file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"))) == 1 && length(regexall("localhostProfile: profiles/${local.runner_seccomp_name}", file("${path.module}/../kubernetes/platform/ci-runners/app/scaledjob.yaml"))) == 1
+    error_message = "only buildkitd runs under buildkit-rootless.json; the runner container runs under ci-runner.json, RuntimeDefault with clone3 answered ENOSYS through a trace rule, because runsc without gVisor's errnoRet fix (merged 2026-10-12) turns RuntimeDefault's ENOSYS into EPERM and glibc then cannot start a thread"
   }
 
   assert {

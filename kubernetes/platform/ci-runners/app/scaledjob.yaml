@@ -271,7 +271,7 @@ spec:
                   - ALL
               seccompProfile:
                 type: Localhost
-                localhostProfile: profiles/buildkit-rootless.json
+                localhostProfile: profiles/ci-runner.json
             readinessProbe:
               exec:
                 command:
