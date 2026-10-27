@@ -2,7 +2,6 @@ locals {
   gvisor_capability_label = "runtime.webgrip.io/gvisor"
   gvisor_config_etc_file  = "unfold-sandbox/runsc.toml"
   buildkit_seccomp_name   = "buildkit-rootless.json"
-  runner_seccomp_name     = "ci-runner.json"
 
   gvisor_runtime_patches = {
     for platform in ["systrap", "kvm"] : platform => [
@@ -38,12 +37,10 @@ locals {
       }),
       yamlencode({
         machine = {
-          seccompProfiles = [
-            for name in [local.buildkit_seccomp_name, local.runner_seccomp_name] : {
-              name  = name
-              value = jsondecode(file("${path.module}/templates/seccomp/${name}"))
-            }
-          ]
+          seccompProfiles = [{
+            name  = local.buildkit_seccomp_name
+            value = jsondecode(file("${path.module}/templates/seccomp/${local.buildkit_seccomp_name}"))
+          }]
         }
       }),
     ]

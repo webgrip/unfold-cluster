@@ -96,12 +96,13 @@ What that costs, and what to check:
   answers `EPERM` ([gVisor issue 14688](https://github.com/google/gvisor/issues/14688)). glibc 2.34
   and later on amd64 treat that as fatal, so no thread starts: `git clone` fails with
   `getaddrinfo() thread failed to start`, and so does anything else that starts a thread. The
-  container therefore runs under the Localhost profile `ci-runner.json`, which is
-  `buildkit-rootless.json` without its namespace, mount and keyring additions, plus moby's
-  flag-filtered `clone` rule and `clone3` allowed. The cost is that `clone3` can request a new namespace that `clone` and `unshare` cannot;
-  without capabilities that reaches only an unprivileged user namespace inside gVisor's kernel.
-  Once Talos ships a gVisor release with the fix (merged 2026-10-12), the container goes back to
-  `RuntimeDefault` and the profile is removed.
+  container therefore shares `buildkitd`'s profile `buildkit-rootless.json`, which allows `clone3`.
+  A separate, narrower profile does not fit: each profile adds about 15 KiB to the machine config,
+  and an autoscaled CI node receives that config as Hetzner user data, limited to 32 KiB. Sharing
+  grants the job's steps the namespace, mount and keyring calls `buildkitd` has, which a job could
+  already use through a `RUN` step of its own build; the container keeps no capabilities and cannot
+  escalate, and all of it stays inside gVisor's kernel. Once Talos ships a gVisor release with the
+  fix (merged 2026-10-12), the container goes back to `RuntimeDefault`.
 - The snapshotter is left to BuildKit's own detection. The smoke workflow prints which one it chose
   (`buildctl debug workers --verbose`); `native` works everywhere but copies every layer.
 
