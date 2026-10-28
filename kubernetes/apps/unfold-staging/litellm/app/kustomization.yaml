@@ -1,0 +1,15 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: litellm-staging
+resources:
+  - ocirepository.yaml
+  - secrets.yaml
+  - helmrelease.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: litellm-config
+    files:
+      - config.yaml=litellm-config.yaml
+generatorOptions:
+  disableNameSuffixHash: true

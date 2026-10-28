@@ -1,0 +1,325 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unfold
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: unfold
+  interval: 10m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: ploeg
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: ploeg
+              spec:
+                template:
+                  metadata:
+                    labels:
+                      cnpg.webgrip.io/client: ploeg-db
+                  spec:
+                    priorityClassName: hub-critical
+                    enableServiceLinks: false
+                    tolerations:
+                      - key: node.webgrip.io/pool
+                        operator: Equal
+                        value: unfold
+                        effect: NoSchedule
+  values:
+    mode: live
+    baseUrl: https://${UNFOLD_STAGING_HOSTNAME}
+    credentialsSecret: unfold-credentials
+    auth:
+      localLogin: true
+    priorityClassName: hub-critical
+    nodeSelector:
+      node.webgrip.io/pool: unfold
+    tolerations:
+      - key: node.webgrip.io/pool
+        operator: Equal
+        value: unfold
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+        ephemeral-storage: 512Mi
+    storage:
+      className: hcloud-luks
+      size: 10Gi
+    errorReports:
+      environment: staging
+    extraEnv:
+      - name: UNFOLD_TASK_VIKUNJA_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: ploeg-vikunja-bot
+            key: VIKUNJA_API_TOKEN
+      - name: NODE_USE_ENV_PROXY
+        value: "1"
+      - name: HTTPS_PROXY
+        value: http://vikunja-relay.unfold-staging.svc.cluster.local:3128
+      - name: NO_PROXY
+        value: localhost,127.0.0.1,.svc,.cluster.local,forgejo.webgrip.dev,10.66.0.0/16,10.65.0.0/16
+    workspaceNamespace: unfold-staging-workspaces
+    createWorkspaceNamespace: false
+    workspaceProvisioner: pod
+    workspacePodRuntimeClassName: gvisor
+    workspaceTransport: pull
+    workspaceStorageClass: hcloud-luks
+    workspaceStorageSize: 10Gi
+    workspaceCpu: "1"
+    workspaceMemory: 2Gi
+    workspaceCpuRequest: 250m
+    workspaceMemoryRequest: 1Gi
+    workspaceRetentionDays: 3
+    workspaceEgress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: unfold-staging
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: unfold
+        ports:
+          - protocol: TCP
+            port: 4080
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: litellm-staging
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: litellm
+        ports:
+          - protocol: TCP
+            port: 4000
+    delivery:
+      enabled: false
+    decider:
+      enabled: false
+    config:
+      maxConcurrentSessions: 1
+      maxBudgetUsd: 0.50
+      ploeg:
+        url: http://ploeg.unfold-staging.svc.cluster.local:8080
+        tokenEnv: PLOEG_OPERATOR_UNFOLD_TOKEN
+        teams:
+          - staging
+      execution:
+        team: staging
+      litellm:
+        baseUrl: http://litellm.litellm-staging.svc.cluster.local:4000/v1
+        ttl: 10m
+        settlementDelayMs: 60000
+      models:
+        - id: fireworks-deepseek-v4p1-flash
+          name: DeepSeek V4.1 Flash (Fireworks)
+          providerId: litellm
+          modelId: fireworks-deepseek-v4p1-flash
+      repositories:
+        - id: ploeg-bench-world
+          name: Ploeg Bench World
+          description: Staging fixture repository
+          url: https://forgejo.webgrip.dev/webgrip/ploeg-bench-world.git
+          baseBranch: main
+          executionOwner: ploeg
+          verify:
+            - git
+            - diff
+            - --check
+      taskSources:
+        - id: ploeg-staging
+          name: Ploeg Staging
+          provider: vikunja
+          baseUrl: https://vikunja.webgrip.dev/api/v1
+          project: ${UNFOLD_STAGING_VIKUNJA_PROJECT_ID}
+          repositoryId: ploeg-bench-world
+          tokenEnv: UNFOLD_TASK_VIKUNJA_TOKEN
+          executionOwner: ploeg
+          ploeg:
+            target:
+              forge: forgejo
+              owner: webgrip
+              repo: ploeg-bench-world
+              baseBranch: main
+    ploeg:
+      enabled: true
+      supportProfile: P1
+      fullnameOverride: ploeg
+      instanceOverride: ploeg
+      security:
+        workerAdmission:
+          enabled: true
+          runtimeClassNames:
+            - gvisor
+      nodeSelector:
+        node.webgrip.io/pool: unfold
+      networkPolicy:
+        enabled: true
+        database:
+          peers:
+            - podSelector:
+                matchLabels:
+                  cnpg.io/cluster: ploeg-db
+        forge:
+          peers:
+            - podSelector:
+                matchLabels:
+                  ploeg.webgrip.dev/egress: cilium-fqdn
+        tracker:
+          peers:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vikunja-relay
+          port: "3128"
+        ploegd:
+          ingressFrom:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: unfold
+                  app.kubernetes.io/instance: unfold
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 100m
+          memory: 256Mi
+          ephemeral-storage: 256Mi
+      database:
+        existingSecret:
+          name: ploeg-db-app
+          key: uri
+      webhook:
+        existingSecret:
+          name: ploeg-webhook-secret
+          key: PLOEG_VIKUNJA_SECRET
+      tracker:
+        url: https://vikunja.webgrip.dev/api/v1
+        tokenSecret:
+          name: ploeg-vikunja-bot
+          key: VIKUNJA_API_TOKEN
+      env:
+        PLOEG_DEFAULT_TEAM: staging
+        PLOEG_LEASE_TTL: 15m
+        HTTPS_PROXY: http://vikunja-relay.unfold-staging.svc.cluster.local:3128
+        NO_PROXY: localhost,127.0.0.1,.svc,.cluster.local,forgejo.webgrip.dev,10.66.0.0/16,10.65.0.0/16
+      operator:
+        consumers:
+          - name: unfold
+            teams:
+              - staging
+            execute: true
+            maxBudgetUsd: 0.50
+            tokenSecret:
+              name: unfold-credentials
+              key: PLOEG_OPERATOR_UNFOLD_TOKEN
+      config:
+        targets:
+          ploeg-bench-world:
+            repo: webgrip/ploeg-bench-world
+            branch: main
+            forge: forgejo
+        trackers:
+          vikunja:
+            projects:
+              - name: Ploeg Staging
+                team: staging
+                repo: webgrip/ploeg-bench-world
+                branch: main
+                forge: forgejo
+        teams:
+          staging:
+            assignees: []
+      executor:
+        enabled: false
+        type: keda
+        forge: forgejo
+        runtimeClassName: gvisor
+        nodeSelector:
+          node.webgrip.io/pool: unfold
+        forgeTokenIsolation: proxy
+        harnessOutputInLog: false
+        runnerImage: ghcr.io/webgrip/agent-runner:1.4.1@sha256:3649001200acbc7708f628403183ce1af93f90a2de339e55dfc70abb2f51f57b
+        litellm:
+          baseUrl: http://litellm.litellm-staging.svc.cluster.local:4000/v1
+          adminUrl: http://litellm.litellm-staging.svc.cluster.local:4000
+          keyIsolation: proxy
+          masterKeySecret:
+            name: agent-litellm-master
+            key: LITELLM_MASTER_KEY
+        forgejo:
+          url: https://forgejo.webgrip.dev
+          tokenSecret:
+            name: agent-builder-token
+            key: FORGEJO_TOKEN
+          readTokenSecret:
+            name: agent-reader-token
+            key: FORGEJO_TOKEN
+          webhookSecret:
+            name: ploeg-forge-webhook
+            key: PLOEG_FORGEJO_SECRET
+        workerAuth:
+          mode: managed
+          signingKeySecret:
+            name: ploeg-worker-signing
+            key: key
+          bootstrapSecret:
+            name: ploeg-worker-bootstrap
+            registryKey: registry.json
+        scaler:
+          host: ploeg-db-rw.unfold-staging.svc.cluster.local
+          dbName: app
+        pollingInterval: 15
+        workerResources:
+          requests: {cpu: 100m, memory: 768Mi}
+          limits: {cpu: "1", memory: 768Mi, ephemeral-storage: 10Gi}
+        workerContainerResources:
+          requests: {cpu: 250m, memory: 512Mi}
+          limits: {cpu: 250m, memory: 512Mi, ephemeral-storage: 1Gi}
+        workerBinResources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits: {cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi}
+        teams:
+          - name: staging
+            model: litellm_proxy/fireworks-deepseek-v4p1-flash
+            budget: "0.50"
+            repoOwner: webgrip
+            repoName: ploeg-bench-world
+            baseBranch: main
+            maxReplicaCount: 1
+            maxFixRounds: 1
+            harness:
+              name: acp
+              dind: false
+              acp:
+                profile: openhands
+                idleTimeout: 10m
+                promptTimeout: 60m
+            plan:
+              - roles:
+                  - {name: builder, writes: true, cap: "0.40"}
+              - roles:
+                  - name: reviewer
+                    writes: false
+                    cap: "0.10"
+                    model: litellm_proxy/fireworks-glm-5p3-flash

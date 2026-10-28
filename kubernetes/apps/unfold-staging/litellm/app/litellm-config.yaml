@@ -1,0 +1,54 @@
+model_list:
+  - model_name: fireworks-deepseek-v4p1-flash
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash
+      api_key: os.environ/FIREWORKS_AI_API_KEY
+    model_info:
+      mode: chat
+      input_cost_per_token: 0.0000003
+      output_cost_per_token: 0.0000012
+      cache_read_input_token_cost: 0.000000006
+      supports_function_calling: true
+  - model_name: fireworks-glm-5p3-flash
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/glm-5p3-flash
+      api_key: os.environ/FIREWORKS_AI_API_KEY
+    model_info:
+      mode: chat
+      input_cost_per_token: 0.00000015
+      output_cost_per_token: 0.0000005
+      cache_read_input_token_cost: 0.00000003
+      supports_function_calling: true
+  - model_name: hetzner-qwen3-8-27b
+    litellm_params:
+      model: openai/Qwen3.8-27B
+      api_base: https://inference.hetzner.com/api/v1
+      api_key: os.environ/HETZNER_INFERENCE_API_KEY
+      rpm: 10
+    model_info:
+      mode: chat
+      max_input_tokens: 262144
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      supports_function_calling: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  supported_db_objects: ["mcp"]
+  require_key_mcp_access_defined: true
+
+litellm_settings:
+  drop_params: true
+  max_internal_user_budget: 5
+  internal_user_budget_duration: "30d"
+  default_team_params:
+    max_budget: 10
+    budget_duration: "30d"
+
+router_settings:
+  num_retries: 2
+  retry_policy:
+    TimeoutErrorRetries: 2
+    RateLimitErrorRetries: 3
+  timeout: 120

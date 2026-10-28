@@ -1,0 +1,130 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: litellm
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: app-template
+  interval: 30m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    controllers:
+      litellm:
+        strategy: RollingUpdate
+        rollingUpdate:
+          unavailable: 0
+          surge: 1
+        pod:
+          labels:
+            cnpg.webgrip.io/client: litellm-db
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          priorityClassName: hub-critical
+          nodeSelector:
+            node.webgrip.io/pool: unfold
+          tolerations:
+            - key: node.webgrip.io/pool
+              operator: Equal
+              value: unfold
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+        containers:
+          app:
+            image:
+              repository: ghcr.io/berriai/litellm-non_root
+              tag: v1.105.3@sha256:947fc7fe046a194d2a1f687089bf14cdc8b44a0f33c2cae6ec2eabeb2363493f
+            args:
+              - --config
+              - /etc/litellm/config.yaml
+              - --port
+              - "4000"
+            env:
+              STORE_MODEL_IN_DB: "False"
+              LITELLM_LOG: INFO
+              LITELLM_LOCAL_MODEL_COST_MAP: "True"
+              DISABLE_SCHEMA_UPDATE: "False"
+              DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: litellm-db-app
+                    key: uri
+            envFrom:
+              - secretRef:
+                  name: litellm-secret
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+            resources:
+              requests:
+                cpu: 50m
+                memory: 640Mi
+              limits:
+                memory: 2Gi
+                ephemeral-storage: 1Gi
+            probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/liveliness
+                    port: 4000
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 30
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/liveliness
+                    port: 4000
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/readiness
+                    port: 4000
+                  periodSeconds: 15
+                  timeoutSeconds: 10
+                  failureThreshold: 3
+    service:
+      app:
+        controller: litellm
+        ports:
+          http:
+            port: 4000
+    persistence:
+      config:
+        type: configMap
+        name: litellm-config
+        globalMounts:
+          - path: /etc/litellm
+            readOnly: true
+      tmp:
+        type: emptyDir
+        sizeLimit: 512Mi
+        globalMounts:
+          - path: /tmp

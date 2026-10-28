@@ -10,7 +10,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 
 | Namespace | Default deny | Egress policy |
 | --- | --- | --- |
-| every namespace except `kube-system` and `flux-system` | enforced by the `default-deny` CiliumClusterwideNetworkPolicy; `default-dns` allows DNS to kube-dns everywhere except `ci`, whose runner policy allows only the names it filters | its own CiliumNetworkPolicy (`etcd-backup`, and `zot` once it lands; `ops-auth`, `headlamp` and `policy-reporter` in [ops-consoles](ops-consoles.md#egress)) |
+| every namespace except `kube-system` and `flux-system` | enforced by the `default-deny` CiliumClusterwideNetworkPolicy; `default-dns` allows DNS to kube-dns everywhere except `ci` and `unfold-staging-workspaces`, whose own policies allow only the names they filter | its own CiliumNetworkPolicy (`etcd-backup`, and `zot` once it lands; `ops-auth`, `headlamp` and `policy-reporter` in [ops-consoles](ops-consoles.md#egress); the four staging namespaces in [unfold-staging](unfold-staging.md#network)) |
 | `flux-system` | not yet | [flux-system-egress.yaml](../../kubernetes/platform/network-policy/flux-system-egress.yaml), staged |
 | `kube-system` | not yet | [kube-system-egress.yaml](../../kubernetes/platform/network-policy/kube-system-egress.yaml), staged |
 

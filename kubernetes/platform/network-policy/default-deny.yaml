@@ -25,7 +25,7 @@ kind: CiliumClusterwideNetworkPolicy
 metadata:
   name: default-dns
 spec:
-  description: Every pod outside kube-system, flux-system and ci reaches kube-dns. The ci namespace is left out because an unfiltered DNS rule here would widen the runner's own DNS rule to every name, and a job could carry data out in its lookups.
+  description: Every pod outside kube-system, flux-system, ci and unfold-staging-workspaces reaches kube-dns. The ci and agent workspace namespaces are left out because an unfiltered DNS rule here would widen their own DNS rule to every name, and a job or an agent could carry data out in its lookups.
   endpointSelector:
     matchExpressions:
       - key: k8s:io.kubernetes.pod.namespace
@@ -34,6 +34,7 @@ spec:
           - kube-system
           - flux-system
           - ci
+          - unfold-staging-workspaces
   enableDefaultDeny:
     ingress: false
     egress: false

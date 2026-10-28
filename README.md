@@ -12,6 +12,7 @@ This repository is public. Nothing secret is committed here, encrypted or not.
 | `talos/` | Version pins, the Image Factory schematics for the cloud and metal nodes, and the pinned Kata 4.3.1 installer and disk image of the metal node (`metal-image.yaml`) | OpenTofu, the snapshot build and Renovate |
 | `kubernetes/clusters/main/` | Flux's entry for this cluster, and in `flux-system/` its own GitRepository, Kustomization and trusted signers | Flux in the cluster |
 | `kubernetes/platform/` | Platform components Flux owns: the Flux operator and instance, Cilium, Hetzner's cloud controller and CSI driver, network and admission policy, the etcd backup, the removal of the kube-proxy Talos installed first, the roles people sign in to, the `gvisor` and `kata` RuntimeClasses and their probes | Flux in the cluster |
+| `kubernetes/apps/unfold-staging/` | Unfold staging: Unfold and ploegd, their LiteLLM and databases, the agent workspaces under gVisor and the tunnel connector ([runbook](docs/runbooks/unfold-staging.md), ADR 0017) | Flux in the cluster |
 | `access/` | The OIDC kubeconfig people use daily; no secret in it | people, with `mise.toml`'s kubectl, kubelogin and k9s |
 
 ## From nothing to GitOps
