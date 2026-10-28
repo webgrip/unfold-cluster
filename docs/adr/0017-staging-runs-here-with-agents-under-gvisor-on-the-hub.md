@@ -60,3 +60,10 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
 * A workspace pod reports gVisor's kernel (`dmesg` starts with "Starting gVisor").
 * From outside: `https://staging.app.unfoldhq.dev/` asks for Access; an unsigned `POST /webhooks/vikunja` gets 401; a port scan of every node's public address finds nothing open.
 * ploegd migrates its empty database, Unfold answers `/healthz`, and a LiteLLM call is metered against a staging key's budget.
+
+## History
+
+* 2026-10-28: The owner renamed the host to `staging-app.unfoldhq.dev`, one level below the zone,
+  so Cloudflare's free Universal SSL covers it and Advanced Certificate Manager is not needed.
+  Wherever this record says `staging.app.unfoldhq.dev`, read `staging-app.unfoldhq.dev`; production
+  stays `app.unfoldhq.dev`. The `unfold_staging_hostname` variable refuses a deeper name.

@@ -1,7 +1,7 @@
 # Unfold staging's public edge
 
 [ADR 0017](../adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md) puts Unfold staging at
-`staging.app.unfoldhq.dev`, public through a Cloudflare Tunnel. This page covers the part OpenTofu
+`staging-app.unfoldhq.dev`, public through a Cloudflare Tunnel. This page covers the part OpenTofu
 owns in [infra/unfold-staging-edge.tf](../../infra/unfold-staging-edge.tf): the tunnel, its routes,
 the DNS record and Cloudflare Access. The `cloudflared` connector that runs in the cluster is part of
 the staging manifests under `kubernetes/apps/unfold-staging/`.
@@ -10,7 +10,7 @@ the staging manifests under `kubernetes/apps/unfold-staging/`.
 
 ```text
 browser, forge or tracker
-  │  DNS: staging.app.unfoldhq.dev, a proxied CNAME to <tunnel id>.cfargotunnel.com
+  │  DNS: staging-app.unfoldhq.dev, a proxied CNAME to <tunnel id>.cfargotunnel.com
   ▼
 Cloudflare edge: TLS, then Access
   │  /webhooks/*  → Access application "Unfold staging webhooks", bypass for everyone
@@ -34,17 +34,10 @@ is enabled.
 
 ## The certificate at the edge
 
-Cloudflare's free Universal SSL covers `unfoldhq.dev` and `*.unfoldhq.dev`, one level only.
-`staging.app.unfoldhq.dev` is two levels down, so the edge has no certificate for it until one of these
-is done:
-
-* **Advanced Certificate Manager** on the zone (about €9.50 a month), with a certificate for
-  `staging.app.unfoldhq.dev` (or `*.app.unfoldhq.dev`, which also covers `app.unfoldhq.dev`'s later
-  siblings). This is a dashboard or API order, not declared here.
-* **A first-level name**, such as `staging-app.unfoldhq.dev`: set `unfold_staging_hostname` (and the
-  staging manifests' hostname substitution) to it. Universal SSL then covers it at no cost.
-
-Until then the tunnel and Access exist, but a browser gets a TLS error.
+Cloudflare's free Universal SSL covers `unfoldhq.dev` and `*.unfoldhq.dev`, one level only, so the
+hostname stays a first-level name: `staging-app.unfoldhq.dev`, not `staging.app.unfoldhq.dev`. The
+variable's validation refuses a deeper name, which would need Advanced Certificate Manager (about
+€9.50 a month) before a browser could reach it.
 
 ## Turning it on
 
@@ -56,18 +49,21 @@ rebuild drill never sets it, so a throwaway cluster never takes the staging host
    **Zone · DNS · Edit** on `unfoldhq.dev` only. Store it from the homelab:
 
    ```sh
-   bao kv put secret/cloudflare/unfold-tunnel api-token=<token>
+   just secret-set cloudflare/unfold-tunnel api-token
    ```
 
 2. Add the plain variables (the homelab's `forgejo-actions-secrets` bridge copies them at minute 23):
 
    ```sh
-   bao kv patch secret/unfold-cluster/vars \
-     CLOUDFLARE_ACCOUNT_ID=<account id> \
-     CLOUDFLARE_ZONE_ID_UNFOLDHQ=<zone id of unfoldhq.dev> \
-     UNFOLD_STAGING_ACCESS_EMAILS='["<owner address>"]' \
-     UNFOLD_STAGING_EDGE=enabled
+   just secret-set unfold-cluster/vars CLOUDFLARE_ACCOUNT_ID
+   just secret-set unfold-cluster/vars CLOUDFLARE_ZONE_ID_UNFOLDHQ
+   just secret-set unfold-cluster/vars UNFOLD_STAGING_ACCESS_EMAILS
+   just secret-set unfold-cluster/vars UNFOLD_STAGING_EDGE
    ```
+
+   `just secret-set` asks for the value without echoing it, keeps the other keys at the path, and
+   leaves nothing in shell history. The access list is a JSON list, such as `["owner@example.com"]`;
+   the edge switch is `enabled`.
 
 3. OpenBao's role `ci-unfold-cluster` (homelab-cluster,
    `kubernetes/apps/security/openbao/bootstrap/ci-unfold-cluster.hcl`) must read
@@ -85,8 +81,8 @@ to the configuration in a pull request, apply, then remove the block.
 
 ## Checks after an apply
 
-* `https://staging.app.unfoldhq.dev/` asks for an Access one-time PIN, and only a listed address gets one.
-* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging.app.unfoldhq.dev/webhooks/vikunja`
+* `https://staging-app.unfoldhq.dev/` asks for an Access one-time PIN, and only a listed address gets one.
+* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/vikunja`
   answers 401 from ploegd, not an Access redirect.
 * `curl -sS -o /dev/null -w '%{http_code}' -H 'Host: other.unfoldhq.dev' …` through the tunnel answers 404.
 * The tunnel shows two healthy connectors in Zero Trust → Networks → Tunnels.
