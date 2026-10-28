@@ -1,5 +1,5 @@
 variable "unfold_staging_edge_enabled" {
-  description = "Declare Unfold staging's public edge: the Cloudflare Tunnel, its DNS record and the Access applications (docs/adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md). The infra workflow sets it true only while the repository variable UNFOLD_STAGING_EDGE is enabled, and the rebuild drill never does, so a throwaway cluster never takes the staging hostname."
+  description = "Declare Unfold staging's public edge: the Cloudflare Tunnel, its DNS record and the Access applications (docs/adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md). The infra workflow sets it true only when it can read the minted credentials at OpenBao secret/cloudflare/unfold-tunnel, and the rebuild drill never does, so a throwaway cluster never takes the staging hostname."
   type        = bool
   default     = false
 }
@@ -34,8 +34,19 @@ variable "unfold_staging_hostname" {
   }
 }
 
+variable "unfold_staging_access_email_domains" {
+  description = "The email domains Cloudflare Access lets into Unfold staging with a one-time PIN: the owners' Google Workspace domain, as ADR 0014 uses for the operators."
+  type        = list(string)
+  default     = ["webgrip.nl"]
+
+  validation {
+    condition     = alltrue([for domain in var.unfold_staging_access_email_domains : can(regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$", domain))])
+    error_message = "Every entry must be one domain name, without @."
+  }
+}
+
 variable "unfold_staging_access_emails" {
-  description = "The email addresses Cloudflare Access lets into Unfold staging with a one-time PIN, as a JSON list."
+  description = "Single email addresses Cloudflare Access also lets into Unfold staging with a one-time PIN, as a JSON list."
   type        = list(string)
   default     = []
 
@@ -102,12 +113,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "unfold_staging" {
   lifecycle {
     precondition {
       condition     = var.cloudflare_api_token != "" && var.cloudflare_account_id != "" && var.cloudflare_zone_id_unfoldhq != ""
-      error_message = "The staging edge needs the Cloudflare token from OpenBao secret/cloudflare/unfold-tunnel and the variables CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ZONE_ID_UNFOLDHQ (docs/runbooks/unfold-staging-edge.md)."
+      error_message = "The staging edge needs api-token, account-id and zone-id from OpenBao secret/cloudflare/unfold-tunnel, which the homelab's cloudflare-token-minter writes (docs/runbooks/unfold-staging-edge.md)."
     }
 
     precondition {
-      condition     = length(var.unfold_staging_access_emails) > 0
-      error_message = "UNFOLD_STAGING_ACCESS_EMAILS is empty, so Access would let nobody in; set it before enabling the staging edge."
+      condition     = length(var.unfold_staging_access_emails) + length(var.unfold_staging_access_email_domains) > 0
+      error_message = "No email address or domain is allowed, so Access would let nobody in."
     }
   }
 }
@@ -151,7 +162,10 @@ resource "cloudflare_zero_trust_access_policy" "unfold_staging_people" {
   name             = "unfold-staging people"
   decision         = "allow"
   session_duration = local.unfold_staging_access_session
-  include          = [for email in var.unfold_staging_access_emails : { email = { email = email } }]
+  include = concat(
+    [for domain in var.unfold_staging_access_email_domains : { email_domain = { domain = domain } }],
+    [for email in var.unfold_staging_access_emails : { email = { email = email } }],
+  )
 }
 
 resource "cloudflare_zero_trust_access_policy" "unfold_staging_webhooks" {

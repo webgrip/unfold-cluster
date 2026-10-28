@@ -157,11 +157,12 @@ run "access_guards_the_host_and_lets_only_webhooks_past" {
     condition = alltrue([
       cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].domain == "staging-app.unfoldhq.dev",
       cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].decision == "allow",
-      [for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.email.email] == ["owner@example.org"],
+      [for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.email_domain.domain if rule.email_domain != null] == ["webgrip.nl"],
+      [for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.email.email if rule.email != null] == ["owner@example.org"],
       alltrue([for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.everyone == null]),
       cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].session_duration == "8h",
     ])
-    error_message = "the whole staging host is behind an Access allow policy for the listed people only, with an 8-hour session"
+    error_message = "the whole staging host is behind an Access allow policy for the webgrip.nl domain and the listed addresses only, with an 8-hour session"
   }
 
   assert {
@@ -182,7 +183,8 @@ run "the_edge_refuses_to_open_without_anyone_allowed_in" {
   command = plan
 
   variables {
-    unfold_staging_access_emails = []
+    unfold_staging_access_emails        = []
+    unfold_staging_access_email_domains = []
   }
 
   expect_failures = [
