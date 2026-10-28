@@ -1,6 +1,6 @@
 # Unfold staging
 
-Unfold staging runs in this cluster at `https://staging.app.unfoldhq.dev`, public through a Cloudflare Tunnel, with its agents under gVisor on the hub node. The decision and its accepted risks are [ADR 0017](../adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md). Everything is in `kubernetes/apps/unfold-staging/`.
+Unfold staging runs in this cluster at `https://staging-app.unfoldhq.dev`, public through a Cloudflare Tunnel, with its agents under gVisor on the hub node. The decision and its accepted risks are [ADR 0017](../adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md). Everything is in `kubernetes/apps/unfold-staging/`.
 
 ## What runs where
 
@@ -21,29 +21,30 @@ The `unfold-staging` Flux Kustomization sets two variables in `kubernetes/apps/u
 
 | Variable | Value | Used for |
 | --- | --- | --- |
-| `UNFOLD_STAGING_HOSTNAME` | `staging.app.unfoldhq.dev` | Unfold's `baseUrl` |
+| `UNFOLD_STAGING_HOSTNAME` | `staging-app.unfoldhq.dev` | Unfold's `baseUrl` |
 | `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` | `'"0"'` until the project exists | the Vikunja project id of Unfold's task source |
 
 The project id keeps its double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold as a number. ploegd finds the same project by its name, *Ploeg Staging*.
 
 ## Secrets the owner seeds
 
-Every value lives in the homelab OpenBao; External Secrets reads it through `openbao-homelab`. Run these from homelab-cluster with your own values. The commands generate what can be random; the rest comes from the provider or the service.
+Every value lives in the homelab OpenBao; External Secrets reads it through `openbao-homelab`. Seed them from a homelab-cluster checkout with `just secret-set <path> <key>`: it logs in to OpenBao if needed, asks for the value without echoing it, keeps the other keys at the path and leaves nothing in shell history.
 
 ```sh
-bao kv put secret/unfold-main/staging/litellm \
-  master-key="sk-$(openssl rand -hex 32)" \
-  salt-key="$(openssl rand -hex 32)" \
-  fireworks-api-key='<a Fireworks key for staging, with a monthly cap>' \
-  hetzner-inference-api-key='<a Hetzner inference key for staging>'
-
-bao kv put secret/unfold-main/staging/vikunja \
-  api-token='<an API token of the Vikunja bot user bot-ploeg, scoped to the Ploeg Staging project>' \
-  webhook-secret="$(openssl rand -hex 32)"
-
-bao kv put secret/unfold-main/staging/cloudflare-tunnel \
-  token='<written by the infra apply that creates the tunnel unfold-staging>'
+just secret-set unfold-main/staging/litellm master-key
+just secret-set unfold-main/staging/litellm salt-key
+just secret-set unfold-main/staging/litellm fireworks-api-key
+just secret-set unfold-main/staging/litellm hetzner-inference-api-key
+just secret-set unfold-main/staging/vikunja api-token
+just secret-set unfold-main/staging/vikunja webhook-secret
 ```
+
+| Key | Value |
+| --- | --- |
+| `master-key` | `sk-` followed by random hex: paste the output of `echo "sk-$(openssl rand -hex 32)"` |
+| `salt-key`, `webhook-secret` | random: paste the output of `openssl rand -hex 32` |
+| `fireworks-api-key`, `hetzner-inference-api-key` | staging keys from each provider, with a monthly cap |
+| `api-token` | an API token of the Vikunja bot user `bot-ploeg`, scoped to the Ploeg Staging project |
 
 The tunnel token is written by the `infra` apply that declares the tunnel, not by hand; until it exists `cloudflared` does not start. OpenBao's role `unfold-main-external-secrets` must allow `secret/unfold-main/staging/*`; it already allows `secret/unfold-main/*`.
 
@@ -54,7 +55,7 @@ Generated in the cluster, never in OpenBao (External Secrets `Password` generato
 1. Create the project *Ploeg Staging* in Vikunja. Never point staging at a board the homelab's ploegd watches: both would dispatch the same ticket ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
 2. Give `bot-ploeg` access to it and put a token in `secret/unfold-main/staging/vikunja` (above).
 3. Put the project id in `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` in `ks.yaml`, as `'"<id>"'`.
-4. Add a project webhook to `https://staging.app.unfoldhq.dev/webhooks/vikunja` with the secret `webhook-secret` and the task events.
+4. Add a project webhook to `https://staging-app.unfoldhq.dev/webhooks/vikunja` with the secret `webhook-secret` and the task events.
 
 ploegd and the workbench reach Vikunja's API through `vikunja-relay`, an Envoy CONNECT proxy that forwards `vikunja.webgrip.dev:443` and nothing else to the homelab gateway's 443, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) use for Authentik. Both pods send `HTTPS_PROXY` to it and keep Forgejo and the cluster's own names in `NO_PROXY`. Before relying on it, check from the relay's side that the homelab gateway routes `vikunja.webgrip.dev` like it routes Authentik: `kubectl -n unfold-staging logs deploy/vikunja-relay` shows nothing on success, and ploegd's log names the tracker error otherwise.
 
@@ -86,13 +87,14 @@ The executor is configured for gVisor in the HelmRelease (`ploeg.executor`: team
 3. **The executor's secrets.** Add `executor` to `kubernetes/apps/unfold-staging/unfold/kustomization.yaml`'s resources (it holds `agent-litellm-master`, `agent-builder-token`, `agent-reader-token`, `ploeg-forge-webhook`, `ploeg-scaler` and the generated `ploeg-worker-signing` and `ploeg-worker-bootstrap`), and seed:
 
    ```sh
-   bao kv put secret/unfold-main/staging/forgejo \
-     builder-token='<a new token of agent-builder, write on webgrip/ploeg-bench-world only>' \
-     reader-token='<a new token of agent-reviewer, read on webgrip/ploeg-bench-world only>' \
-     webhook-secret="$(openssl rand -hex 32)"
+   just secret-set unfold-main/staging/forgejo builder-token
+   just secret-set unfold-main/staging/forgejo reader-token
+   just secret-set unfold-main/staging/forgejo webhook-secret
    ```
 
-   and add a Forgejo webhook on `webgrip/ploeg-bench-world` to `https://staging.app.unfoldhq.dev/webhooks/forge/forgejo` with that secret.
+   `builder-token` is a new token of `agent-builder` with write on `webgrip/ploeg-bench-world` only, `reader-token` a new token of `agent-reviewer` with read on it only, and `webhook-secret` the output of `openssl rand -hex 32`.
+
+   and add a Forgejo webhook on `webgrip/ploeg-bench-world` to `https://staging-app.unfoldhq.dev/webhooks/forge/forgejo` with that secret.
 4. **KEDA.** The ScaledJob's scaler connects to `ploeg-db` as `ploeg_scaler` from the `keda` namespace: add the managed role (with `SELECT` on Ploeg's counting view only, RFC 0003 gate G8) and a client label rule for KEDA on `ploeg-db`'s policy.
 5. **DNS for workers.** Workers share `unfold-staging` with ploegd, so `default-dns` answers them any name. Move them to their own namespace or accept it for staging.
 
@@ -107,7 +109,7 @@ From [ADR 0017's confirmation](../adr/0017-staging-runs-here-with-agents-under-g
   ```
 
 * A running workspace reports gVisor's kernel: `kubectl -n unfold-staging-workspaces exec <pod> -- dmesg | head -1` starts with "Starting gVisor".
-* From outside: `https://staging.app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging.app.unfoldhq.dev/webhooks/vikunja` answers 401; a port scan of the nodes' public addresses finds nothing open.
+* From outside: `https://staging-app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging-app.unfoldhq.dev/webhooks/vikunja` answers 401; a port scan of the nodes' public addresses finds nothing open.
 * ploegd migrated its database (`kubectl -n unfold-staging logs deploy/ploeg | grep -i migrat`), Unfold answers `/healthz`, and a LiteLLM call is metered against a staging key's budget.
 
 ## Not wired yet
