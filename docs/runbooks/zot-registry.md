@@ -61,7 +61,7 @@ CI pods also need an egress rule to Zot (`toEndpoints` with `k8s:io.kubernetes.p
 
 ### Why not workload identity
 
-Zot can verify Kubernetes service-account tokens itself (`auth.bearer.oidc`), which would remove the password entirely: a CI pod would push with a projected token for audience `zot`. It needs the API server's OIDC discovery document to be readable without credentials, and on this cluster it is not: `/.well-known/openid-configuration` answers 401 to an anonymous request. Opening it is an API-server authentication change for the Talos config, so it waits for the authentication work in delivery step 5. When discovery is reachable, switch Zot to bearer OIDC and delete the Job.
+Zot can verify OIDC tokens itself (`auth.bearer.oidc`), which would remove the password entirely. The issuer to use is Forgejo's, not the API server's: a job proves its repository and ref with its Actions token, and Zot's policy conditions limit it to that repository ([RFC 0004](../rfc/0004-ci-jobs-cannot-reach-past-their-own-repository.md) part 1, spiked against this Zot version). The switch waits on one thing: with a token realm configured, Zot challenges an anonymous `GET /v2/` and mints no anonymous token ([zot#4373](https://github.com/project-zot/zot/issues/4373)), so Trivy and Kyverno, which ask `/v2/` first, could no longer read anonymously.
 
 ## Retention and disk
 
@@ -102,7 +102,7 @@ Docker Hub limits anonymous pulls per source address. Zot pulls each digest once
 
 The NodePort 30500 listens on every node address. From outside, the Hetzner Cloud Firewall admits only ICMP and the admin ports, and the policy above refuses any source that is not a node or a `ci` pod, so the port answers only the nodes themselves.
 
-The traffic is plain HTTP inside the cluster. Pod-to-pod traffic across nodes is WireGuard-encrypted by Cilium; the push password travels that way. TLS on Zot itself comes with cert-manager in step 10. Image content needs no secrecy and is checked by digest.
+The traffic is plain HTTP inside the cluster. Pod-to-pod traffic across nodes is WireGuard-encrypted by Cilium (strict mode); the push password and every CI pull travel that way. The nodes' own pulls through the NodePort are not, because Cilium encrypts node-to-node traffic only with `nodeEncryption`, which is off. Those pulls stay safe without it: image content needs no secrecy, every pod image is pinned by digest (`pinned-approved-images`, Deny), and containerd checks every layer against its digest. TLS on Zot itself comes with cert-manager in step 10.
 
 ## Checks
 
