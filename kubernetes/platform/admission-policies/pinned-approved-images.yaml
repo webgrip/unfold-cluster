@@ -55,7 +55,16 @@ spec:
         'ghcr.io/headlamp-k8s/headlamp:',
         'ghcr.io/kyverno/policy-reporter:',
         'ghcr.io/kyverno/policy-reporter-ui:',
-        'ghcr.io/fjogeleit/trivy-operator-polr-adapter:']
+        'ghcr.io/fjogeleit/trivy-operator-polr-adapter:',
+        'ghcr.io/webgrip/unfold@',
+        'ghcr.io/webgrip/unfold:',
+        'ghcr.io/webgrip/unfold-agent@',
+        'ghcr.io/webgrip/unfold-agent:',
+        'ghcr.io/webgrip/agent-runner:',
+        'ghcr.io/ploeg-hq/ploegd:',
+        'ghcr.io/ploeg-hq/ploeg-worker:',
+        'ghcr.io/berriai/litellm-non_root:',
+        'docker.io/cloudflare/cloudflared:']
     - name: images
       expression: >-
         object.spec.containers.map(c, c.image)

@@ -1,0 +1,120 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unfold-staging
+  namespace: tenant
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: unfold
+      image: ghcr.io/webgrip/unfold@sha256:c7836272a3e2bceb7db4f2881f4e56ecc71d44c0b86a116cb84c72eb785d7a6e
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+    - name: workspace
+      image: ghcr.io/webgrip/unfold-agent:0.4.0-rc.119@sha256:e11d267c96f9120e6dad657ee1b4a4fd555fd57e0a357cff327f33254ce8f6a2
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+    - name: ploegd
+      image: ghcr.io/ploeg-hq/ploegd:0.2.0-rc.81@sha256:8c23161a24a8b1bf46c340d227112e07cc227c0d5ae4264b10fcba1f752faf4d
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+    - name: worker
+      image: ghcr.io/ploeg-hq/ploeg-worker:0.2.0-rc.81@sha256:e71d74a6908a9e20324412c680f0b3a0ad56c877fb06cbdfcae4899e7479eb39
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+    - name: litellm
+      image: ghcr.io/berriai/litellm-non_root:v1.105.3@sha256:947fc7fe046a194d2a1f687089bf14cdc8b44a0f33c2cae6ec2eabeb2363493f
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+    - name: cloudflared
+      image: docker.io/cloudflare/cloudflared:2024.1.2@sha256:116171d734c606a7d67f86f6309b56193095e19fd3af478e83fee3f24d93c692
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+          ephemeral-storage: 64Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 64Mi
