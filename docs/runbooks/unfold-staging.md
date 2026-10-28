@@ -52,7 +52,7 @@ Generated in the cluster, never in OpenBao (External Secrets `Password` generato
 1. The project is *Fixture · Ploeg Staging (unfold-cluster)*, id 154. Never point staging at a board the homelab's ploegd watches: both would dispatch the same ticket ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
 2. Give `bot-ploeg` access to it and put a token in `secret/unfold-main/staging/vikunja` (above).
 3. Its id is `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` in `ks.yaml`, written as `'"154"'`.
-4. Add a project webhook to `https://staging-app.unfoldhq.dev/webhooks/vikunja` with the secret `webhook-secret` and the task events.
+4. The homelab's `unfold-staging-board-wiring` CronJob (homelab-cluster `kubernetes/apps/vikunja/vikunja/app/`) shares the project with `bot-ploeg` and registers the webhook `https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja` with `webhook-secret`, which it generates and pushes to OpenBao itself. For now `api-token` is a copy of `bot-ploeg`'s homelab token, so it can write every board that bot is on; a separate staging bot is the follow-up.
 
 ploegd and the workbench reach Vikunja's API through `vikunja-relay`, an Envoy CONNECT proxy that forwards `vikunja.webgrip.dev:443` and nothing else to the homelab gateway's 443, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) use for Authentik. Both pods send `HTTPS_PROXY` to it and keep Forgejo and the cluster's own names in `NO_PROXY`. Before relying on it, check from the relay's side that the homelab gateway routes `vikunja.webgrip.dev` like it routes Authentik: `kubectl -n unfold-staging logs deploy/vikunja-relay` shows nothing on success, and ploegd's log names the tracker error otherwise.
 
@@ -106,7 +106,7 @@ From [ADR 0017's confirmation](../adr/0017-staging-runs-here-with-agents-under-g
   ```
 
 * A running workspace reports gVisor's kernel: `kubectl -n unfold-staging-workspaces exec <pod> -- dmesg | head -1` starts with "Starting gVisor".
-* From outside: `https://staging-app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging-app.unfoldhq.dev/webhooks/vikunja` answers 401; a port scan of the nodes' public addresses finds nothing open.
+* From outside: `https://staging-app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja` answers 401; a port scan of the nodes' public addresses finds nothing open.
 * ploegd migrated its database (`kubectl -n unfold-staging logs deploy/ploeg | grep -i migrat`), Unfold answers `/healthz`, and a LiteLLM call is metered against a staging key's budget.
 
 ## Not wired yet
