@@ -22,7 +22,7 @@ The `unfold-staging` Flux Kustomization sets two variables in `kubernetes/apps/u
 | Variable | Value | Used for |
 | --- | --- | --- |
 | `UNFOLD_STAGING_HOSTNAME` | `staging-app.unfoldhq.dev` | Unfold's `baseUrl` |
-| `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` | `'"0"'` until the project exists | the Vikunja project id of Unfold's task source |
+| `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` | `'"154"'`, *Fixture · Ploeg Staging (unfold-cluster)* | the Vikunja project id of Unfold's task source |
 
 The project id keeps its double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold as a number. ploegd finds the same project by its name, *Ploeg Staging*.
 
@@ -31,8 +31,6 @@ The project id keeps its double quotes inside the single quotes (`'"123"'`). Flu
 Every value lives in the homelab OpenBao; External Secrets reads it through `openbao-homelab`. Seed them from a homelab-cluster checkout with `just secret-set <path> <key>`: it logs in to OpenBao if needed, asks for the value without echoing it, keeps the other keys at the path and leaves nothing in shell history.
 
 ```sh
-just secret-set unfold-main/staging/litellm master-key
-just secret-set unfold-main/staging/litellm salt-key
 just secret-set unfold-main/staging/litellm fireworks-api-key
 just secret-set unfold-main/staging/litellm hetzner-inference-api-key
 just secret-set unfold-main/staging/vikunja api-token
@@ -41,20 +39,19 @@ just secret-set unfold-main/staging/vikunja webhook-secret
 
 | Key | Value |
 | --- | --- |
-| `master-key` | `sk-` followed by random hex: paste the output of `echo "sk-$(openssl rand -hex 32)"` |
-| `salt-key`, `webhook-secret` | random: paste the output of `openssl rand -hex 32` |
+| `webhook-secret` | random: paste the output of `openssl rand -hex 32` |
 | `fireworks-api-key`, `hetzner-inference-api-key` | staging keys from each provider, with a monthly cap |
 | `api-token` | an API token of the Vikunja bot user `bot-ploeg`, scoped to the Ploeg Staging project |
 
 The tunnel token is written by the `infra` apply that declares the tunnel, not by hand; until it exists `cloudflared` does not start. OpenBao's role `unfold-main-external-secrets` must allow `secret/unfold-main/staging/*`; it already allows `secret/unfold-main/*`.
 
-Generated in the cluster, never in OpenBao (External Secrets `Password` generator `token`, `refreshInterval: "0"`): `unfold-credentials` (`PLOEG_OPERATOR_UNFOLD_TOKEN`, the token Unfold presents to ploegd, and `UNFOLD_ADMIN_PASSWORD`, the first administrator's password). Read the password once with `kubectl -n unfold-staging get secret unfold-credentials -o jsonpath='{.data.UNFOLD_ADMIN_PASSWORD}' | base64 -d`. The store key that encrypts Unfold's stored links and credentials is the file the workbench writes next to its database on the encrypted `unfold-data` volume.
+Generated in the cluster, never in OpenBao (External Secrets `Password` generators, `refreshInterval: "0"`): `litellm-generated` in `litellm-staging` (`LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`; the executor reads the master key from there through the `litellm-staging` SecretStore, whose service account may get that one Secret and nothing else), and `unfold-credentials` (`PLOEG_OPERATOR_UNFOLD_TOKEN`, the token Unfold presents to ploegd, and `UNFOLD_ADMIN_PASSWORD`, the first administrator's password). Read the password once with `kubectl -n unfold-staging get secret unfold-credentials -o jsonpath='{.data.UNFOLD_ADMIN_PASSWORD}' | base64 -d`. The store key that encrypts Unfold's stored links and credentials is the file the workbench writes next to its database on the encrypted `unfold-data` volume.
 
 ## Vikunja
 
-1. Create the project *Ploeg Staging* in Vikunja. Never point staging at a board the homelab's ploegd watches: both would dispatch the same ticket ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
+1. The project is *Fixture · Ploeg Staging (unfold-cluster)*, id 154. Never point staging at a board the homelab's ploegd watches: both would dispatch the same ticket ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
 2. Give `bot-ploeg` access to it and put a token in `secret/unfold-main/staging/vikunja` (above).
-3. Put the project id in `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` in `ks.yaml`, as `'"<id>"'`.
+3. Its id is `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` in `ks.yaml`, written as `'"154"'`.
 4. Add a project webhook to `https://staging-app.unfoldhq.dev/webhooks/vikunja` with the secret `webhook-secret` and the task events.
 
 ploegd and the workbench reach Vikunja's API through `vikunja-relay`, an Envoy CONNECT proxy that forwards `vikunja.webgrip.dev:443` and nothing else to the homelab gateway's 443, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) use for Authentik. Both pods send `HTTPS_PROXY` to it and keep Forgejo and the cluster's own names in `NO_PROXY`. Before relying on it, check from the relay's side that the homelab gateway routes `vikunja.webgrip.dev` like it routes Authentik: `kubectl -n unfold-staging logs deploy/vikunja-relay` shows nothing on success, and ploegd's log names the tracker error otherwise.
@@ -83,7 +80,7 @@ Ploeg's chart renders its own default-deny NetworkPolicies, which profile P1 req
 The executor is configured for gVisor in the HelmRelease (`ploeg.executor`: team `staging`, a builder and a reviewer on `webgrip/ploeg-bench-world`, `runtimeClassName: gvisor`, both credential proxies, `security.workerAdmission` admitting only `gvisor`) and switched off. Before `executor.enabled: true`:
 
 1. **The agent image.** `agent-runner` exists only on the homelab's Harbor. Publish it to `ghcr.io/webgrip/agent-runner` (or push it into Zot's `webgrip/` namespace) and set the digest in `executor.runnerImage`; the value there now is the Harbor digest and only a guess.
-2. **The worker's unbounded `emptyDir`.** Ploeg chart 0.2.0-rc.81 renders `worker-bin` with no `sizeLimit`, and `resource-limits` refuses the Job. Fix it in Ploeg's chart; until then the ScaledJob cannot start a pod here.
+2. **The worker's unbounded `emptyDir`.** Ploeg chart 0.2.0-rc.81 renders `worker-bin` with no `sizeLimit`, which `resource-limits` refuses. A post-renderer on the HelmRelease sets it to 256Mi; its `test` step fails the release if a chart moves that volume, so drop the patch once Ploeg's chart sets a limit itself.
 3. **The executor's secrets.** Add `executor` to `kubernetes/apps/unfold-staging/unfold/kustomization.yaml`'s resources (it holds `agent-litellm-master`, `agent-builder-token`, `agent-reader-token`, `ploeg-forge-webhook`, `ploeg-scaler` and the generated `ploeg-worker-signing` and `ploeg-worker-bootstrap`), and seed:
 
    ```sh
