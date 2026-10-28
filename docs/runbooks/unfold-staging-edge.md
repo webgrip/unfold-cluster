@@ -41,36 +41,29 @@ variable's validation refuses a deeper name, which would need Advanced Certifica
 
 ## Turning it on
 
-The edge is declared only while the repository variable `UNFOLD_STAGING_EDGE` is `enabled`. The
-rebuild drill never sets it, so a throwaway cluster never takes the staging hostname or a second tunnel.
+Nobody types a Cloudflare value. The homelab's `cloudflare-token-minter` (homelab-cluster ADR-0061)
+uses the account's token manager to create the token `unfold-staging-edge`, with **Account ·
+Cloudflare Tunnel · Edit**, **Account · Access: Apps and Policies · Edit**, **Account · Access:
+Organizations, Identity Providers, and Groups · Edit** and **Zone · DNS · Edit** on `unfoldhq.dev`
+only, verifies it, and writes `api-token`, `token-id`, `account-id` and `zone-id` to OpenBao
+`secret/cloudflare/unfold-tunnel`.
 
-1. Create a Cloudflare API token with **Account · Cloudflare Tunnel · Edit**, **Account · Access: Apps
-   and Policies · Edit**, **Account · Access: Organizations, Identity Providers, and Groups · Edit** and
-   **Zone · DNS · Edit** on `unfoldhq.dev` only. Store it from the homelab:
+Every `infra` run reads that path. When all three values are there, the run declares the edge; when
+the path is missing or unreadable, the step's failure is ignored and the run leaves the edge out with
+a notice, so infrastructure runs never wait on the minter. Set the repository variable
+`UNFOLD_STAGING_EDGE` to `disabled` to skip the read altogether. The rebuild drill does not run this
+workflow, so a throwaway cluster never takes the staging hostname or a second tunnel.
 
-   ```sh
-   just secret-set cloudflare/unfold-tunnel api-token
-   ```
+Access lets in anyone with an address in `unfold_staging_access_email_domains` (default
+`webgrip.nl`) who can receive the one-time PIN, plus any address in the optional repository
+variable `UNFOLD_STAGING_ACCESS_EMAILS` (a JSON list).
 
-2. Add the plain variables (the homelab's `forgejo-actions-secrets` bridge copies them at minute 23):
-
-   ```sh
-   just secret-set unfold-cluster/vars CLOUDFLARE_ACCOUNT_ID
-   just secret-set unfold-cluster/vars CLOUDFLARE_ZONE_ID_UNFOLDHQ
-   just secret-set unfold-cluster/vars UNFOLD_STAGING_ACCESS_EMAILS
-   just secret-set unfold-cluster/vars UNFOLD_STAGING_EDGE
-   ```
-
-   `just secret-set` asks for the value without echoing it, keeps the other keys at the path, and
-   leaves nothing in shell history. The access list is a JSON list, such as `["owner@example.com"]`;
-   the edge switch is `enabled`.
-
-3. OpenBao's role `ci-unfold-cluster` (homelab-cluster,
-   `kubernetes/apps/security/openbao/bootstrap/ci-unfold-cluster.hcl`) must read
-   `secret/data/cloudflare/unfold-tunnel` and write `secret/data/unfold-main/staging/cloudflare-tunnel`.
-4. Run `infra` plan-only, read the plan (one tunnel, one config, one CNAME, one identity provider, two
+1. OpenBao's role `ci-unfold-cluster` (homelab-cluster,
+   `kubernetes/apps/security/openbao/bootstrap/`) reads `secret/data/cloudflare/unfold-tunnel` and
+   writes `secret/data/unfold-main/staging/cloudflare-tunnel`.
+2. Run `infra` plan-only, read the plan (one tunnel, one config, one CNAME, one identity provider, two
    policies, two Access applications, the token write), then apply with its digest.
-5. The apply writes the connector token to `secret/unfold-main/staging/cloudflare-tunnel` (`token`),
+3. The apply writes the connector token to `secret/unfold-main/staging/cloudflare-tunnel` (`token`),
    through `scripts/openbao-kv.sh put tunnel-token`, which masks it. External Secrets hands it to
    `cloudflared`.
 
@@ -81,7 +74,7 @@ to the configuration in a pull request, apply, then remove the block.
 
 ## Checks after an apply
 
-* `https://staging-app.unfoldhq.dev/` asks for an Access one-time PIN, and only a listed address gets one.
+* `https://staging-app.unfoldhq.dev/` asks for an Access one-time PIN, and only an allowed domain or address gets one.
 * `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/vikunja`
   answers 401 from ploegd, not an Access redirect.
 * `curl -sS -o /dev/null -w '%{http_code}' -H 'Host: other.unfoldhq.dev' …` through the tunnel answers 404.
