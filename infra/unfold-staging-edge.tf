@@ -24,12 +24,12 @@ variable "cloudflare_zone_id_unfoldhq" {
 }
 
 variable "unfold_staging_hostname" {
-  description = "The one public hostname of Unfold staging. A name two levels below unfoldhq.dev needs Cloudflare Advanced Certificate Manager at the edge; a first-level name is covered by Universal SSL (docs/runbooks/unfold-staging-edge.md)."
+  description = "The one public hostname of Unfold staging. It stays one level below unfoldhq.dev, the depth Cloudflare's free Universal SSL covers (docs/runbooks/unfold-staging-edge.md)."
   type        = string
-  default     = "staging.app.unfoldhq.dev"
+  default     = "staging-app.unfoldhq.dev"
 
   validation {
-    condition     = can(regex("^([a-z0-9-]+\\.)+unfoldhq\\.dev$", var.unfold_staging_hostname))
+    condition     = can(regex("^[a-z0-9-]+\\.unfoldhq\\.dev$", var.unfold_staging_hostname))
     error_message = "The staging hostname must be a name under unfoldhq.dev, the zone the token covers."
   }
 }

@@ -106,8 +106,8 @@ run "the_tunnel_sends_webhooks_to_ploegd_everything_else_to_unfold_and_nothing_e
 
   assert {
     condition = jsonencode([for rule in cloudflare_zero_trust_tunnel_cloudflared_config.unfold_staging["unfold-staging"].config.ingress : [rule.hostname, rule.path, rule.service]]) == jsonencode([
-      ["staging.app.unfoldhq.dev", "^/webhooks/", "http://ploeg.unfold-staging.svc.cluster.local:8080"],
-      ["staging.app.unfoldhq.dev", null, "http://unfold.unfold-staging.svc.cluster.local:4080"],
+      ["staging-app.unfoldhq.dev", "^/webhooks/", "http://ploeg.unfold-staging.svc.cluster.local:8080"],
+      ["staging-app.unfoldhq.dev", null, "http://unfold.unfold-staging.svc.cluster.local:4080"],
       [null, null, "http_status:404"],
     ])
     error_message = "the ingress is exactly: /webhooks/ on the staging host to ploegd, the rest of the staging host to Unfold, and a 404 for any other request; the order matters, because cloudflared takes the first rule that matches"
@@ -117,6 +117,16 @@ run "the_tunnel_sends_webhooks_to_ploegd_everything_else_to_unfold_and_nothing_e
     condition     = cloudflare_zero_trust_tunnel_cloudflared.unfold_staging["unfold-staging"].config_src == "cloudflare"
     error_message = "the tunnel is remotely managed, so its routes live in this state and not in the connector's arguments"
   }
+}
+
+run "a_hostname_deeper_than_universal_ssl_covers_is_refused" {
+  command = plan
+
+  variables {
+    unfold_staging_hostname = "staging.app.unfoldhq.dev"
+  }
+
+  expect_failures = [var.unfold_staging_hostname]
 }
 
 run "the_record_is_proxied_so_traffic_meets_cloudflare_before_the_tunnel" {
@@ -133,7 +143,7 @@ run "the_record_is_proxied_so_traffic_meets_cloudflare_before_the_tunnel" {
     condition = alltrue([
       cloudflare_dns_record.unfold_staging["unfold-staging"].proxied == true,
       cloudflare_dns_record.unfold_staging["unfold-staging"].type == "CNAME",
-      cloudflare_dns_record.unfold_staging["unfold-staging"].name == "staging.app.unfoldhq.dev",
+      cloudflare_dns_record.unfold_staging["unfold-staging"].name == "staging-app.unfoldhq.dev",
       cloudflare_dns_record.unfold_staging["unfold-staging"].content == "0b6a1e2c-3d4f-4a5b-8c6d-7e8f9a0b1c2d.cfargotunnel.com",
     ])
     error_message = "the staging name is a proxied CNAME to the tunnel; an unproxied record would publish the tunnel's id and skip Access"
@@ -145,7 +155,7 @@ run "access_guards_the_host_and_lets_only_webhooks_past" {
 
   assert {
     condition = alltrue([
-      cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].domain == "staging.app.unfoldhq.dev",
+      cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].domain == "staging-app.unfoldhq.dev",
       cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].decision == "allow",
       [for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.email.email] == ["owner@example.org"],
       alltrue([for rule in cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].include : rule.everyone == null]),
@@ -156,7 +166,7 @@ run "access_guards_the_host_and_lets_only_webhooks_past" {
 
   assert {
     condition = alltrue([
-      cloudflare_zero_trust_access_application.unfold_staging_webhooks["unfold-staging"].domain == "staging.app.unfoldhq.dev/webhooks/",
+      cloudflare_zero_trust_access_application.unfold_staging_webhooks["unfold-staging"].domain == "staging-app.unfoldhq.dev/webhooks/",
       cloudflare_zero_trust_access_policy.unfold_staging_webhooks["unfold-staging"].decision == "bypass",
     ])
     error_message = "the bypass covers /webhooks/ and nothing wider: forges and the tracker cannot answer Access, and ploegd checks their HMAC"
