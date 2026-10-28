@@ -16,6 +16,8 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
       otherwise:
         disk-kms-key   the disk KMS master key, base64 of 32 bytes, masked in the log
         authkey        a Headscale pre-auth key (hskey-auth-...), masked in the log
+        tunnel-token   a Cloudflare Tunnel connector token, base64 of JSON with
+                       a, t and s, masked in the log
         ipv4           a public IPv4 address, or an empty line to clear it
         talos-secrets  a talosctl secrets bundle
         known-hosts    one known_hosts line: host,address ssh-ed25519 key
@@ -69,6 +71,13 @@ checked_value() {
     authkey)
       value="$(tr -d '\r\n ')"
       [[ "$value" == hskey-auth-* ]] || fail "stdin holds no pre-auth key"
+      echo "::add-mask::${value}" >&3
+      ;;
+    tunnel-token)
+      value="$(tr -d '\r\n ')"
+      [[ "$value" =~ ^[A-Za-z0-9+/]+=*$ ]] || fail "stdin holds no tunnel token"
+      printf '%s' "$value" | base64 -d 2>/dev/null | jq -e 'type == "object" and (.a | type == "string") and (.t | type == "string") and (.s | type == "string")' >/dev/null 2>&1 \
+        || fail "stdin holds no tunnel token"
       echo "::add-mask::${value}" >&3
       ;;
     ipv4)

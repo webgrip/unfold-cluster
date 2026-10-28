@@ -22,6 +22,14 @@ terraform {
       source  = "hashicorp/external"
       version = "~> 2.4"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.28"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
   }
 
   encryption {
@@ -57,4 +65,8 @@ terraform {
 
 provider "hcloud" {
   poll_interval = "2s"
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token == "" ? null : var.cloudflare_api_token
 }

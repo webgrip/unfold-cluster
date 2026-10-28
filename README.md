@@ -180,6 +180,8 @@ The owner puts every value into the homelab's OpenBao; nobody types one into For
 | OpenBao read per run | `ETCD_BACKUP_WRITE_ACCESS_KEY`, `ETCD_BACKUP_WRITE_SECRET_KEY` | `secret/unfold-cluster/etcd-backup` | the Garage key the cluster writes etcd snapshots with: write on `unfold-cluster-etcd`, no read |
 | OpenBao read per run | `ETCD_BACKUP_READ_ACCESS_KEY`, `ETCD_BACKUP_READ_SECRET_KEY`, `ETCD_BACKUP_AGE_IDENTITY` | `secret/unfold-cluster/etcd-backup` | the restore check's read-only Garage key and the age private key |
 | variable | `ETCD_BACKUP_AGE_RECIPIENT`, `ETCD_BACKUP_CHECK` | `secret/unfold-cluster/vars` | the age public key snapshots are encrypted to; `enabled` once the first snapshot exists |
+| OpenBao read per run, only while `UNFOLD_STAGING_EDGE` is `enabled` | `CLOUDFLARE_API_TOKEN` (as `TF_VAR_cloudflare_api_token`) | `secret/cloudflare/unfold-tunnel`, key `api-token` | the Cloudflare token for Unfold staging's tunnel, DNS record and Access ([unfold-staging-edge](docs/runbooks/unfold-staging-edge.md)) |
+| variable | `UNFOLD_STAGING_EDGE`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID_UNFOLDHQ`, `UNFOLD_STAGING_ACCESS_EMAILS` | `secret/unfold-cluster/vars` | `enabled` declares the staging edge; the account and the `unfoldhq.dev` zone it lives in; a JSON list of the addresses Access lets in |
 
 A value missing from OpenBao stops the run at the read, naming the path and key; without the variables other than `ETCD_BACKUP_CHECK`, the workflow stops before `init`. The Talos snapshot and the tailnet keys are not among them: the apply run builds the first and reads the others from `unfold-headscale`. Garage ignores S3 conditional writes, so OpenTofu's lock file cannot be trusted there; the workflow's `concurrency` group is what keeps two runs from writing the state at once.
 
@@ -213,6 +215,8 @@ The workflow logs are readable without signing in, and Hetzner's API errors quot
 | `HCLOUD_TOKEN` | OpenBao `secret/hetzner/unfold-tofu` | every 6 months |
 | `HCLOUD_TOKEN_CLUSTER` | OpenBao `secret/hetzner/unfold-cluster`, encrypted state, Secret `kube-system/hcloud` | every 6 months, then apply |
 | `HCLOUD_TOKEN_VIP` | OpenBao `secret/hetzner/unfold-vip`, encrypted state, control plane configs | every 6 months, then apply |
+| Cloudflare token for the staging edge | OpenBao `secret/cloudflare/unfold-tunnel` | every 6 months |
+| Staging tunnel connector token | encrypted state; OpenBao `secret/unfold-main/staging/cloudflare-tunnel`, written by every apply that changes it | when it may have leaked: raise `unfold_staging_tunnel_generation`, then apply ([unfold-staging-edge](docs/runbooks/unfold-staging-edge.md)) |
 | tailnet pre-auth keys | made on `unfold-headscale`, encrypted state, node configs | `tag:cp`: renewed on the server before 45 days are left, nothing to do; `tag:node`: single use, one per worker server |
 | OpenTofu's SSH client key and the pinned host key of `unfold-headscale` | encrypted state; the host key also in the server's user_data, which Hetzner's metadata service serves to the server | with the server: raise `headscale_generation` |
 | `STATE_PASSPHRASE` | OpenBao `secret/unfold-cluster/tofu-state`, password manager with an offline copy | when someone with access leaves |

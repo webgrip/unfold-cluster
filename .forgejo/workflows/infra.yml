@@ -68,6 +68,10 @@ jobs:
       TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
       TF_VAR_admin_ssh_public_key: ${{ vars.ADMIN_SSH_PUBLIC_KEY }}
       TF_VAR_etcd_backup_age_recipient: ${{ vars.ETCD_BACKUP_AGE_RECIPIENT }}
+      TF_VAR_unfold_staging_edge_enabled: ${{ vars.UNFOLD_STAGING_EDGE == 'enabled' }}
+      TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_zone_id_unfoldhq: ${{ vars.CLOUDFLARE_ZONE_ID_UNFOLDHQ }}
+      TF_VAR_unfold_staging_access_emails: ${{ vars.UNFOLD_STAGING_ACCESS_EMAILS || '[]' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -90,6 +94,14 @@ jobs:
             ROBOT_PASSWORD=secret/data/hetzner/unfold-robot#ROBOT_PASSWORD
             TF_VAR_metal_image_pull_username=secret/data/unfold-cluster/metal-image-pull#username
             TF_VAR_metal_image_pull_token=secret/data/unfold-cluster/metal-image-pull#token
+
+      - name: Read the Cloudflare token for Unfold staging's edge from OpenBao, once the edge is enabled
+        if: vars.UNFOLD_STAGING_EDGE == 'enabled'
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            TF_VAR_cloudflare_api_token=secret/data/cloudflare/unfold-tunnel#api-token
 
       - name: Mask every prefix of the Hetzner tokens, which Hetzner's API errors quote
         working-directory: .
