@@ -33,15 +33,13 @@ Every value lives in the homelab OpenBao; External Secrets reads it through `ope
 ```sh
 just secret-set unfold-main/staging/litellm fireworks-api-key
 just secret-set unfold-main/staging/litellm hetzner-inference-api-key
-just secret-set unfold-main/staging/forgejo builder-token
-just secret-set unfold-main/staging/forgejo reader-token
 ```
 
 | Key | Value |
 | --- | --- |
 | `fireworks-api-key`, `hetzner-inference-api-key` | staging keys from each provider, with a monthly cap |
-| `builder-token` | a new Forgejo token of `agent-builder` with write on `webgrip/ploeg-bench-world` only; ploegd does not start without it, even with the executor off |
-| `reader-token` | a new Forgejo token of `agent-reviewer` with read on `webgrip/ploeg-bench-world` only |
+
+`unfold-main/staging/forgejo` (`builder-token`, `reader-token`) is pushed by the homelab: its provisioner Jobs mint the `agent-builder` and `agent-reviewer` tokens and the PushSecrets `unfold-staging-agent-builder-token` and `unfold-staging-agent-reviewer-token` (homelab-cluster `kubernetes/apps/forgejo/forgejo-actions-secrets/app/`) copy them there. They are the homelab's own tokens, so they can write every repository the `agents` team can; ploegd does not start without them, even with the executor off.
 
 The tunnel token is written by the `infra` apply that declares the tunnel, not by hand; until it exists `cloudflared` does not start. OpenBao's role `unfold-main-external-secrets` must allow `secret/unfold-main/staging/*`; it already allows `secret/unfold-main/*`.
 
