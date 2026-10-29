@@ -29,6 +29,7 @@ spec:
         'code.forgejo.org/forgejo/runner:',
         'docker.io/moby/buildkit:',
         'docker.io/library/node:',
+        'forgejo.webgrip.dev/webgrip/infra-runner:',
         'ghcr.io/project-zot/zot:',
         'docker.io/alpine/kubectl:',
         'docker.io/grafana/alloy:',
