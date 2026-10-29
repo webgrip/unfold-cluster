@@ -58,6 +58,20 @@ Access lets in anyone with an address in `unfold_staging_access_email_domains` (
 `webgrip.nl`) who can receive the one-time PIN, plus any address in the optional repository
 variable `UNFOLD_STAGING_ACCESS_EMAILS` (a JSON list).
 
+### The one step in Cloudflare's dashboard
+
+Cloudflare Access needs a Zero Trust organisation on the account, and the account has to take the
+Zero Trust Free plan in the dashboard: the plan is a subscription, and Cloudflare offers no API to
+take one. Without it every Access call answers `access.api.error.not_enabled: Access is not
+enabled`. It is done once per account, and it was done on 2026-10-29
+(Zero Trust Free). For a new account: Cloudflare dashboard → Zero Trust →
+choose a team name → Free plan. Everything after that is code.
+
+The token write and the DNS record wait for both Access applications, so an apply that fails on
+Access publishes neither the hostname nor the connector token, and `cloudflared` never serves the
+host without Access in front of it. On 2026-10-29 the first apply ran before that ordering existed:
+it created the tunnel, its configuration, the DNS record and the token, and failed on Access.
+
 1. OpenBao's role `ci-unfold-cluster` (homelab-cluster,
    `kubernetes/apps/security/openbao/bootstrap/`) reads `secret/data/cloudflare/unfold-tunnel` and
    writes `secret/data/unfold-main/staging/cloudflare-tunnel`.

@@ -137,6 +137,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "unfold_staging" {
 resource "cloudflare_dns_record" "unfold_staging" {
   for_each = local.unfold_staging_edge
 
+  depends_on = [
+    cloudflare_zero_trust_access_application.unfold_staging,
+    cloudflare_zero_trust_access_application.unfold_staging_webhooks,
+  ]
+
   zone_id = var.cloudflare_zone_id_unfoldhq
   name    = var.unfold_staging_hostname
   type    = "CNAME"
@@ -223,6 +228,11 @@ locals {
 
 resource "terraform_data" "unfold_staging_tunnel_token" {
   for_each = local.unfold_staging_edge
+
+  depends_on = [
+    cloudflare_zero_trust_access_application.unfold_staging,
+    cloudflare_zero_trust_access_application.unfold_staging_webhooks,
+  ]
 
   triggers_replace = [sha256(local.unfold_staging_tunnel_token[each.key])]
 
