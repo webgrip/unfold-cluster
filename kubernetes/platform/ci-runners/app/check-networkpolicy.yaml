@@ -1,0 +1,52 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-check-runner
+  namespace: ci
+spec:
+  description: A check job (runs-on unfold-check) adds to the forgejo-runner policy the hosts this repository's check scripts download their checksum-pinned tools from. GitHub release downloads (kyverno, cosign, crane, etcd, alloy, VictoriaMetrics, VictoriaLogs, yq, alertmanager, envoy, vector, headscale, gateway-api) redirect from github.com to its release CDNs; dl.k8s.io serves kube-apiserver and kubectl and redirects to cdn.dl.k8s.io; helm.cilium.io serves the Tetragon chart for the runtime-security check. Build jobs on unfold-ci do not get these hosts.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+      app.kubernetes.io/component: check
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: github.com
+              - matchName: objects.githubusercontent.com
+              - matchName: release-assets.githubusercontent.com
+              - matchName: dl.k8s.io
+              - matchName: cdn.dl.k8s.io
+              - matchName: helm.cilium.io
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: objects.githubusercontent.com
+        - matchName: release-assets.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: dl.k8s.io
+        - matchName: cdn.dl.k8s.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: helm.cilium.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
