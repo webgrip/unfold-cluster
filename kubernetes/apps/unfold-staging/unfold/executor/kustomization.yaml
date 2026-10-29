@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: unfold-staging
 resources:
   - secrets.yaml
+  - litellm-master-reader-token.rbac.yaml
