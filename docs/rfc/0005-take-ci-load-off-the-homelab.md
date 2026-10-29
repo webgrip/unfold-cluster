@@ -51,11 +51,11 @@ Of this repository's twelve `docker` jobs, nine run in `container: harbor.webgri
 
 A second ScaledJob, label `unfold-check`, uses the homelab's pattern for its `unfold-infra` pool: the main container is the `infra-runner` image, an init container copies `forgejo-runner` in, and steps run in host mode inside the toolchain. It keeps everything else from `forgejo-runner`: gVisor, an ephemeral runner per pod, the same egress policy, PriorityClass `ci-runner`, and its own count from the homelab's `forgejo-runner-queue`, which needs `unfold-check` added to the labels it answers.
 
-`infra-runner` is published to Harbor only, which this cluster cannot pull from. The `infrastructure` repository also publishes it to `ghcr.io/webgrip/infra-runner`, which Zot already mirrors and Kyverno already checks (`ghcr.io/webgrip/*`).
+`infra-runner` is published to Harbor only, which this cluster cannot pull from. The `infrastructure` release copies it, signature and attestations included, to `forgejo.webgrip.dev/webgrip/infra-runner` and checks the copy serves the same digest anonymously. Forgejo's registry and not GHCR: infrastructure ADR 0004 removed GHCR publishing, and its `GHCR_TOKEN` is a GitHub token handed to two repositories only, while the Forgejo copy needs only `WEBGRIP_CI_TOKEN`, which already copies Unfold's images there. Kyverno already covers `forgejo.webgrip.dev/webgrip/*`; `pinned-approved-images` gains the one prefix.
 
 ### 2. This repository's checks move first
 
-The eight workflows with `runs-on: docker` change to `runs-on: unfold-check` and drop `container:`. The scripts fetch from `github.com` and its release CDN, `dl.k8s.io` and `helm.cilium.io`; the first run on the new label confirms the list. Each host gets its own rule in [the runner policy](../../kubernetes/platform/ci-runners/app/networkpolicy.yaml) naming the workflow that needs it. Only this repository runs here at this step, so the shared Zot credential of RFC 0004 is not yet a cross-repository risk.
+The eight workflows with `runs-on: docker` change to `runs-on: unfold-check`, drop `container:`, and name `actions/checkout` by its full `https://forgejo.webgrip.dev/actions/checkout` URL, because a bare name resolves against the homelab's in-cluster Forgejo address. The scripts fetch from `github.com` and its release CDN, `dl.k8s.io` and `helm.cilium.io`; the first run on the new label confirms the list. Each host gets its own rule in [the runner policy](../../kubernetes/platform/ci-runners/app/networkpolicy.yaml) naming the workflow that needs it. Only this repository runs here at this step, so the shared Zot credential of RFC 0004 is not yet a cross-repository risk.
 
 ### 3. RFC 0004 part 1 before a second repository
 
@@ -90,5 +90,4 @@ The two hub slots cost nothing extra. Bursts run on a CPX42 at €0,1122 an hour
 
 ## Open questions
 
-1. Does the `infrastructure` repository publish `infra-runner` to GHCR, or does this cluster pull from Forgejo's package registry?
-2. Do the `unfold` jobs need hosts beyond the npm registry and GitHub, and can a `pnpm` store live in Zot or on the CI node?
+1. Do the `unfold` jobs need hosts beyond the npm registry and GitHub, and can a `pnpm` store live in Zot or on the CI node?
