@@ -101,7 +101,7 @@ monthly change the target adds.
 | E39 | Talos discovery service (`discovery.talos.dev`, the default) | U→X | Member hints for `talosctl get members`; KubeSpan is off | Nothing the cluster needs | Sees encrypted membership data; BUSL licence | – | b | Switch the service registry off | S | 0,00 |
 | E40 | NTP (Talos default `time.cloudflare.com`) | U→X | Node clocks | Drift, tolerable for days | Time skew could expire certificates early | – | a | Add Hetzner's NTP servers as more sources | S | 0,00 |
 | E41 | Headscale's install sources (`github.com` releases, `pkgs.tailscale.com`, the Ubuntu archive) | U→X | cloud-init of a new `unfold-headscale`; its unattended upgrades | A Headscale rebuild fails; security updates wait | Pinned versions and checksums | Pins | c | Stays; the rebuild drill proves it | – | 0,00 |
-| E42 | CI tool downloads (`dl.k8s.io`, `github.com` releases) | U→X | `diagnose-cluster.sh`, the disk-encryption rollout | No diagnose run | No: checksums pinned | Checksums | c | Stays | – | 0,00 |
+| E42 | CI tool downloads (`dl.k8s.io` and `cdn.dl.k8s.io`, `github.com` releases, the Tetragon chart on `helm.cilium.io`) | U→X | `diagnose-cluster.sh`, the disk-encryption rollout, the checks on the `unfold-check` runners | No diagnose run, and the checks that download a tool fail | No: checksums pinned | Checksums | c | Stays | – | 0,00 |
 | E43 | Google Workspace | U→X | Upstream of Authentik today; the operators' IdP and an alert mail relay in the target | No human OIDC login | **Partly:** an operator identity, as E13 | Workspace 2-step verification | a | Stays (ADR 0014) | – | 0,00 |
 | E44 | Model providers | U→X | LiteLLM's calls (ADR 0007) | Runs and the decider stop | No infrastructure change | Budgets per key | a | Stays | – | usage |
 | E45 | The owner's password manager and offline copy (the T0 seed) | – | Break-glass for everything; the rebuild | – | It opens everything | Holds the passphrase, the age key, the tokens and the Talos bundle. **Gap:** not the disk KMS master key or the `hcloud-luks` passphrase, both only in the homelab OpenBao (and the state) | a | Add both now ([break-glass](../runbooks/break-glass.md#the-offline-seed)) | S | 0,00 |
@@ -160,7 +160,7 @@ at its row.
 | `helm.cilium.io`, `charts.hetzner.cloud`, `kedacore.github.io`, `prometheus-community.github.io`, `kubernetes.github.io`, `aquasecurity.github.io`, `kubernetes-sigs.github.io`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` | E37 |
 | `factory.talos.dev` | E38 |
 | `pkgs.tailscale.com` | E41 |
-| `dl.k8s.io` | E42 |
+| `dl.k8s.io`, `cdn.dl.k8s.io` | E42 |
 | `ntfy.webgrip.dev` | E14, E15 |
 | `grafana.ops.unfoldhq.dev`, `query.ops.unfoldhq.dev` | E13, E27, E33: the cluster's own Grafana and its read-only query endpoint behind the ops Gateway; the homelab Grafana reads `query` over the tailnet |
 | `staging-app.unfoldhq.dev` | E27: Unfold staging's public name, served by the Cloudflare Tunnel ([unfold-staging](../runbooks/unfold-staging.md)) |

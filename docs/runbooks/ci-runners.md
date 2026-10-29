@@ -203,6 +203,18 @@ Checked against the Forgejo v15.0.10 source:
   Actions user has no write access of its own and is never an official reviewer. A branch
   without protection, such as another open pull request's branch, it can still push to.
 
+## The `unfold-check` pool
+
+A second ScaledJob, `forgejo-check-runner`, serves `runs-on: unfold-check`: this repository's checks, moved off the homelab ([RFC 0005](../rfc/0005-take-ci-load-off-the-homelab.md)). It differs from `forgejo-runner` in three ways and shares everything else (gVisor, an ephemeral runner per pod, the registration token, PriorityClass, placement and the `forgejo-runner` network policy):
+
+| | `unfold-ci` | `unfold-check` |
+| --- | --- | --- |
+| Steps run in | `node:24` with the job's own BuildKit | `forgejo.webgrip.dev/webgrip/infra-runner`, the toolchain the checks ran in as `container:` on the homelab: OpenTofu, age, etcd, node, bash, GNU coreutils, curl, git, jq |
+| Zot push credential | mounted | none |
+| Egress beyond Forgejo and Zot | none | the check scripts' tool downloads: `github.com` and its release CDNs, `dl.k8s.io` and `cdn.dl.k8s.io`, `helm.cilium.io` (policy `forgejo-check-runner`) |
+
+The image comes from Forgejo's registry because this cluster cannot reach Harbor; the infrastructure release copies each `infra-runner` release there with its signature. KEDA counts waiting jobs at `/waiting-jobs/unfold-check` on the same homelab endpoint. A host a moved check needs is added to `check-networkpolicy.yaml` in its own rule, named in the description, and listed in [external dependencies](../architecture/external-dependencies.md).
+
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,
