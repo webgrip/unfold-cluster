@@ -33,15 +33,15 @@ Every value lives in the homelab OpenBao; External Secrets reads it through `ope
 ```sh
 just secret-set unfold-main/staging/litellm fireworks-api-key
 just secret-set unfold-main/staging/litellm hetzner-inference-api-key
-just secret-set unfold-main/staging/vikunja api-token
-just secret-set unfold-main/staging/vikunja webhook-secret
+just secret-set unfold-main/staging/forgejo builder-token
+just secret-set unfold-main/staging/forgejo reader-token
 ```
 
 | Key | Value |
 | --- | --- |
-| `webhook-secret` | random: paste the output of `openssl rand -hex 32` |
 | `fireworks-api-key`, `hetzner-inference-api-key` | staging keys from each provider, with a monthly cap |
-| `api-token` | an API token of the Vikunja bot user `bot-ploeg`, scoped to the Ploeg Staging project |
+| `builder-token` | a new Forgejo token of `agent-builder` with write on `webgrip/ploeg-bench-world` only; ploegd does not start without it, even with the executor off |
+| `reader-token` | a new Forgejo token of `agent-reviewer` with read on `webgrip/ploeg-bench-world` only |
 
 The tunnel token is written by the `infra` apply that declares the tunnel, not by hand; until it exists `cloudflared` does not start. OpenBao's role `unfold-main-external-secrets` must allow `secret/unfold-main/staging/*`; it already allows `secret/unfold-main/*`.
 
@@ -81,17 +81,7 @@ The executor is configured for gVisor in the HelmRelease (`ploeg.executor`: team
 
 1. **The agent image.** `agent-runner` exists only on the homelab's Harbor. Publish it to `ghcr.io/webgrip/agent-runner` (or push it into Zot's `webgrip/` namespace) and set the digest in `executor.runnerImage`; the value there now is the Harbor digest and only a guess.
 2. **The worker's unbounded `emptyDir`.** Ploeg chart 0.2.0-rc.81 renders `worker-bin` with no `sizeLimit`, which `resource-limits` refuses. A post-renderer on the HelmRelease sets it to 256Mi; its `test` step fails the release if a chart moves that volume, so drop the patch once Ploeg's chart sets a limit itself.
-3. **The executor's secrets.** Add `executor` to `kubernetes/apps/unfold-staging/unfold/kustomization.yaml`'s resources (it holds `agent-litellm-master`, `agent-builder-token`, `agent-reader-token`, `ploeg-forge-webhook`, `ploeg-scaler` and the generated `ploeg-worker-signing` and `ploeg-worker-bootstrap`), and seed:
-
-   ```sh
-   just secret-set unfold-main/staging/forgejo builder-token
-   just secret-set unfold-main/staging/forgejo reader-token
-   just secret-set unfold-main/staging/forgejo webhook-secret
-   ```
-
-   `builder-token` is a new token of `agent-builder` with write on `webgrip/ploeg-bench-world` only, `reader-token` a new token of `agent-reviewer` with read on it only, and `webhook-secret` the output of `openssl rand -hex 32`.
-
-   and add a Forgejo webhook on `webgrip/ploeg-bench-world` to `https://staging-app.unfoldhq.dev/webhooks/forge/forgejo` with that secret.
+3. **The forge webhook.** The executor's secrets in `unfold/executor/` are applied already, because Ploeg's chart hands ploegd every one of them whether the executor is on or not. `ploeg-forge-webhook` is generated in the cluster; add a Forgejo webhook on `webgrip/ploeg-bench-world` to `https://staging-app.unfoldhq.dev/webhooks/forge/forgejo` with its `PLOEG_FORGEJO_SECRET`.
 4. **KEDA.** The ScaledJob's scaler connects to `ploeg-db` as `ploeg_scaler` from the `keda` namespace: add the managed role (with `SELECT` on Ploeg's counting view only, RFC 0003 gate G8) and a client label rule for KEDA on `ploeg-db`'s policy.
 5. **DNS for workers.** Workers share `unfold-staging` with ploegd, so `default-dns` answers them any name. Move them to their own namespace or accept it for staging.
 
