@@ -75,7 +75,7 @@ to the configuration in a pull request, apply, then remove the block.
 ## Checks after an apply
 
 * `https://staging-app.unfoldhq.dev/` asks for an Access one-time PIN, and only an allowed domain or address gets one.
-* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/vikunja`
+* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja`
   answers 401 from ploegd, not an Access redirect.
 * `curl -sS -o /dev/null -w '%{http_code}' -H 'Host: other.unfoldhq.dev' …` through the tunnel answers 404.
 * The tunnel shows two healthy connectors in Zero Trust → Networks → Tunnels.

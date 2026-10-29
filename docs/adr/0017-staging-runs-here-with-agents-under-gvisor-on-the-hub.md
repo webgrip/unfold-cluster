@@ -58,7 +58,7 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
 
 * `kubectl -n unfold-staging-workspaces run probe --image=… ` without `runtimeClassName: gvisor` is refused by `sandboxed-workloads`; a Ploeg worker without it is refused by Ploeg's `agent-security` policy.
 * A workspace pod reports gVisor's kernel (`dmesg` starts with "Starting gVisor").
-* From outside: `https://staging.app.unfoldhq.dev/` asks for Access; an unsigned `POST /webhooks/vikunja` gets 401; a port scan of every node's public address finds nothing open.
+* From outside: `https://staging.app.unfoldhq.dev/` asks for Access; an unsigned `POST /webhooks/tracker/vikunja` gets 401; a port scan of every node's public address finds nothing open.
 * ploegd migrates its empty database, Unfold answers `/healthz`, and a LiteLLM call is metered against a staging key's budget.
 
 ## History

@@ -40,6 +40,16 @@ spec:
                         operator: Equal
                         value: unfold
                         effect: NoSchedule
+          - target:
+              group: keda.sh
+              kind: ScaledJob
+            patch: |-
+              - op: test
+                path: /spec/jobTargetRef/template/spec/volumes/0/name
+                value: worker-bin
+              - op: add
+                path: /spec/jobTargetRef/template/spec/volumes/0/emptyDir/sizeLimit
+                value: 256Mi
   values:
     mode: live
     baseUrl: https://${UNFOLD_STAGING_HOSTNAME}
@@ -243,6 +253,7 @@ spec:
           vikunja:
             projects:
               - name: Ploeg Staging
+                id: ${UNFOLD_STAGING_VIKUNJA_PROJECT_ID}
                 team: staging
                 repo: webgrip/ploeg-bench-world
                 branch: main

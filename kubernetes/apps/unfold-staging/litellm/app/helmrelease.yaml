@@ -65,7 +65,10 @@ spec:
                     key: uri
             envFrom:
               - secretRef:
+                  name: litellm-generated
+              - secretRef:
                   name: litellm-secret
+                  optional: true
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
