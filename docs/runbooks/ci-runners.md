@@ -202,6 +202,13 @@ Checked against the Forgejo v15.0.10 source:
   list, tags only from `webgrip-ci`, and its review does not count as an approval, because the
   Actions user has no write access of its own and is never an official reviewer. A branch
   without protection, such as another open pull request's branch, it can still push to.
+- **Why feature branches stay unprotected** (decided 2026-10-30). A rule such as `*/**` would
+  keep the automatic token off every pull request branch, but Forgejo v15 then refuses every
+  force push to those branches and refuses to delete them, so a rebased branch cannot be pushed
+  and merged branches are never cleaned up. A commit pushed into another pull request instead
+  shows up in that pull request, dismisses its approval (`dismiss_stale_approvals`), and only the
+  merge list can merge it. Revisit when Forgejo can narrow the automatic token or allow force
+  pushes per rule.
 
 ## The `unfold-check` pool
 
