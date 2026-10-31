@@ -87,6 +87,13 @@ The `openbao-config` CronJob applies the committed key within the hour.
    provided once with `just secret-set unfold-main/<area>/<name> <key>` from homelab-cluster.
 3. Add an ExternalSecret with `secretStoreRef: {kind: ClusterSecretStore, name: openbao-homelab}`.
 
+The chart installs only the kinds this cluster uses: ExternalSecret, SecretStore, ClusterSecretStore
+and the namespaced generators (Password and the rest). ClusterExternalSecret, PushSecret,
+ClusterPushSecret and ClusterGenerator are off, with their controllers, because every CRD's schema
+sits in each control plane's API server memory (ADR 0013). A manifest of one of those kinds fails
+Flux's dry run with `no matches for kind`; turning its `crds.create*` and `process*` values back on
+in `kubernetes/platform/external-secrets/app/helmrelease.yaml` comes first, in its own pull request.
+
 ## Checks
 
 ```sh

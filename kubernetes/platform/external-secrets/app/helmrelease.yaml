@@ -20,6 +20,15 @@ spec:
       retries: 3
   values:
     installCRDs: true
+    crds:
+      createClusterExternalSecret: false
+      createClusterGenerator: false
+      createClusterPushSecret: false
+      createPushSecret: false
+    processClusterExternalSecret: false
+    processClusterGenerator: false
+    processClusterPushSecret: false
+    processPushSecret: false
     rbac:
       serviceAccountTokenCreate: false
       aggregateToEdit: false

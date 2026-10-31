@@ -71,3 +71,16 @@ Ignore`. Third-party images stay as they are: digest-pinned under `pinned-approv
   request that adds the new key next to the old one ([image-signatures](../runbooks/image-signatures.md#when-the-signing-key-rotates)).
 * Moving to Deny is its own pull request, with the conditions in
   [image-signatures](../runbooks/image-signatures.md#from-audit-to-deny).
+
+## History
+
+* 2026-10-31: Kyverno no longer installs CleanupPolicy and ClusterCleanupPolicy, the CRDs of the
+  cleanup controller that is off; neither had an object. The rest of the deprecated `kyverno.io`
+  group stays, and that is a constraint rather than a choice, seen on a throwaway kind cluster
+  before the change: the admission controller of 1.19.2 exits at start (`sanity checks failed`)
+  without `clusterpolicies.kyverno.io` and `policies.kyverno.io`, never becomes ready without
+  `updaterequests.kyverno.io` (its cache never syncs, even with the background controller off),
+  and logs an error every few seconds without PolicyException and GlobalContextEntry. The
+  `policies.kyverno.io` group stays whole: chart 3.9.2 documents a switch per CRD there but does
+  not wire them. The CRD migration hook lists only the CRDs that remain, since it fails on a
+  missing one.

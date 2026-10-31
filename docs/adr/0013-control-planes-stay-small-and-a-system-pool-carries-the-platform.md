@@ -123,3 +123,9 @@ PriorityClasses, disruption budgets and spread follow [Capacity and scale](../ar
   Unfold staging's agents under gVisor on the hub. Neither the Ploeg nor the Unfold chart lets
   worker or workspace pods carry tolerations, so the `gvisor` RuntimeClass tolerates the `unfold`
   pool taint until they do; part 5's "stops tolerating pool taints" waits for that.
+* 2026-10-31: the control planes hold 6 fewer CRDs (138 to 132, about 340 KiB of the 8.0 MB of
+  schema): Kyverno's two cleanup kinds (ADR 0011) and External Secrets' ClusterExternalSecret,
+  PushSecret, ClusterPushSecret and ClusterGenerator, none of which had an object. Every API server
+  keeps each CRD's schema and handlers in memory whether or not anything uses it. The larger cut,
+  Kyverno's deprecated ClusterPolicy group (about 1.4 MB), is not possible: Kyverno 1.19.2 does not
+  start without it. The finished kube-proxy removal Job left with them.
