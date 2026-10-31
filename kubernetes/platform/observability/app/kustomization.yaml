@@ -7,6 +7,11 @@ resources:
   - helmrepository.yaml
   - kube-state-metrics.yaml
   - node-exporter.yaml
+  - alloy
+  - victoria-metrics
+  - victoria-logs
+  - alerting
+  - query
   - networkpolicy.yaml
 patches:
   - path: placement.yaml
