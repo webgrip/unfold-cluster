@@ -4,8 +4,8 @@ dependencies:
 - repo_url: webgrip/agent-standards
   name: webgrip-baseline
   host: forgejo.webgrip.dev
-  resolved_commit: 3c583cd532c1fe967a780bab8c317dadaf596c60
-  resolved_ref: v0.3.1
+  resolved_commit: ea6c5d269914676a37e31e514cfb322063b623b7
+  resolved_ref: v0.3.2
   version: 0.0.0
   virtual_path: packages/baseline
   is_virtual: true
@@ -20,8 +20,8 @@ dependencies:
 - repo_url: webgrip/agent-standards
   name: webgrip-secrets
   host: forgejo.webgrip.dev
-  resolved_commit: 3c583cd532c1fe967a780bab8c317dadaf596c60
-  resolved_ref: v0.3.1
+  resolved_commit: ea6c5d269914676a37e31e514cfb322063b623b7
+  resolved_ref: v0.3.2
   version: 0.0.0
   virtual_path: packages/secrets
   is_virtual: true
@@ -148,6 +148,15 @@ deployments:
   - forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
   active_owner: forgejo.webgrip.dev/webgrip/agent-standards/packages/baseline
   content_hash: sha256:c6644318fe8544b9ad009e3e8a6626310666906270ca42ae3f1b621657e67801
+- kind: project-relative
+  target: claude
+  value: .claude/rules/flux-admission-order.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:36bde107f666d7691c6a678cad190f60cd041a36d3eb10c7d4404171e36176bb
 - kind: project-relative
   target: claude
   value: .claude/rules/forgejo-ci.md
@@ -490,3 +499,7 @@ deployments:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   content_hash: sha256:f783ff501c9c1ec167f5a644ba7c8547bfc345074a67dd8a9bad2bb6567eb753
+local_deployed_files:
+- .claude/rules/flux-admission-order.md
+local_deployed_file_hashes:
+  .claude/rules/flux-admission-order.md: sha256:36bde107f666d7691c6a678cad190f60cd041a36d3eb10c7d4404171e36176bb
