@@ -58,9 +58,9 @@ Ingress to flux-system is owned by [flux-system-ingress.yaml](../../kubernetes/p
 | hubble-relay | `host`, `remote-node` | 4244 | each Cilium agent's Hubble server |
 | metrics-server | `kube-apiserver` | any | nodes, and serving `metrics.k8s.io` |
 | metrics-server | `host`, `remote-node` | 10250 | each kubelet's resource metrics |
-| hubble-generate-certs job, kube-proxy-removal job | kube-dns, `kube-apiserver` | 53, any | their only work is through the API |
+| hubble-generate-certs job | kube-dns, `kube-apiserver` | 53, any | its only work is through the API |
 
-The Cilium agent, operator and envoy, kube-proxy (while it still exists) and the control-plane static pods run on the host network. Pod policies do not select them; Talos's host firewall covers the nodes ([host firewall](host-firewall.md)).
+The Cilium agent, operator and envoy and the control-plane static pods run on the host network. Pod policies do not select them; Talos's host firewall covers the nodes ([host firewall](host-firewall.md)).
 
 ### cluster-autoscaler
 
