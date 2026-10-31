@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Read the drill project's Hetzner token from OpenBao
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@fec5377edfef94b7836bb115c732dfee6421e010 # v2.8.3
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@93ff38f11f2da0b33d2a4079fbbfd1b3cfe5399f # v2.9.6
         with:
           role: ci-unfold-cluster
           secrets: |
