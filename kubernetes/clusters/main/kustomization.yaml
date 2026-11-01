@@ -16,6 +16,7 @@ resources:
   - ../../platform/network-policy
   - ../../platform/admission-policies
   - ../../platform/external-secrets
+  - ../../platform/wellhead
   - ../../platform/cert-manager
   - ../../platform/volume-encryption
   - ../../platform/cloudnative-pg
