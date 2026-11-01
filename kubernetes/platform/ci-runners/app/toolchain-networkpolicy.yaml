@@ -1,0 +1,90 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-runner-toolchains
+  namespace: ci
+spec:
+  description: A CI job pod adds to the forgejo-runner policy the hosts the unfold repository's checks install their pinned toolchain and locked packages from, so those checks run here instead of queueing on the homelab. mise and mise-action download mise and the aqua tools from mise.jdx.dev, mise-versions.jdx.dev and GitHub releases (github.com, api.github.com and the release CDNs); Node from nodejs.org; npm and corepack's pnpm from registry.npmjs.org; Go from go.dev and dl.google.com with modules through proxy.golang.org, sum.golang.org and storage.googleapis.com; Helm from get.helm.sh; uv's Python packages from pypi.org and files.pythonhosted.org; the pinned Ploeg contract bundle and chart from ghcr.io and pkg-containers.githubusercontent.com. Every package is pinned by lockfile or digest.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: github.com
+              - matchName: api.github.com
+              - matchName: objects.githubusercontent.com
+              - matchName: release-assets.githubusercontent.com
+              - matchName: mise.jdx.dev
+              - matchName: mise-versions.jdx.dev
+              - matchName: nodejs.org
+              - matchName: registry.npmjs.org
+              - matchName: go.dev
+              - matchName: dl.google.com
+              - matchName: proxy.golang.org
+              - matchName: sum.golang.org
+              - matchName: storage.googleapis.com
+              - matchName: get.helm.sh
+              - matchName: pypi.org
+              - matchName: files.pythonhosted.org
+              - matchName: ghcr.io
+              - matchName: pkg-containers.githubusercontent.com
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: api.github.com
+        - matchName: objects.githubusercontent.com
+        - matchName: release-assets.githubusercontent.com
+        - matchName: mise.jdx.dev
+        - matchName: mise-versions.jdx.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: nodejs.org
+        - matchName: registry.npmjs.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: go.dev
+        - matchName: dl.google.com
+        - matchName: proxy.golang.org
+        - matchName: sum.golang.org
+        - matchName: storage.googleapis.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: get.helm.sh
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: pypi.org
+        - matchName: files.pythonhosted.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

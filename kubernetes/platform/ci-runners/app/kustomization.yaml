@@ -13,4 +13,5 @@ resources:
   - check-scaledjob.yaml
   - networkpolicy.yaml
   - check-networkpolicy.yaml
+  - toolchain-networkpolicy.yaml
   - zot-push-credentials.rolebinding.yaml
