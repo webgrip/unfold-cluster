@@ -86,7 +86,35 @@ The `openbao-config` CronJob applies the committed key within the hour.
 1. Label the consumer's namespace `external-secrets.webgrip.io/openbao-homelab: allowed`.
 2. Put the value in OpenBao under `secret/unfold-main/<area>/<name>`, minted by a homelab job, or
    provided once with `just secret-set unfold-main/<area>/<name> <key>` from homelab-cluster.
-3. Add an ExternalSecret with `secretStoreRef: {kind: ClusterSecretStore, name: openbao-homelab}`.
+3. Add an ExternalSecret with `secretStoreRef: {kind: ClusterSecretStore, name: openbao-homelab}`,
+   annotated with where its value comes from (below). `scripts/check-wellhead.sh` refuses one that
+   is not, in CI (`wellhead-check`).
+
+## Every ExternalSecret says where its value comes from
+
+Each ExternalSecret carries [wellhead](https://github.com/wellhead-dev/wellhead) annotations
+(spec `v1alpha1`):
+
+| `wellhead.dev/origin` | Who writes the value | Here |
+| --- | --- | --- |
+| `minted` | a controller: an External Secrets generator in this cluster, or a homelab job or PushSecret | every generator-backed ExternalSecret; the Forgejo, Cloudflare, ntfy, query and OIDC values the homelab pushes; the tunnel token the `infra` apply writes |
+| `provided` | a person, with `wellhead.dev/how` saying where to get it and `wellhead.dev/verify` how it is checked | LiteLLM's provider keys, the Vikunja bot token, the backup bucket keys, the dead-man URL |
+| `preserve` | written once, never regenerated | the `hcloud-luks` passphrase: restore the escrowed value, never a new one |
+| `projected` | another ExternalSecret | `agent-litellm-master`, copied from `litellm-generated` |
+
+From a device on the tailnet, with this cluster's kubeconfig and a token for the homelab OpenBao,
+`wellhead missing` lists every value the vault does not hold, and `wellhead seed` fills one: it shows
+`how`, asks without echo, runs the checks, writes with check-and-set, records who seeded it and when,
+and makes External Secrets sync:
+
+```sh
+export KUBECONFIG=~/.kube/unfold.yaml BAO_ADDR=http://unfold-gateway.webgrip.dev:8200
+export BAO_TOKEN="$(bao print token)"   # after logging in to the homelab OpenBao
+wellhead missing --verify
+wellhead seed observability/alertmanager-deadman
+```
+
+A `minted` value that is missing waits for its writer; `wellhead seed` refuses it.
 
 The chart installs only the kinds this cluster uses: ExternalSecret, SecretStore, ClusterSecretStore
 and the namespaced generators (Password and the rest). ClusterExternalSecret, PushSecret,

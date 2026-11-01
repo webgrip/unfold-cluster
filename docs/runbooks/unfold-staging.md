@@ -35,6 +35,9 @@ just secret-set unfold-main/staging/litellm fireworks-api-key
 just secret-set unfold-main/staging/litellm hetzner-inference-api-key
 ```
 
+Or, with this cluster's kubeconfig and a homelab OpenBao token, `wellhead seed litellm-staging/litellm-secret`,
+which also checks the Fireworks key against its API before writing ([External Secrets](external-secrets.md#every-externalsecret-says-where-its-value-comes-from)).
+
 | Key | Value |
 | --- | --- |
 | `fireworks-api-key`, `hetzner-inference-api-key` | staging keys from each provider, with a monthly cap |
