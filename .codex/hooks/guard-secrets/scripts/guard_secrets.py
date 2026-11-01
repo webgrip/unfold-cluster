@@ -4,7 +4,7 @@
 Hard-blocks plaintext-secret leaks before an Edit/Write/MultiEdit runs:
   1. never create decrypted secret artifacts (*.decrypted*, *decrypted~*)
   2. a *.sops.yaml / *.sops.yml write must contain SOPS ciphertext (ENC[)
-  3. best-effort plaintext-secret scan via gitleaks (warns and continues when absent)
+  3. best-effort plaintext-secret scan via gitleaks, on PATH or through mise (warns and continues when absent)
 
 Blocking = exit 2 with a reason on stderr (Claude Code's deny contract, the
 analogue of the opencode plugin's throw). Any other error path exits 0
@@ -20,6 +20,19 @@ import sys
 import tempfile
 
 DECRYPTED = ("decrypted",)
+
+
+def gitleaks_path():
+    found = shutil.which("gitleaks")
+    if found or not shutil.which("mise"):
+        return found
+    try:
+        resolved = subprocess.run(["mise", "which", "gitleaks"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    except OSError:
+        return None
+    if resolved.returncode != 0:
+        return None
+    return resolved.stdout.strip() or None
 
 
 def deny(msg: str) -> None:
@@ -58,16 +71,17 @@ def main() -> None:
         deny(f"{base} is a SOPS file but the content isn't encrypted. Edit plaintext elsewhere, then 'sops --encrypt'.")
 
     # 3) best-effort gitleaks scan (warn, never block, when absent)
-    if content and not shutil.which("gitleaks"):
-        print("guard-secrets: gitleaks not on PATH; plaintext scan skipped. Pin it in .mise.toml.", file=sys.stderr)
-    if content and shutil.which("gitleaks"):
+    gitleaks = gitleaks_path() if content else None
+    if content and not gitleaks:
+        print("guard-secrets: gitleaks not on PATH or in mise; plaintext scan skipped. Pin it in .mise.toml.", file=sys.stderr)
+    if gitleaks:
         tmp = None
         try:
             with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
                 fh.write(content)
                 tmp = fh.name
             scan = subprocess.run(
-                ["gitleaks", "detect", "--no-banner", "--no-git", "--redact", "-s", tmp],
+                [gitleaks, "detect", "--no-banner", "--no-git", "--redact", "-s", tmp],
                 capture_output=True,
             )
             if scan.returncode == 1:

@@ -21,7 +21,7 @@ when it would leak a plaintext secret. Same rule set in both tools.
    `sops --encrypt`.
 3. **No plaintext secrets in any file.** When `gitleaks` is installed, the
    content is scanned and a positive hit is refused (best-effort — skipped
-   silently without gitleaks).
+   with a warning without gitleaks).
 
 ## The compliant path
 
@@ -36,8 +36,9 @@ when it would leak a plaintext secret. Same rule set in both tools.
   floor). A human enters the value; the agent never does.
 - Config templates carry **placeholders**, not values (`API_KEY: ${API_KEY}`
   from the environment, not the literal key).
-- Rule 3 needs `gitleaks` on `PATH`; pin it in the repo's `.mise.toml`. The hook
-  prints a warning and continues when it is missing.
+- Rule 3 needs `gitleaks` on `PATH` or pinned in the repo's `.mise.toml`; the hook
+  asks `mise which gitleaks` when it is not on `PATH`, so it scans without mise
+  shims too. It prints a warning and continues when neither finds it.
 
 ## When a BLOCKED message appears
 
