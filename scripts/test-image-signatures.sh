@@ -15,7 +15,9 @@ Against the real registry and the estate's real key (tests/image-signatures/):
 And on a throwaway registry on loopback, with throwaway keys, for the Zot
 policy (plain HTTP inside the cluster):
   an image signed with the trusted key passes, an unsigned one fails, and one
-  signed with any other key fails.
+  signed with any other key fails. Each signed case runs in both formats:
+  cosign 3's Sigstore bundle, stored as an OCI referrer, and the legacy .sig
+  tag that the estate's signing jobs still write.
 
 A wrongly signed image is also proven against the real registry: the signed
 fixture must fail once the policy trusts a different key.
@@ -43,8 +45,8 @@ readonly kyverno_version="v1.19.2"
 readonly kyverno_sha256_linux_amd64="357eaf1df8bc24ddd5a73979fadeaae6a032e8710f11af264229756e4956bf4a"
 
 # renovate: datasource=github-releases depName=sigstore/cosign
-readonly cosign_version="v2.6.5"
-readonly cosign_sha256_linux_amd64="c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644"
+readonly cosign_version="v3.1.4"
+readonly cosign_sha256_linux_amd64="424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa"
 
 # renovate: datasource=github-releases depName=google/go-containerregistry
 readonly crane_version="v0.22.1"
@@ -209,7 +211,12 @@ push_fixture_image() {
 }
 
 sign() {
-  COSIGN_PASSWORD="" "${cosign_bin}" sign --yes --key "$1" --tlog-upload=false --allow-http-registry "$2" >/dev/null 2>&1
+  local format="$1" key="$2" image="$3" format_flags
+  case "${format}" in
+    bundle) format_flags=(--signing-config "${work_dir}/no-tlog-signing-config.json") ;;
+    legacy) format_flags=(--new-bundle-format=false --use-signing-config=false --tlog-upload=false) ;;
+  esac
+  COSIGN_PASSWORD="" "${cosign_bin}" sign --yes --key "${key}" "${format_flags[@]}" --allow-http-registry "${image}" >/dev/null 2>&1
 }
 
 start_registry() {
@@ -226,22 +233,26 @@ start_registry() {
 
 check_throwaway_registry() {
   start_registry
-  local signed unsigned other
-  signed="$(push_fixture_image signed)"
+  local format signed unsigned other
   unsigned="$(push_fixture_image unsigned)"
-  other="$(push_fixture_image other-key)"
-  sign "${work_dir}/trusted.key" "${signed}"
-  sign "${work_dir}/other.key" "${other}"
-  pod_for signed "${signed}" "${work_dir}/zot-signed.yaml"
   pod_for unsigned "${unsigned}" "${work_dir}/zot-unsigned.yaml"
-  pod_for other-key "${other}" "${work_dir}/zot-other-key.yaml"
+  for format in bundle legacy; do
+    signed="$(push_fixture_image "signed-${format}")"
+    other="$(push_fixture_image "other-key-${format}")"
+    sign "${format}" "${work_dir}/trusted.key" "${signed}"
+    sign "${format}" "${work_dir}/other.key" "${other}"
+    pod_for "signed-${format}" "${signed}" "${work_dir}/zot-signed-${format}.yaml"
+    pod_for "other-key-${format}" "${other}" "${work_dir}/zot-other-key-${format}.yaml"
+  done
 
   with_trusted_key "${zot_policy}" "${work_dir}/trusted.pub" | sed "s|${zot_address}|${registry}|" >"${work_dir}/zot-policy.yaml"
   grep -q "${registry}/webgrip/\*" "${work_dir}/zot-policy.yaml" \
     || record_failure "the Zot policy no longer names ${zot_address}/webgrip/*"
-  expect pass "${work_dir}/zot-policy.yaml" "${work_dir}/zot-signed.yaml" "zot policy, signed with the trusted key"
   expect fail "${work_dir}/zot-policy.yaml" "${work_dir}/zot-unsigned.yaml" "zot policy, unsigned"
-  expect fail "${work_dir}/zot-policy.yaml" "${work_dir}/zot-other-key.yaml" "zot policy, signed with another key"
+  for format in bundle legacy; do
+    expect pass "${work_dir}/zot-policy.yaml" "${work_dir}/zot-signed-${format}.yaml" "zot policy, ${format} signature from the trusted key"
+    expect fail "${work_dir}/zot-policy.yaml" "${work_dir}/zot-other-key-${format}.yaml" "zot policy, ${format} signature from another key"
+  done
 }
 
 mutation_cases() {
@@ -255,7 +266,7 @@ mutation_cases() {
   expect pass "${work_dir}/wrong-key-neutralised.yaml" "${fixture_dir}/admitted-signed-webgrip-image.yaml" \
     "mutation, neutralised policy that trusts another key"
   expect pass "${work_dir}/zot-neutralised.yaml" "${work_dir}/zot-unsigned.yaml" "mutation, neutralised zot policy, unsigned"
-  expect pass "${work_dir}/zot-neutralised.yaml" "${work_dir}/zot-other-key.yaml" "mutation, neutralised zot policy, another key"
+  expect pass "${work_dir}/zot-neutralised.yaml" "${work_dir}/zot-other-key-bundle.yaml" "mutation, neutralised zot policy, another key"
 
   without_expression_gate "${public_policy}" >"${work_dir}/public-required-only.yaml"
   without_required_gate "${public_policy}" >"${work_dir}/public-expression-only.yaml"
@@ -268,6 +279,7 @@ mutation_cases() {
 install_binaries
 (cd "${work_dir}" && COSIGN_PASSWORD="" "${cosign_bin}" generate-key-pair --output-key-prefix trusted >/dev/null 2>&1)
 (cd "${work_dir}" && COSIGN_PASSWORD="" "${cosign_bin}" generate-key-pair --output-key-prefix other >/dev/null 2>&1)
+"${cosign_bin}" signing-config create --out "${work_dir}/no-tlog-signing-config.json" >/dev/null 2>&1
 
 check_real_registry
 check_throwaway_registry

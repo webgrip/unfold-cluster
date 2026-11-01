@@ -15,7 +15,9 @@ Everything is in `kubernetes/platform/kyverno`, reconciled by the Flux Kustomiza
 
 A matching image in a container, init container or ephemeral container needs a cosign signature,
 on its digest, that verifies with the public half of the OpenBao Transit key `cosign-webgrip`.
-Signatures are made with `--tlog-upload=false`, so the policies skip the transparency log.
+Signatures are made without a transparency log entry, so the policies skip the transparency log.
+The policies accept both cosign signature formats: the legacy `.sig` tag and cosign 3's Sigstore
+bundle.
 Two gates refuse an unsigned image, each on its own: `required: true` (every matching image must
 be verified) and the CEL validation that calls `verifyImageSignatures`.
 
@@ -74,7 +76,9 @@ request that touches the policies:
   `linux/amd64` manifest fails as a container, as an init container and next to a signed one; a
   third-party image is not judged; the signed image fails once the policy trusts another key;
 - against a throwaway registry on loopback with throwaway keys, for the Zot policy over HTTP: signed
-  passes, unsigned and signed-with-another-key fail;
+  passes, unsigned and signed-with-another-key fail, both for cosign 3's Sigstore bundle (an OCI
+  referrer, signed with a signing config that has no transparency log) and for the legacy `.sig` tag
+  the estate's signing jobs write;
 - mutation: with both gates removed every refused case passes, and with either gate removed alone
   the other still refuses.
 
