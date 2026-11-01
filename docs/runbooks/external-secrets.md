@@ -102,19 +102,19 @@ Each ExternalSecret carries [wellhead](https://github.com/wellhead-dev/wellhead)
 | `preserve` | written once, never regenerated | the `hcloud-luks` passphrase: restore the escrowed value, never a new one |
 | `projected` | another ExternalSecret | `agent-litellm-master`, copied from `litellm-generated` |
 
-From a device on the tailnet, with this cluster's kubeconfig and a token for the homelab OpenBao,
-`wellhead missing` lists every value the vault does not hold, and `wellhead seed` fills one: it shows
-`how`, asks without echo, runs the checks, writes with check-and-set, records who seeded it and when,
-and makes External Secrets sync:
+From a device on the tailnet, logged in to the homelab OpenBao (`bao login`, or `BAO_TOKEN`),
+`missing` lists every value the vault does not hold, and `seed` fills one: it shows `how`, asks
+without echo, runs the checks, writes with check-and-set, records who seeded it and when, and makes
+External Secrets sync. The mise task runs the version pinned in `scripts/wellhead.sh`, downloaded on
+first use, with this repository's kubeconfig and the gateway's OpenBao address; nothing is installed:
 
 ```sh
-export KUBECONFIG=~/.kube/unfold.yaml BAO_ADDR=http://unfold-gateway.webgrip.dev:8200
-export BAO_TOKEN="$(bao print token)"   # after logging in to the homelab OpenBao
-wellhead missing --verify
-wellhead seed observability/alertmanager-deadman
+mise run wellhead -- missing --verify
+mise run wellhead -- seed observability/alertmanager-deadman
 ```
 
-A `minted` value that is missing waits for its writer; `wellhead seed` refuses it.
+`missing` exits 1 when something is missing, which mise reports as `task failed`. A `minted` value
+that is missing waits for its writer; `seed` refuses it.
 
 The chart installs only the kinds this cluster uses: ExternalSecret, SecretStore, ClusterSecretStore
 and the namespaced generators (Password and the rest). ClusterExternalSecret, PushSecret,

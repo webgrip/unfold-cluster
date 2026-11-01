@@ -14,3 +14,8 @@ description = "Install the agent-standards packages pinned in apm.yml and compil
 [tasks.agents-check]
 run = "uvx --from 'git+https://forgejo.webgrip.dev/webgrip/agent-standards.git@v0.5.3#subdirectory=cli' agentstd check"
 description = "Fail when a generated agent file differs from .apm and apm.lock.yaml, CLAUDE.md imports anything, or the session budget is exceeded"
+
+[tasks.wellhead]
+run = "{{config_root}}/scripts/wellhead.sh"
+env = { BAO_ADDR = "http://unfold-gateway.webgrip.dev:8200" }
+description = "Run wellhead (pinned in scripts/wellhead.sh, downloaded on first use) against this cluster and the homelab OpenBao: mise run wellhead -- missing --verify, or -- seed <namespace>/<name>"

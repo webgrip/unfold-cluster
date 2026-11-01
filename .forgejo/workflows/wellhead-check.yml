@@ -6,6 +6,7 @@ on:
     paths:
       - kubernetes/**
       - scripts/check-wellhead.sh
+      - scripts/wellhead.sh
       - .forgejo/workflows/wellhead-check.yml
   push:
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - kubernetes/**
       - scripts/check-wellhead.sh
+      - scripts/wellhead.sh
       - .forgejo/workflows/wellhead-check.yml
   workflow_dispatch:
 

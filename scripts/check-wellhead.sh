@@ -12,15 +12,10 @@ Runbook: docs/runbooks/external-secrets.md.
                    carries it, one file at a time, and requires lint to fail.
                    A file lint still passes was never checked.
 
-Downloads the wellhead CLI at the pinned version below, checksum-verified,
-into a cache directory. Needs curl, sha256sum and tar."
+Runs wellhead through scripts/wellhead.sh, which pins its version."
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly repo_root
-
-# renovate: datasource=github-releases depName=wellhead-dev/wellhead
-readonly wellhead_version="v0.1.0"
-readonly wellhead_sha256_linux_amd64="43f8a9f20d9e3cb1411125ca7b6ac627a478e34f5d11f5bda2a3eb36543b1a08"
 
 mutation_test=false
 case "${1:-}" in
@@ -30,28 +25,10 @@ case "${1:-}" in
   *) echo "${usage}" >&2; exit 2 ;;
 esac
 
-[ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] || { echo "only the linux-amd64 binary is pinned" >&2; exit 2; }
-
-cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/unfold-wellhead"
-readonly cache_dir
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/wellhead-check.XXXXXX")"
 readonly work_dir
 trap 'rm -rf "${work_dir}"' EXIT
-
-install_wellhead() {
-  local archive="${cache_dir}/wellhead_${wellhead_version#v}_linux_amd64.tar.gz"
-  if ! { [ -f "${archive}" ] && echo "${wellhead_sha256_linux_amd64}  ${archive}" | sha256sum -c --status -; }; then
-    mkdir -p "${cache_dir}"
-    curl -fsSL --retry 3 -o "${archive}.partial" \
-      "https://github.com/wellhead-dev/wellhead/releases/download/${wellhead_version}/wellhead_${wellhead_version#v}_linux_amd64.tar.gz"
-    echo "${wellhead_sha256_linux_amd64}  ${archive}.partial" | sha256sum -c --quiet -
-    mv "${archive}.partial" "${archive}"
-  fi
-  tar -xzf "${archive}" -C "${work_dir}" wellhead
-}
-
-install_wellhead
-readonly wellhead="${work_dir}/wellhead"
+readonly wellhead="${repo_root}/scripts/wellhead.sh"
 
 "${wellhead}" lint "${repo_root}/kubernetes"
 
