@@ -113,7 +113,9 @@ mise run wellhead -- missing --verify
 mise run wellhead -- seed observability/alertmanager-deadman
 ```
 
-`missing` exits 1 when something is missing, which mise reports as `task failed`. A `minted` value
+`missing` exits 1 when something is missing, which mise reports as `task failed`. `seed` makes the
+sync by setting the ExternalSecret's `force-sync` annotation, the one change an operator may make to
+an ExternalSecret (admission policy `operator-externalsecret-sync`). A `minted` value
 that is missing waits for its writer; `seed` refuses it.
 
 The chart installs only the kinds this cluster uses: ExternalSecret, SecretStore, ClusterSecretStore

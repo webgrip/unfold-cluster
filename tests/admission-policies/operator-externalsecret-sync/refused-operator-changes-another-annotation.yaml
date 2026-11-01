@@ -1,0 +1,24 @@
+# as-group: oidc:unfold-admins
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: existing
+  namespace: tenant
+  labels:
+    app: demo
+  annotations:
+    wellhead.dev/origin: provided
+    wellhead.dev/how: "something else"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao-homelab
+  target:
+    name: existing
+  data:
+    - secretKey: value
+      remoteRef:
+        key: unfold-main/demo
+        property: value

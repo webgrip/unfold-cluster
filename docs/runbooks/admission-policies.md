@@ -18,6 +18,7 @@ The API server enforces the cluster's admission rules in-process as native `Vali
 | `service-account-token-secrets` | Secrets of type `kubernetes.io/service-account-token` | every namespace | Deny |
 | `pod-security-floor` | a namespace whose `pod-security.kubernetes.io/enforce` label is anything but `restricted` | every namespace but `kube-system` | Deny |
 | `encrypted-volumes` | a PersistentVolumeClaim on any StorageClass but the LUKS-encrypted `hcloud-luks`; `hcloud-luks-drill`, which deletes its volume, only for a CloudNativePG cluster named `*-drill` | every namespace | Deny |
+| `operator-externalsecret-sync` | a change to an ExternalSecret by a person in `oidc:unfold-admins` other than its `force-sync` annotation: spec, labels, finalizers, owners or any other annotation. Operators may patch ExternalSecrets only so `wellhead seed` can make External Secrets read the vault now | every namespace; Flux and controllers are not matched | Deny |
 | `trivy-scan-job-defaults` (MutatingAdmissionPolicy) | nothing: it sets a 2 GiB `sizeLimit` on every unbounded `emptyDir` and `shareProcessNamespace` in the Trivy Operator's scan Jobs ([vulnerability-scanning](vulnerability-scanning.md)) | Jobs labelled `app.kubernetes.io/managed-by: trivy-operator` in `trivy-system` | mutates |
 
 The policies match Pods and the pod templates in Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs, so Flux's apply sees the warning before a controller creates the Pod.

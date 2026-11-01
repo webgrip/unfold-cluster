@@ -14,6 +14,10 @@ exists is checked as the UPDATE Flux would send:
                    the policy its directory is named after
   admitted-*.yaml  must be admitted with no word from that policy
 
+A fixture whose first line is # as-group: GROUP is sent as a person in
+that group (impersonated), for policies that match on who asks. The
+custom resources a policy needs exist from tests/admission-policies/crds.yaml.
+
 While one policy's fixtures run, every other binding only warns, so a
 Deny from a neighbouring policy cannot stand in for the one under test.
 
@@ -250,7 +254,10 @@ policy_names() {
 }
 
 dry_run() {
-  kubectl apply --server-side --force-conflicts --field-manager=admission-test --dry-run=server -f "$1" 2>&1
+  local group identity=()
+  group="$(sed -n '1s/^# as-group: //p' "$1")"
+  [ -z "${group}" ] || identity=(--as=admission-person --as-group="${group}")
+  kubectl apply "${identity[@]}" --server-side --force-conflicts --field-manager=admission-test --dry-run=server -f "$1" 2>&1
 }
 
 policy_named_in() {
@@ -361,6 +368,8 @@ neutralise_and_expect_admission() {
 
 install_binaries
 start_servers
+kubectl apply -f "${fixture_dir}/crds.yaml" >/dev/null
+kubectl wait --for=condition=Established --timeout=60s -f "${fixture_dir}/crds.yaml" >/dev/null
 kubectl apply -f "${fixture_dir}/cluster-objects.yaml" >/dev/null
 kubectl apply -k "${policy_dir}" >/dev/null
 wait_for_policies_to_settle

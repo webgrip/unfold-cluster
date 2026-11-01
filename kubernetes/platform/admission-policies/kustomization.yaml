@@ -15,3 +15,4 @@ resources:
   - pod-security-floor.yaml
   - encrypted-volumes.yaml
   - trivy-scan-job-defaults.yaml
+  - operator-externalsecret-sync.yaml

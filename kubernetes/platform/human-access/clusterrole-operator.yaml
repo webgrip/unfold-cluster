@@ -29,3 +29,6 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["patch"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets"]
+    verbs: ["patch"]
