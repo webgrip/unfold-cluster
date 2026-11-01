@@ -222,6 +222,8 @@ A second ScaledJob, `forgejo-check-runner`, serves `runs-on: unfold-check`: this
 
 The image comes from Forgejo's registry because this cluster cannot reach Harbor; the infrastructure release copies each `infra-runner` release there with its signature. KEDA counts waiting jobs at `/waiting-jobs/unfold-check` on the same homelab endpoint. A host a moved check needs is added to `check-networkpolicy.yaml` in its own rule, named in the description, and listed in [external dependencies](../architecture/external-dependencies.md).
 
+Three checks stay on the homelab's `docker` runners. `observability-check` and `ops-consoles-check` run Alloy and Envoy release binaries, which are linked against glibc and cannot start in the Alpine-based `infra-runner` (`cannot execute: required file not found`); they move once the image carries `gcompat` or a glibc base. `infra-check`'s `token-mask-canary` and `token-mask-proof` prove the masks of the runner that runs `plan-or-apply`, so they run on the same kind of runner, and the proof reads the canary's log through the homelab's in-cluster Forgejo address.
+
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,

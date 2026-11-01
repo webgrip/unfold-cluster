@@ -5,7 +5,7 @@ metadata:
   name: forgejo-check-runner
   namespace: ci
 spec:
-  description: A check job (runs-on unfold-check) adds to the forgejo-runner policy the hosts this repository's check scripts download their checksum-pinned tools from. GitHub release downloads (kyverno, cosign, crane, etcd, alloy, VictoriaMetrics, VictoriaLogs, yq, alertmanager, envoy, vector, headscale, gateway-api) redirect from github.com to its release CDNs; dl.k8s.io serves kube-apiserver and kubectl and redirects to cdn.dl.k8s.io; helm.cilium.io serves the Tetragon chart for the runtime-security check. Build jobs on unfold-ci do not get these hosts.
+  description: A check job (runs-on unfold-check) adds to the forgejo-runner policy the hosts this repository's check scripts download their checksum-pinned tools from. GitHub release downloads (kyverno, cosign, crane, etcd, alloy, VictoriaMetrics, VictoriaLogs, yq, alertmanager, envoy, vector, headscale, gateway-api) redirect from github.com to its release CDNs; dl.k8s.io serves kube-apiserver and kubectl and redirects to cdn.dl.k8s.io; helm.cilium.io serves the Tetragon chart for the runtime-security check; registry.opentofu.org answers infra-check's tofu init and sends it on to the providers' GitHub release downloads; ghcr.io and pkg-containers.githubusercontent.com serve the Unfold images and signatures supply-chain-check verifies against the real registry. Build jobs on unfold-ci do not get these hosts.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: forgejo-runner
@@ -29,6 +29,9 @@ spec:
               - matchName: dl.k8s.io
               - matchName: cdn.dl.k8s.io
               - matchName: helm.cilium.io
+              - matchName: registry.opentofu.org
+              - matchName: ghcr.io
+              - matchName: pkg-containers.githubusercontent.com
     - toFQDNs:
         - matchName: github.com
         - matchName: objects.githubusercontent.com
@@ -46,6 +49,19 @@ spec:
               protocol: TCP
     - toFQDNs:
         - matchName: helm.cilium.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: registry.opentofu.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: ghcr.io
+        - matchName: pkg-containers.githubusercontent.com
       toPorts:
         - ports:
             - port: "443"

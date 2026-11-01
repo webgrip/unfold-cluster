@@ -93,9 +93,11 @@ jobs:
 
 
   token-mask-canary:
-    runs-on: unfold-check
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.2.0@sha256:c0703b8eb5a037ab3d0d2260a3c2aa13e09de4c4007da04504d6e01801a7fee7
     steps:
-      - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Test the masks against the runner's replacement rules
         run: ./scripts/test-mask-hcloud-token-prefixes.sh
@@ -118,7 +120,9 @@ jobs:
 
   token-mask-proof:
     needs: token-mask-canary
-    runs-on: unfold-check
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/webgrip/infra-runner:0.2.0@sha256:c0703b8eb5a037ab3d0d2260a3c2aa13e09de4c4007da04504d6e01801a7fee7
     steps:
       - name: Read the canary's public log and refuse any trace of its token
         shell: bash
