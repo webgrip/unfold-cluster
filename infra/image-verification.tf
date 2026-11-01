@@ -1,9 +1,7 @@
 locals {
   cosign_webgrip_public_key = trimspace(file("${path.module}/keys/cosign-webgrip.pub"))
 
-  unsigned_webgrip_images = [
-    "forgejo.webgrip.dev/webgrip/infra-runner",
-  ]
+  unsigned_webgrip_images = []
 
   signed_webgrip_image_patterns = [
     "ghcr.io/webgrip/*",

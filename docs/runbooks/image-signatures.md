@@ -14,7 +14,6 @@ takes the first rule that matches its registry and repository:
 
 | Rule | Images | Effect |
 | --- | --- | --- |
-| `skip` | `forgejo.webgrip.dev/webgrip/infra-runner` | pulled unchecked until its release job signs it |
 | `publicKey` | `ghcr.io/webgrip/*`, `forgejo.webgrip.dev/webgrip/*`, and one path level deeper | pulled only with a valid signature from `infra/keys/cosign-webgrip.pub` |
 
 Anything else pulls as before. Talos checks only when it pulls: an image already on the node is not
