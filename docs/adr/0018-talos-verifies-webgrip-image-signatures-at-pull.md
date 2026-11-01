@@ -89,3 +89,11 @@ for a week without refusing an image that should run. That pull request supersed
 * After the apply, on each node: `talosctl -n <node> get mc -o yaml | grep -A3 ImageVerificationConfig`.
 * `talosctl -n <worker> image pull --namespace cri ghcr.io/webgrip/unfold@sha256:570a3bd3b4aa734063ac65f5159057116e42612e186d3bf1a89fef14307d016a`
   is refused with `image verification failed`.
+
+## History
+
+* 2026-11-01: the `skip` rule for `forgejo.webgrip.dev/webgrip/infra-runner` goes. The
+  infrastructure release signs it on Harbor and copies the signature with it, and
+  `cosign verify --key infra/keys/cosign-webgrip.pub --insecure-ignore-tlog` now passes for the
+  pinned `0.2.0@sha256:c0703b8e…` on both registries; earlier the same day the Forgejo copy had no
+  signature. No webgrip image is exempt any more.
