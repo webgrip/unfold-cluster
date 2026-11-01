@@ -90,7 +90,7 @@ From [ADR 0017's confirmation](../adr/0017-staging-runs-here-with-agents-under-g
 * A pod in `unfold-staging-workspaces` without `runtimeClassName: gvisor` is refused by `sandboxed-workloads`:
 
   ```sh
-  kubectl -n unfold-staging-workspaces run probe --image=ghcr.io/webgrip/unfold-agent:0.4.0-rc.119@sha256:e11d267c96f9120e6dad657ee1b4a4fd555fd57e0a357cff327f33254ce8f6a2 --dry-run=server
+  kubectl -n unfold-staging-workspaces run probe --image=ghcr.io/webgrip/unfold-agent:0.4.0-rc.127@sha256:88c31734e975594287d41cfe6d38e3f12bfa25c43d335d2ded9a98fbe67adf41 --dry-run=server
   ```
 
 * A running workspace reports gVisor's kernel: `kubectl -n unfold-staging-workspaces exec <pod> -- dmesg | head -1` starts with "Starting gVisor".

@@ -10,5 +10,5 @@ spec:
     operation: copy
   url: oci://ghcr.io/webgrip/charts/unfold
   ref:
-    tag: 0.4.0-rc.119
-    digest: sha256:bf5490b21d6110abb27a40df3891cc5e573db85208b2c5ae94ed5b73867a2015
+    tag: 0.4.0-rc.127
+    digest: sha256:91a82529f2c28aac0e85bf507c8c0eebd63a31b78c47f6dac71cb596726417eb
