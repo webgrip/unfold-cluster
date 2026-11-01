@@ -88,7 +88,9 @@ The `openbao-config` CronJob applies the committed key within the hour.
    provided once with `just secret-set unfold-main/<area>/<name> <key>` from homelab-cluster.
 3. Add an ExternalSecret with `secretStoreRef: {kind: ClusterSecretStore, name: openbao-homelab}`,
    annotated with where its value comes from (below). `scripts/check-wellhead.sh` refuses one that
-   is not, in CI (`wellhead-check`).
+   is not, in CI (`wellhead-check`), and the API server warns about it on apply (admission policy
+   `wellhead-externalsecret-origin`, from wellhead's chart in `kubernetes/platform/wellhead`, in Warn
+   and Audit; Deny is its own pull request).
 
 ## Every ExternalSecret says where its value comes from
 

@@ -1,0 +1,18 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: wellhead
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: external-secrets
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  path: ./kubernetes/platform/wellhead/app
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
