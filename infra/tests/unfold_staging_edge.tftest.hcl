@@ -179,6 +179,37 @@ run "access_guards_the_host_and_lets_only_webhooks_past" {
   }
 }
 
+run "people_sign_in_with_a_one_time_pin_until_the_google_client_exists" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      length(cloudflare_zero_trust_access_identity_provider.google_workspace) == 0,
+      length(cloudflare_zero_trust_access_identity_provider.one_time_pin) == 1,
+    ])
+    error_message = "without the Google client in OpenBao the edge keeps the one-time PIN, so the host never opens without a sign-in"
+  }
+}
+
+run "people_sign_in_with_google_workspace_once_the_client_exists" {
+  command = plan
+
+  variables {
+    unfold_staging_google_client_id     = "1234567890-mock.apps.googleusercontent.com"
+    unfold_staging_google_client_secret = "mock-google-client-secret"
+  }
+
+  assert {
+    condition = alltrue([
+      cloudflare_zero_trust_access_identity_provider.google_workspace["unfold-staging"].type == "google-apps",
+      cloudflare_zero_trust_access_identity_provider.google_workspace["unfold-staging"].config.apps_domain == "webgrip.nl",
+      length(cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].allowed_idps) == 1,
+      cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].auto_redirect_to_identity == true,
+    ])
+    error_message = "with the Google client, staging offers Google Workspace for the owners' domain alone and redirects to it, so a person signs in once"
+  }
+}
+
 run "the_edge_refuses_to_open_without_anyone_allowed_in" {
   command = plan
 

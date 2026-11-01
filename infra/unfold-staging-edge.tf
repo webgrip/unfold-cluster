@@ -56,8 +56,23 @@ variable "unfold_staging_access_emails" {
   }
 }
 
+variable "unfold_staging_google_client_id" {
+  description = "Client id of the Google OAuth client people sign in to Unfold staging with, through Cloudflare Access. A person makes the client once in Google Cloud and keeps it in OpenBao secret/unfold-main/staging/google-oidc (client-id); the infra workflow reads it per run (docs/runbooks/unfold-staging-edge.md). Empty keeps the one-time PIN."
+  type        = string
+  default     = ""
+}
+
+variable "unfold_staging_google_client_secret" {
+  description = "Client secret of that Google OAuth client, from OpenBao secret/unfold-main/staging/google-oidc (client-secret). Empty keeps the one-time PIN."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 locals {
   unfold_staging_edge = var.unfold_staging_edge_enabled ? toset(["unfold-staging"]) : toset([])
+
+  unfold_staging_google = var.unfold_staging_google_client_id != "" && nonsensitive(var.unfold_staging_google_client_secret != "") ? local.unfold_staging_edge : toset([])
 
   unfold_staging_origins = {
     webhooks = "http://ploeg.unfold-staging.svc.cluster.local:8080"
@@ -160,6 +175,19 @@ resource "cloudflare_zero_trust_access_identity_provider" "one_time_pin" {
   config     = {}
 }
 
+resource "cloudflare_zero_trust_access_identity_provider" "google_workspace" {
+  for_each = local.unfold_staging_google
+
+  account_id = var.cloudflare_account_id
+  name       = "Google Workspace"
+  type       = "google-apps"
+  config = {
+    apps_domain   = var.unfold_staging_access_email_domains[0]
+    client_id     = var.unfold_staging_google_client_id
+    client_secret = var.unfold_staging_google_client_secret
+  }
+}
+
 resource "cloudflare_zero_trust_access_policy" "unfold_staging_people" {
   for_each = local.unfold_staging_edge
 
@@ -191,7 +219,7 @@ resource "cloudflare_zero_trust_access_application" "unfold_staging" {
   domain                     = var.unfold_staging_hostname
   destinations               = [{ type = "public", uri = var.unfold_staging_hostname }]
   session_duration           = local.unfold_staging_access_session
-  allowed_idps               = [cloudflare_zero_trust_access_identity_provider.one_time_pin[each.key].id]
+  allowed_idps               = contains(local.unfold_staging_google, each.key) ? [cloudflare_zero_trust_access_identity_provider.google_workspace[each.key].id] : [cloudflare_zero_trust_access_identity_provider.one_time_pin[each.key].id]
   auto_redirect_to_identity  = true
   app_launcher_visible       = false
   http_only_cookie_attribute = true

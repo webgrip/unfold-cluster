@@ -103,6 +103,16 @@ jobs:
             TF_VAR_cloudflare_account_id=secret/data/cloudflare/unfold-tunnel#account-id
             TF_VAR_cloudflare_zone_id_unfoldhq=secret/data/cloudflare/unfold-tunnel#zone-id
 
+      - name: Read the Google client people sign in to Unfold staging with from OpenBao
+        if: vars.UNFOLD_STAGING_EDGE != 'disabled'
+        continue-on-error: true
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@1998bc1c507e5f35e88aea7898a598a92488bb2a # v3.4.0
+        with:
+          role: ci-unfold-cluster
+          secrets: |
+            TF_VAR_unfold_staging_google_client_id=secret/data/unfold-main/staging/google-oidc#client-id
+            TF_VAR_unfold_staging_google_client_secret=secret/data/unfold-main/staging/google-oidc#client-secret
+
       - name: Declare the staging edge once its credentials exist
         working-directory: .
         run: |

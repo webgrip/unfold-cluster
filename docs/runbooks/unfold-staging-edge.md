@@ -14,7 +14,7 @@ browser, forge or tracker
   ▼
 Cloudflare edge: TLS, then Access
   │  /webhooks/*  → Access application "Unfold staging webhooks", bypass for everyone
-  │  everything else → Access application "Unfold staging", one-time PIN, listed addresses only, 8 h session
+  │  everything else → Access application "Unfold staging", Google Workspace (or a one-time PIN until the Google client exists), listed addresses only, 8 h session
   ▼
 tunnel unfold-staging (remotely managed; the routes live in OpenTofu)
   │  ^/webhooks/  → http://ploeg.unfold-staging.svc.cluster.local:8080   ploegd checks each webhook's HMAC
@@ -55,8 +55,35 @@ a notice, so infrastructure runs never wait on the minter. Set the repository va
 workflow, so a throwaway cluster never takes the staging hostname or a second tunnel.
 
 Access lets in anyone with an address in `unfold_staging_access_email_domains` (default
-`webgrip.nl`) who can receive the one-time PIN, plus any address in the optional repository
-variable `UNFOLD_STAGING_ACCESS_EMAILS` (a JSON list).
+`webgrip.nl`), plus any address in the optional repository variable `UNFOLD_STAGING_ACCESS_EMAILS`
+(a JSON list). They sign in with Google Workspace once its client is in OpenBao, and with a one-time
+PIN until then.
+
+### Sign in with Google Workspace
+
+People sign in with their Google Workspace account, through one Google OAuth client. Google offers
+no API to create an OAuth client for a web application, so a person makes it once; everything after
+that is code. Customers will sign in through Unfold's own identity broker instead
+([customer environments](https://forgejo.webgrip.dev/webgrip/unfold/src/branch/development/docs/concepts/customer-environments.md)),
+which can reuse this client to federate the Webgrip staff.
+
+1. In the Google Cloud project that holds the Workspace's internal OAuth consent screen: APIs &
+   Services → Credentials → Create credentials → OAuth client ID → Web application, named
+   `Unfold staging`, with two authorised redirect URIs:
+   `https://<team name>.cloudflareaccess.com/cdn-cgi/access/callback` (the team name is under Zero
+   Trust → Settings) and `https://staging-app.unfoldhq.dev/api/auth/oidc/callback` (for Unfold's own
+   sign-in).
+2. From a homelab-cluster checkout, store both values without echoing them:
+   `just secret-set unfold-main/staging/google-oidc client-id` and
+   `just secret-set unfold-main/staging/google-oidc client-secret`.
+3. OpenBao's role `ci-unfold-cluster` reads `secret/data/unfold-main/staging/google-oidc`
+   (homelab-cluster, `kubernetes/apps/security/openbao/bootstrap/ci-unfold-cluster.hcl`).
+4. Run `infra` plan-only: one identity provider `Google Workspace` to add and the application
+   `Unfold staging` to change. Apply with its digest.
+
+The application then offers Google Workspace alone and redirects to it, so a person signs in once.
+The one-time PIN identity provider stays declared: removing the client from OpenBao and applying
+brings the PIN back. `infra/tests/unfold_staging_edge.tftest.hcl` pins both states.
 
 ### The one step in Cloudflare's dashboard
 
@@ -88,7 +115,7 @@ to the configuration in a pull request, apply, then remove the block.
 
 ## Checks after an apply
 
-* `https://staging-app.unfoldhq.dev/` asks for an Access one-time PIN, and only an allowed domain or address gets one.
+* `https://staging-app.unfoldhq.dev/` redirects to Google (or asks for a one-time PIN before the Google client exists), and only an allowed domain or address gets in.
 * `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja`
   answers 401 from ploegd, not an Access redirect.
 * `curl -sS -o /dev/null -w '%{http_code}' -H 'Host: other.unfoldhq.dev' …` through the tunnel answers 404.
