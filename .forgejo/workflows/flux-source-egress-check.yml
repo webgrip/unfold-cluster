@@ -18,11 +18,9 @@ on:
 
 jobs:
   check:
-    runs-on: docker
-    container:
-      image: harbor.webgrip.dev/webgrip/infra-runner:0.2.0@sha256:c0703b8eb5a037ab3d0d2260a3c2aa13e09de4c4007da04504d6e01801a7fee7
+    runs-on: unfold-check
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Every Flux source host is named by source-controller's egress policy, and the check catches a missing one
         run: ./scripts/check-flux-source-egress.sh --mutation-test
