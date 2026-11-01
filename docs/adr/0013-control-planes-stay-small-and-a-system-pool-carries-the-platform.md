@@ -129,3 +129,12 @@ PriorityClasses, disruption budgets and spread follow [Capacity and scale](../ar
   keeps each CRD's schema and handlers in memory whether or not anything uses it. The larger cut,
   Kyverno's deprecated ClusterPolicy group (about 1.4 MB), is not possible: Kyverno 1.19.2 does not
   start without it. The finished kube-proxy removal Job left with them.
+* 2026-11-01: the control planes were at 97 to 103% of their memory. Of External Secrets, only the
+  controller stays in the recovery set, because it is the one pod that reads OpenBao and only
+  `tag:cp` may open the gateway's 8200. The webhook (now one replica, no disruption budget, which
+  on one replica would block every drain) and the cert controller, about 120 MiB together, prefer
+  the system pool and keep the control planes as a fallback: required affinity to either, both
+  tolerations. Checked on a throwaway kind cluster with a tainted system node: the controller stayed
+  on the control plane, the webhook refused an invalid ExternalSecret from the system node, a drain
+  moved both pods to the control plane where ExternalSecrets kept being admitted and synced, and a
+  rollout after the uncordon brought them back, with no restarts or errors.

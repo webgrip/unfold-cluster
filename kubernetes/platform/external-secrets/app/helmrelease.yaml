@@ -33,13 +33,12 @@ spec:
       serviceAccountTokenCreate: false
       aggregateToEdit: false
       aggregateToAdmin: false
-    global:
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
-      tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     image:
       # renovate: datasource=docker depName=ghcr.io/external-secrets/external-secrets
       tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
@@ -52,19 +51,35 @@ spec:
         memory: 256Mi
         ephemeral-storage: 256Mi
     webhook:
-      replicaCount: 2
-      podDisruptionBudget:
-        enabled: true
-        minAvailable: 1
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: external-secrets-webhook
-          matchLabelKeys:
-            - pod-template-hash
+      replicaCount: 1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       image:
         # renovate: datasource=docker depName=ghcr.io/external-secrets/external-secrets
         tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
@@ -77,6 +92,34 @@ spec:
           memory: 128Mi
           ephemeral-storage: 256Mi
     certController:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.webgrip.io/pool
+                    operator: In
+                    values:
+                      - system
+      tolerations:
+        - key: node.webgrip.io/pool
+          operator: Equal
+          value: system
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       image:
         # renovate: datasource=docker depName=ghcr.io/external-secrets/external-secrets
         tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b

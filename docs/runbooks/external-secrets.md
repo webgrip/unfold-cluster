@@ -9,7 +9,8 @@ homelab one, and moving to the in-cluster OpenBao later only changes the store.
 
 | Piece | Where | Owner |
 | --- | --- | --- |
-| ESO controller, webhook, cert controller | `external-secrets`, on the control planes (recovery set) | Flux Kustomization `external-secrets` |
+| ESO controller | `external-secrets`, on the control planes (recovery set) | Flux Kustomization `external-secrets` |
+| ESO webhook, cert controller | `external-secrets`, on the system pool, or a control plane while that node is gone | Flux Kustomization `external-secrets` |
 | ClusterSecretStore `openbao-homelab` | cluster-wide, usable only from namespaces labelled `external-secrets.webgrip.io/openbao-homelab: allowed` | Flux Kustomization `external-secrets-stores` |
 | The homelab gateway, `unfold-gateway.webgrip.dev:8200` | forwards to the homelab OpenBao over the tailnet | homelab-cluster `kubernetes/apps/observability/unfold/`; see [observability](../observability.md) |
 | JWT auth mount `jwt-unfold-main`, role `unfold-main-external-secrets`, policy `unfold-main-reader` | homelab OpenBao | homelab-cluster `kubernetes/apps/security/openbao/bootstrap` |
@@ -36,7 +37,7 @@ switched off.
 
 The homelab OpenBao is reachable only on the homelab LAN. The homelab gateway joins this cluster's
 tailnet as `tag:homelab-gateway` and forwards its port 8200 to that OpenBao; the Headscale policy lets
-only the control planes (`tag:cp`), where the chart pins every External Secrets pod, and the admins
+only the control planes (`tag:cp`), where the chart pins the External Secrets controller, and the admins
 open it; the workers, which run untrusted CI jobs and Runs, cannot
 ([node roles](infra-workflow.md#node-roles-on-the-tailnet)). The store's server is
 `http://unfold-gateway.webgrip.dev:8200`, a DNS-only record that the homelab publishes with the
@@ -93,6 +94,22 @@ ClusterPushSecret and ClusterGenerator are off, with their controllers, because 
 sits in each control plane's API server memory (ADR 0013). A manifest of one of those kinds fails
 Flux's dry run with `no matches for kind`; turning its `crds.create*` and `process*` values back on
 in `kubernetes/platform/external-secrets/app/helmrelease.yaml` comes first, in its own pull request.
+
+## Where the webhook and cert controller run
+
+Only the controller reads OpenBao, so only it needs `tag:cp`. The webhook, which checks every
+ExternalSecret and SecretStore Flux applies, and the cert controller, which keeps the webhook's
+certificate, prefer the system pool and may fall back to a control plane. Their ValidatingWebhook
+refuses writes while no webhook pod is ready (`failurePolicy: Fail`), so:
+
+* **The system node is drained** (a Talos upgrade): both pods are evicted and start on a control
+  plane within seconds; Flux retries anything refused in between.
+* **The system node dies:** Kubernetes evicts its pods after five minutes `NotReady`, then the same.
+  Secrets already in the cluster stay, and the controller keeps syncing them; only new or changed
+  ExternalSecrets wait.
+* **The node is back:** a preference never moves a running pod, so they stay on the control plane
+  until the next rollout (a Renovate update, or
+  `kubectl -n external-secrets rollout restart deploy/external-secrets-webhook deploy/external-secrets-cert-controller`).
 
 ## Checks
 

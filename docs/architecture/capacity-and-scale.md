@@ -158,7 +158,7 @@ At S3, losing one CPX32 leaves 14 GiB for 13.2 GiB of requests. It fits only bec
 
 | Pool | Server | Nodes | Label and taint | Tailnet tag | Carries |
 | --- | --- | --- | --- | --- | --- |
-| `cp` | CX23 (CPX22 replaces a lost one while CX is sold out) | 3, fixed | `node-role.kubernetes.io/control-plane:NoSchedule` (Talos) | `tag:cp` | etcd, the API server, controller manager and scheduler; the recovery set: Flux, cilium-operator, the cloud controller, the CSI controller, CoreDNS, External Secrets, the Kyverno admission controller; the etcd backup |
+| `cp` | CX23 (CPX22 replaces a lost one while CX is sold out) | 3, fixed | `node-role.kubernetes.io/control-plane:NoSchedule` (Talos) | `tag:cp` | etcd, the API server, controller manager and scheduler; the recovery set: Flux, cilium-operator, the cloud controller, the CSI controller, CoreDNS, the External Secrets controller, the Kyverno admission controller; the etcd backup |
 | `system` | CPX32, 4 vCPU and 8 GB, fsn1 | 1, fixed, S1 to S2 | `node.webgrip.io/pool=system`, taint `system:NoSchedule` | `tag:system`: 8427, and 9150 for KEDA | observability (Alloy gateway, vmsingle, vlsingle, VictoriaTraces, vmalert, Alertmanager, Grafana, kube-state-metrics), KEDA, the CNPG operator and barman plugin, cert-manager, the cluster-autoscaler, Zot, Trivy, the Kyverno reports controller, hubble-relay, the package cache |
 | `unfold` (hub) | CX33, then + 2 × CPX32 | 1 through S2, 3 from S3 | `node.webgrip.io/pool=unfold`, taint `unfold:NoSchedule` | `tag:hub` | Unfold, ploegd, ploeg-mcp, the agent-sandbox controller, cloudflared, LiteLLM and Valkey, `ploeg-db`, `litellm-db`; from S3 OpenBao and NATS, and the system pool's workloads |
 | `ci` | CPX42, nbg1 | 0 to 1, autoscaled | `node.webgrip.io/pool=ci`, `runtime.webgrip.io/gvisor=true`, taint `ci:NoSchedule` | none (private network only, ADR 0004) | CI jobs under `gvisor` |
@@ -198,7 +198,7 @@ The classes live in `kubernetes/platform/priority-classes`. Tetragon is the exce
 | --- | --- | --- | --- |
 | CoreDNS | 2 | `maxUnavailable: 1` | `topologySpreadConstraints` on `kubernetes.io/hostname`, `maxSkew: 1`, `DoNotSchedule` across the control planes |
 | Kyverno admission controller | 2 | `minAvailable: 1` (exists) | the same |
-| External Secrets webhook | 2 | `minAvailable: 1` | the same |
+| External Secrets webhook | 1 | none | on the system pool, falling back to a control plane when that node is gone (ADR 0013, 2026-11-01) |
 | cloudflared | 2 | `minAvailable: 1` | hostname spread over the hub from S3 |
 | `ploeg-db`, `litellm-db` | 1, then 3 at S3 | CNPG's own PDB (`enablePDB: true` from S3; off at one instance, where it would block every drain) | CNPG pod anti-affinity (on in the template), `required` from S3 |
 | LiteLLM | 1, then 2 at S3 | `minAvailable: 1` from S3 | hostname spread |
