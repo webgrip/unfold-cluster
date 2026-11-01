@@ -1,0 +1,22 @@
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: existing
+  namespace: tenant
+  labels:
+    app: demo
+  annotations:
+    wellhead.dev/origin: provided
+spec:
+  refreshInterval: 2h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao-homelab
+  target:
+    name: existing
+  data:
+    - secretKey: value
+      remoteRef:
+        key: unfold-main/demo
+        property: value

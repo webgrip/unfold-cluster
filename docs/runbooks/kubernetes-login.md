@@ -42,7 +42,7 @@ Authentik UI; the access plane reverts it.
 | Authentik group | Capability | ClusterRole here | May | May not |
 | --- | --- | --- | --- | --- |
 | `unfold-viewers` | `unfold-cluster-view` | `unfold-viewer` | read every resource in every namespace except Secrets, plus nodes, CRDs, storage, admission policies, RBAC and Cilium policies | change anything |
-| `unfold-admins` | `unfold-cluster-operate` | `unfold-operator` | everything a viewer may, plus delete pods, evict pods and cordon or drain nodes | read Secrets; `exec`, `attach`, `port-forward`; change any spec, Flux object or RBAC |
+| `unfold-admins` | `unfold-cluster-operate` | `unfold-operator` | everything a viewer may, plus delete pods, evict pods, cordon or drain nodes, and set `force-sync` on an ExternalSecret (`operator-externalsecret-sync` refuses any other change to it) | read Secrets; `exec`, `attach`, `port-forward`; change any spec, Flux object or RBAC |
 
 Changes to what runs go through Git. Patching a Flux object is left out on purpose: a patched
 Kustomization applies anything with Flux's own rights. `exec` is left out because a shell in a
