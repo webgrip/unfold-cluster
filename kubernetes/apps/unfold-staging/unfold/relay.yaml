@@ -61,7 +61,6 @@ spec:
           type: RuntimeDefault
       containers:
         - name: envoy
-          # renovate: datasource=docker depName=docker.io/envoyproxy/envoy
           image: docker.io/envoyproxy/envoy:distroless-v1.40.1@sha256:6cf314259a0adde2386baafeeeb041ed37a30f6bdd935cff36cd38a1e15acab1
           args:
             - -c

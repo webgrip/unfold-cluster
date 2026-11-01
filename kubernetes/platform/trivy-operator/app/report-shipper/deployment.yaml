@@ -56,7 +56,6 @@ spec:
           effect: NoSchedule
       containers:
         - name: vector
-          # renovate: datasource=docker depName=docker.io/timberio/vector
           image: docker.io/timberio/vector:0.60.0-distroless-libc@sha256:a9ed9a4710bdc2efa66e94c1e8edc7b439709e6e50079f1e1b2b1bf479d387da
           args:
             - --config-dir

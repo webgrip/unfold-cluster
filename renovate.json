@@ -306,6 +306,37 @@
       "prBodyNotes": [
         "Update `vector_sha256_linux_amd64_musl` from the release's `vector-<version>-SHA256SUMS`, and keep the version equal to the `docker.io/timberio/vector` image in `kubernetes/platform/observability/vector/daemonset.yaml`."
       ]
+    },
+    {
+      "description": "The gitops preset widens helm-values to every YAML file, and a preset's managerFilePatterns cannot be narrowed here. In workflows it duplicates what github-actions already reads and looks up the CI smoke image in the in-cluster zot, which Renovate cannot resolve ('Error obtaining docker token'). In talos/ it duplicates the metal image managers above.",
+      "matchManagers": [
+        "helm-values"
+      ],
+      "matchFileNames": [
+        ".forgejo/**",
+        "talos/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The gitops preset's CNPG manager reads every `reference: name:tag` line, so the Kubernetes static pod references in talos/talenv.yaml (`reference: v1.37.1@sha256:...`) become a package named `v1.37.1@sha256`. The `# renovate:` line above each of them is what updates them.",
+      "matchFileNames": [
+        "talos/talenv.yaml"
+      ],
+      "matchDepNames": [
+        "/@sha256$/"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "ghcr.io/webgrip/agent-runner is private and Renovate's GitHub App token cannot read it. webgrip/infrastructure pushes the same image, with the same digests, to Harbor, where Renovate has a robot account; homelab-cluster tracks it there. The manifest keeps the ghcr.io path.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/webgrip/agent-runner"
+      ],
+      "overridePackageName": "harbor.webgrip.dev/webgrip/agent-runner"
     }
   ]
 }

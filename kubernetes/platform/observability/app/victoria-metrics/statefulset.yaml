@@ -33,7 +33,6 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vmsingle
-          # renovate: datasource=docker depName=docker.io/victoriametrics/victoria-metrics
           image: docker.io/victoriametrics/victoria-metrics:v1.148.0@sha256:407013e902f9a0ba1d4b2d4c077c47bbaf917c893c52ff39b19efe83a654afda
           args:
             - -httpListenAddr=:8428
