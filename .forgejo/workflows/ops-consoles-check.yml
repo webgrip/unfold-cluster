@@ -20,9 +20,11 @@ on:
 
 jobs:
   checks:
-    runs-on: unfold-check
+    runs-on: docker
+    container:
+      image: harbor.webgrip.dev/dockerhub/library/node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
     steps:
-      - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Check the vendored Gateway API CRDs against the pinned release and prove the Authentik relay opens Authentik and nothing else
         run: ./scripts/test-ops-consoles.sh --mutation-test
