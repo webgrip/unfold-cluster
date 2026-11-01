@@ -84,3 +84,7 @@ Ignore`. Third-party images stay as they are: digest-pinned under `pinned-approv
   `policies.kyverno.io` group stays whole: chart 3.9.2 documents a switch per CRD there but does
   not wire them. The CRD migration hook lists only the CRDs that remain, since it fails on a
   missing one.
+* 2026-11-01: [ADR 0018](0018-talos-verifies-webgrip-image-signatures-at-pull.md) has every node
+  verify the same images with the same key when it pulls them, and refuse an unsigned one. Kyverno
+  stays until that check has run on every node for a week; the pull request that removes it
+  supersedes this record.

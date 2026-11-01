@@ -1,4 +1,4 @@
-# Image signatures: Kyverno checks webgrip images
+# Image signatures: Talos and Kyverno check webgrip images
 
 Every image we build must carry a cosign signature from the estate's signing key before it runs on
 Unfold. The native admission policies cannot read a registry, so Kyverno does this one job. Why
@@ -6,7 +6,35 @@ Kyverno and not policy-controller, Ratify or Connaisseur: [ADR 0011](../adr/0011
 Everything is in `kubernetes/platform/kyverno`, reconciled by the Flux Kustomizations `kyverno`
 (the chart) and `kyverno-policies` (the policies, after the chart's CRDs exist).
 
-## What is checked
+## Talos refuses unsigned webgrip images at pull
+
+Every node carries an `ImageVerificationConfig` ([ADR 0018](../adr/0018-talos-verifies-webgrip-image-signatures-at-pull.md),
+`infra/image-verification.tf`, applied by the `infra` workflow). When a node pulls an image, Talos
+takes the first rule that matches its registry and repository:
+
+| Rule | Images | Effect |
+| --- | --- | --- |
+| `skip` | `forgejo.webgrip.dev/webgrip/infra-runner` | pulled unchecked until its release job signs it |
+| `publicKey` | `ghcr.io/webgrip/*`, `forgejo.webgrip.dev/webgrip/*`, and one path level deeper | pulled only with a valid signature from `infra/keys/cosign-webgrip.pub` |
+
+Anything else pulls as before. Talos checks only when it pulls: an image already on the node is not
+checked again. There is no audit mode.
+
+A refused image leaves the pod in `ErrImagePull`, with the event `failed to verify image`; after 10
+minutes the homelab alert `UnfoldWebgripImageNotPulled` fires. To check by hand from a device on
+the tailnet:
+
+```sh
+talosctl -n <node> image pull --namespace cri <image>@<digest>
+cosign verify --key infra/keys/cosign-webgrip.pub --insecure-ignore-tlog <image>@<digest>
+```
+
+An unsigned release is fixed by signing it in its release job, never by a `skip` rule. A `skip`
+rule names one repository exactly and sits before the patterns; the infra tests refuse a wildcard.
+
+Kyverno still runs the admission check below until it is removed (ADR 0018).
+
+## What Kyverno checks
 
 | Policy | Images | Registry access |
 | --- | --- | --- |
@@ -57,7 +85,11 @@ In one pull request, once all of these hold:
 
 The homelab rotates `cosign-webgrip` by adding a Transit key version
 (homelab runbook `cosign-transit-key-rotation.md`). The public key here is in git, like Flux's
-trusted signers. Before old signatures stop being trusted:
+trusted signers, twice while Kyverno runs: in `infra/keys/cosign-webgrip.pub` for Talos and in the
+Kyverno policies. Talos takes the first matching rule and each rule holds one key, so it cannot
+trust two keys for one pattern: sign every webgrip digest that runs or may be rolled back to with
+the new key as well (cosign keeps both signatures), then replace the key in
+`infra/keys/cosign-webgrip.pub` and run an `infra` apply. Before old signatures stop being trusted:
 
 1. Read the new public key: `kubectl -n security get configmap cosign-webgrip-pub -o jsonpath='{.data.cosign\.pub}'`
    on the homelab (it lists every trusted version, newest first).

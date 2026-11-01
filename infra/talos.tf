@@ -72,7 +72,7 @@ locals {
       kind       = "KubeFlannelCNIConfig"
       "$patch"   = "delete"
     }),
-  ], local.registry_mirror_patches)
+  ], local.registry_mirror_patches, [local.image_verification_patch])
 
   control_plane_patches = concat([
     yamlencode({

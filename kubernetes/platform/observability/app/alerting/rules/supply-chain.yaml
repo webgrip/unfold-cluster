@@ -62,6 +62,21 @@ groups:
         annotations:
           summary: "The Trivy operator on Unfold has not answered its metrics scrape for 30 minutes"
           description: "Without it no image is scanned and the vulnerability alerts above cannot fire. Look at the trivy-operator HelmRelease and pod in trivy-system."
+      - alert: UnfoldWebgripImageNotPulled
+        expr: |
+          max by (namespace, pod, container, image_spec) (
+            kube_pod_container_status_waiting_reason{cluster="unfold", reason=~"ErrImagePull|ImagePullBackOff"}
+            * on (cluster, namespace, pod, container) group_left (image_spec)
+            kube_pod_container_info{cluster="unfold", image_spec=~"(ghcr\\.io|forgejo\\.webgrip\\.dev)/webgrip/.+"}
+          ) > 0
+        for: 10m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "A webgrip image cannot be pulled in {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }})"
+          description: "Every node verifies webgrip images against the cosign-webgrip key when it pulls them (Talos ImageVerificationConfig, infra/image-verification.tf) and refuses one without a valid signature. The pod's events say which: 'failed to verify image' is a missing or wrong signature; anything else is the registry, the tag or the pull credential. Image: {{ $labels.image_spec }}. Runbook: unfold-cluster docs/runbooks/image-signatures.md."
       - alert: UnfoldUnsignedWebgripImage
         expr: |
           sum by (policy_name, resource_namespace) (
