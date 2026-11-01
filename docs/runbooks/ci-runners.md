@@ -172,8 +172,9 @@ host, such as a package registry, adds its own egress rule and its `matchName` i
 `kubernetes/platform/ci-runners/app/networkpolicy.yaml`, with the reason in the rule's description.
 The `unfold` repository's checks, release-train gate and Ploeg pin check run on `unfold-ci` and
 install their toolchain on every run, so the policy `forgejo-runner-toolchains` opens the hosts
-they install from: GitHub releases, mise, Node, npm, Go and its module proxy, Helm, PyPI and the
-Ploeg contract on `ghcr.io` ([external dependencies](../architecture/external-dependencies.md) E48).
+they install from: GitHub releases, mise, Node, npm, Go and its module proxy, Helm, PyPI, the
+Ploeg contract on `ghcr.io`, and Sigstore's TUF root and Rekor, which mise-action needs to verify
+mise's signature (without them it fails with `error refreshing TUF metadata`) ([external dependencies](../architecture/external-dependencies.md) E48).
 KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on the
 internet.
 
