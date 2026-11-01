@@ -337,6 +337,20 @@
         "ghcr.io/webgrip/agent-runner"
       ],
       "overridePackageName": "harbor.webgrip.dev/webgrip/agent-runner"
+    },
+    {
+      "description": "The Unfold chart follows 0.x release candidates. Docker versioning reads everything after '-' as a variant suffix and offers only tags with the same suffix, so 0.4.0-rc.127 was never an update of 0.4.0-rc.119; semver versioning orders the rc numbers. The update opens its pull request without a dashboard tick and never merges itself: a release can need new values or secrets in this cluster.",
+      "matchFileNames": [
+        "kubernetes/apps/unfold-staging/unfold/ocirepository.yaml"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/webgrip/charts/unfold"
+      ],
+      "versioning": "semver",
+      "allowedVersions": "/^0\\./",
+      "ignoreUnstable": false,
+      "dependencyDashboardApproval": false,
+      "automerge": false
     }
   ]
 }
