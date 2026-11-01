@@ -31,7 +31,7 @@ metadata:
   labels:
     app.kubernetes.io/name: cloudflared
 spec:
-  replicas: 0
+  replicas: 2
   revisionHistoryLimit: 2
   selector:
     matchLabels:
