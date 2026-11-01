@@ -170,6 +170,10 @@ that selects a pod, and a DNS rule without a name filter on the same port lets e
 so the cluster-wide `default-dns` policy leaves the `ci` namespace out. A pipeline that needs another
 host, such as a package registry, adds its own egress rule and its `matchName` in the DNS rule to
 `kubernetes/platform/ci-runners/app/networkpolicy.yaml`, with the reason in the rule's description.
+The `unfold` repository's checks, release-train gate and Ploeg pin check run on `unfold-ci` and
+install their toolchain on every run, so the policy `forgejo-runner-toolchains` opens the hosts
+they install from: GitHub releases, mise, Node, npm, Go and its module proxy, Helm, PyPI and the
+Ploeg contract on `ghcr.io` ([external dependencies](../architecture/external-dependencies.md) E48).
 KEDA's operator reaches `unfold-gateway.webgrip.dev:9150` and the API server, and nothing on the
 internet.
 
