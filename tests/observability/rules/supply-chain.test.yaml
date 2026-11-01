@@ -108,3 +108,32 @@ tests:
       - eval_time: 45m
         alertname: UnfoldUnsignedWebgripImage
         exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_waiting_reason{cluster="unfold",namespace="unfold-staging",pod="unfold-0",container="unfold",reason="ImagePullBackOff"}'
+        values: "1x20"
+      - series: 'kube_pod_container_info{cluster="unfold",namespace="unfold-staging",pod="unfold-0",container="unfold",image_spec="ghcr.io/webgrip/unfold@sha256:570a"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UnfoldWebgripImageNotPulled
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, namespace: unfold-staging, pod: unfold-0, container: unfold, image_spec: "ghcr.io/webgrip/unfold@sha256:570a"}
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_waiting_reason{cluster="unfold",namespace="unfold-staging",pod="litellm-0",container="litellm",reason="ImagePullBackOff"}'
+        values: "1x20"
+      - series: 'kube_pod_container_info{cluster="unfold",namespace="unfold-staging",pod="litellm-0",container="litellm",image_spec="ghcr.io/berriai/litellm@sha256:1234"}'
+        values: "1x20"
+      - series: 'kube_pod_container_status_waiting_reason{cluster="unfold",namespace="unfold-staging",pod="unfold-0",container="unfold",reason="ContainerCreating"}'
+        values: "1x20"
+      - series: 'kube_pod_container_info{cluster="unfold",namespace="unfold-staging",pod="unfold-0",container="unfold",image_spec="ghcr.io/webgrip/unfold@sha256:c783"}'
+        values: "1x20"
+      - series: 'kube_pod_container_status_waiting_reason{cluster="unfold",namespace="ci",pod="check-1",container="job",reason="ErrImagePull"}'
+        values: "1x5 _x15"
+      - series: 'kube_pod_container_info{cluster="unfold",namespace="ci",pod="check-1",container="job",image_spec="forgejo.webgrip.dev/webgrip/infra-runner@sha256:c070"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UnfoldWebgripImageNotPulled
+        exp_alerts: []
