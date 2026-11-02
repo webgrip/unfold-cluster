@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Read the state, Hetzner and backup credentials from OpenBao
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@8e06dbdab4907dc97d43515eb9275eadc8ff9271 # v4.0.0
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@53e9bd2265f4f19eb5bc74593133d49e43841958 # v4.1.1
         with:
           role: ci-unfold-cluster
           secrets: |
@@ -95,7 +95,7 @@ jobs:
       - name: Read the minted Cloudflare credentials for Unfold staging's edge from OpenBao
         if: vars.UNFOLD_STAGING_EDGE != 'disabled'
         continue-on-error: true
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@8e06dbdab4907dc97d43515eb9275eadc8ff9271 # v4.0.0
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@53e9bd2265f4f19eb5bc74593133d49e43841958 # v4.1.1
         with:
           role: ci-unfold-cluster
           secrets: |
@@ -106,7 +106,7 @@ jobs:
       - name: Read the Google client people sign in to Unfold staging with from OpenBao
         if: vars.UNFOLD_STAGING_EDGE != 'disabled'
         continue-on-error: true
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@8e06dbdab4907dc97d43515eb9275eadc8ff9271 # v4.0.0
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@53e9bd2265f4f19eb5bc74593133d49e43841958 # v4.1.1
         with:
           role: ci-unfold-cluster
           secrets: |
@@ -289,7 +289,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Read the state and Hetzner credentials from OpenBao
-        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@8e06dbdab4907dc97d43515eb9275eadc8ff9271 # v4.0.0
+        uses: https://forgejo.webgrip.dev/webgrip/workflows/.forgejo/composite-actions/openbao-read@53e9bd2265f4f19eb5bc74593133d49e43841958 # v4.1.1
         with:
           role: ci-unfold-cluster
           secrets: |
