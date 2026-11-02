@@ -5,7 +5,7 @@ metadata:
   name: forgejo-runner-toolchains
   namespace: ci
 spec:
-  description: A CI job pod adds to the forgejo-runner policy the hosts the unfold repository's checks install their pinned toolchain and locked packages from, so those checks run here instead of queueing on the homelab. mise and mise-action download mise and the aqua tools from mise.jdx.dev, mise-versions.jdx.dev and GitHub releases (github.com, api.github.com and the release CDNs); Node from nodejs.org; npm and corepack's pnpm from registry.npmjs.org; Go from go.dev and dl.google.com with modules through proxy.golang.org, sum.golang.org and storage.googleapis.com; Helm from get.helm.sh; Sigstore's TUF root and transparency log (tuf-repo-cdn.sigstore.dev, rekor.sigstore.dev), against which mise-action and mise verify the signatures of what they download; uv's Python packages from pypi.org and files.pythonhosted.org; the pinned Ploeg contract bundle and chart from ghcr.io and pkg-containers.githubusercontent.com. Every package is pinned by lockfile or digest.
+  description: A CI job pod adds to the forgejo-runner policy the hosts the unfold repository's checks install their pinned toolchain and locked packages from, so those checks run here instead of queueing on the homelab. mise and mise-action download mise and the aqua tools from mise.jdx.dev, mise-versions.jdx.dev and GitHub releases (github.com, api.github.com and the release CDNs); Node from nodejs.org; npm and corepack's pnpm from registry.npmjs.org; Go from go.dev and dl.google.com with modules through proxy.golang.org, sum.golang.org and storage.googleapis.com; Helm from get.helm.sh; Sigstore's TUF root and transparency log (tuf-repo-cdn.sigstore.dev, rekor.sigstore.dev), against which mise-action and mise verify the signatures of what they download; uv's Python packages from pypi.org and files.pythonhosted.org; the pinned Ploeg contract bundle and chart from ghcr.io and pkg-containers.githubusercontent.com; the PostgreSQL binaries the managed-execution qualification starts through embedded-postgres, from Maven Central (repo1.maven.org), each checked against its published SHA-256. Every package is pinned by lockfile or digest.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: forgejo-runner
@@ -42,6 +42,7 @@ spec:
               - matchName: files.pythonhosted.org
               - matchName: ghcr.io
               - matchName: pkg-containers.githubusercontent.com
+              - matchName: repo1.maven.org
     - toFQDNs:
         - matchName: github.com
         - matchName: api.github.com
@@ -93,6 +94,12 @@ spec:
     - toFQDNs:
         - matchName: ghcr.io
         - matchName: pkg-containers.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: repo1.maven.org
       toPorts:
         - ports:
             - port: "443"
