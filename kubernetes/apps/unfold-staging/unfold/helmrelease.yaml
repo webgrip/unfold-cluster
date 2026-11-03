@@ -271,7 +271,7 @@ spec:
           node.webgrip.io/pool: unfold
         forgeTokenIsolation: proxy
         harnessOutputInLog: false
-        runnerImage: ghcr.io/webgrip/agent-runner:1.4.2@sha256:7e66896383de9ecf7b425896bfa33b3d7f46f30053fdcacd835bb5a20a5742b2
+        runnerImage: ghcr.io/webgrip/agent-runner:1.4.3@sha256:d7014b5b918368258007947e82ae75b00c3fdf0679eb1312ba45e9e79c90276e
         litellm:
           baseUrl: http://litellm.litellm-staging.svc.cluster.local:4000/v1
           adminUrl: http://litellm.litellm-staging.svc.cluster.local:4000
