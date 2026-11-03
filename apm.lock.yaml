@@ -4,8 +4,8 @@ dependencies:
 - repo_url: webgrip/agent-standards
   name: webgrip-baseline
   host: forgejo.webgrip.dev
-  resolved_commit: 52d2ce6a706bafd241999f2954eb10150bbae3dc
-  resolved_ref: v0.7.1
+  resolved_commit: a6cbfbaf41bf76aa94f5594abc0fe539ff385f65
+  resolved_ref: v0.7.2
   version: 0.0.0
   virtual_path: packages/baseline
   is_virtual: true
@@ -20,19 +20,19 @@ dependencies:
 - repo_url: webgrip/agent-standards
   name: webgrip-secrets
   host: forgejo.webgrip.dev
-  resolved_commit: 52d2ce6a706bafd241999f2954eb10150bbae3dc
-  resolved_ref: v0.7.1
+  resolved_commit: a6cbfbaf41bf76aa94f5594abc0fe539ff385f65
+  resolved_ref: v0.7.2
   version: 0.0.0
   virtual_path: packages/secrets
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:26c0427c46c54ac0622da0faad40780dd2aa4b37b1b1afbf66ed46d6d674c171
+  content_hash: sha256:9eeeedf8179a73423fcdc2cd8e1738d5009cdeb73cef87db4830ce2e82e8c5bf
 - repo_url: webgrip/ai-skills
   name: guard-secrets
   host: forgejo.webgrip.dev
-  resolved_commit: 02fc51e2cbd93d34679583595380254870381173
-  resolved_ref: guard-secrets-v1.0.7
-  version: 02fc51e
+  resolved_commit: 58d151dae181cb875cca39b50404ae31f4cc7f13
+  resolved_ref: guard-secrets-v1.1.0
+  version: 58d151d
   virtual_path: skills/guard-secrets
   is_virtual: true
   depth: 2
@@ -63,22 +63,22 @@ dependencies:
     .agents/skills/guard-secrets/.claude-plugin/plugin.json: sha256:eb1286fa35eb333cf74708d9c51cb62f819bf87cd33db785599e86dad3548a75
     .agents/skills/guard-secrets/CHANGELOG.md: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
     .agents/skills/guard-secrets/README.md: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
-    .agents/skills/guard-secrets/SKILL.md: sha256:487f67713fd3da4fe97d6b277d08f2be7010d0623c29a6fe16682f578f7bf300
+    .agents/skills/guard-secrets/SKILL.md: sha256:7367735a384c61637aade4f817415c9c79df6a6ce5129a5f9a521fb27211d800
     .agents/skills/guard-secrets/evals/evals.json: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
     .agents/skills/guard-secrets/hooks/hooks.json: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
-    .agents/skills/guard-secrets/scripts/guard_secrets.py: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
-    .agents/skills/guard-secrets/test.sh: sha256:209fa0d1edf658eeea3cd1d275af61d133da1d6648e3b46e5a569bb1ad52d638
-    .claude/hooks/guard-secrets/scripts/guard_secrets.py: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
+    .agents/skills/guard-secrets/scripts/guard_secrets.py: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
+    .agents/skills/guard-secrets/test.sh: sha256:b5555097b173bf932bc3c9b876f1bdbced34d104c23d309e3b5fdf80166df0c9
+    .claude/hooks/guard-secrets/scripts/guard_secrets.py: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
     .claude/skills/guard-secrets/.claude-plugin/plugin.json: sha256:eb1286fa35eb333cf74708d9c51cb62f819bf87cd33db785599e86dad3548a75
     .claude/skills/guard-secrets/CHANGELOG.md: sha256:36b6b74db992f2e5e8eaf4099443aa058a2338471be10e98055e8ce44d0b3a46
     .claude/skills/guard-secrets/README.md: sha256:839740649fd8dceb1c8a41ebabe319009a0ae13badc76acd3505bd090baffe19
-    .claude/skills/guard-secrets/SKILL.md: sha256:487f67713fd3da4fe97d6b277d08f2be7010d0623c29a6fe16682f578f7bf300
+    .claude/skills/guard-secrets/SKILL.md: sha256:7367735a384c61637aade4f817415c9c79df6a6ce5129a5f9a521fb27211d800
     .claude/skills/guard-secrets/evals/evals.json: sha256:15982cab206b9c4d4c713fb13b4ef245e8bf9d038b724a5547ff288c5e1ee05c
     .claude/skills/guard-secrets/hooks/hooks.json: sha256:bf9110355bb1cda59e34f71408333bb08103ce219f3aebb3c5c597c44290dfdc
-    .claude/skills/guard-secrets/scripts/guard_secrets.py: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
-    .claude/skills/guard-secrets/test.sh: sha256:209fa0d1edf658eeea3cd1d275af61d133da1d6648e3b46e5a569bb1ad52d638
-    .codex/hooks/guard-secrets/scripts/guard_secrets.py: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
-  content_hash: sha256:03a821ae62c5ec26f81da799164461919964ce53278cc72d3cb8343ecb3c37d3
+    .claude/skills/guard-secrets/scripts/guard_secrets.py: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
+    .claude/skills/guard-secrets/test.sh: sha256:b5555097b173bf932bc3c9b876f1bdbced34d104c23d309e3b5fdf80166df0c9
+    .codex/hooks/guard-secrets/scripts/guard_secrets.py: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
+  content_hash: sha256:15700620c0a99fa21d7f81b59215a9584e3543d270198ed7fe57cd43564e15e4
   declared_license: MIT
 - repo_url: webgrip/ai-skills
   name: secrets-levels
@@ -130,7 +130,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
+  content_hash: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
 - kind: project-relative
   target: claude
   value: .claude/rules/baseline.md
@@ -202,7 +202,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:487f67713fd3da4fe97d6b277d08f2be7010d0623c29a6fe16682f578f7bf300
+  content_hash: sha256:7367735a384c61637aade4f817415c9c79df6a6ce5129a5f9a521fb27211d800
 - kind: project-relative
   target: claude
   value: .claude/skills/guard-secrets/evals/evals.json
@@ -229,7 +229,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
+  content_hash: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
 - kind: project-relative
   target: claude
   value: .claude/skills/guard-secrets/test.sh
@@ -238,7 +238,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:209fa0d1edf658eeea3cd1d275af61d133da1d6648e3b46e5a569bb1ad52d638
+  content_hash: sha256:b5555097b173bf932bc3c9b876f1bdbced34d104c23d309e3b5fdf80166df0c9
 - kind: project-relative
   target: claude
   value: .claude/skills/secrets-levels
@@ -346,7 +346,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:487f67713fd3da4fe97d6b277d08f2be7010d0623c29a6fe16682f578f7bf300
+  content_hash: sha256:7367735a384c61637aade4f817415c9c79df6a6ce5129a5f9a521fb27211d800
 - kind: project-relative
   target: codex
   value: .agents/skills/guard-secrets/evals/evals.json
@@ -373,7 +373,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
+  content_hash: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
 - kind: project-relative
   target: codex
   value: .agents/skills/guard-secrets/test.sh
@@ -382,7 +382,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:209fa0d1edf658eeea3cd1d275af61d133da1d6648e3b46e5a569bb1ad52d638
+  content_hash: sha256:b5555097b173bf932bc3c9b876f1bdbced34d104c23d309e3b5fdf80166df0c9
 - kind: project-relative
   target: codex
   value: .agents/skills/secrets-levels
@@ -454,7 +454,7 @@ deployments:
   owners:
   - forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
   active_owner: forgejo.webgrip.dev/webgrip/ai-skills/skills/guard-secrets
-  content_hash: sha256:7ee6ffb59b76129c5ba8c6397c96c5ede33ee4ab1f2a20997d0249b20dfca552
+  content_hash: sha256:2ad09dea1ffacd145b4a8dd8def1913f7f066505663ef47a9d9f178cd62bc6df
 local_deployed_files:
 - .claude/rules/flux-admission-order.md
 local_deployed_file_hashes:
