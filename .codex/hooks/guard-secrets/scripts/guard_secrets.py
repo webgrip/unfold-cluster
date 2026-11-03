@@ -4,7 +4,8 @@
 Hard-blocks plaintext-secret leaks before an Edit/Write/MultiEdit runs:
   1. never create decrypted secret artifacts (*.decrypted*, *decrypted~*)
   2. a *.sops.yaml / *.sops.yml write must contain SOPS ciphertext (ENC[)
-  3. best-effort plaintext-secret scan via gitleaks, on PATH or through mise (warns and continues when absent)
+  3. best-effort plaintext-secret scan via gitleaks, on PATH or through mise (warns and continues when absent),
+     honouring the repository's own .gitleaks.toml so its allowlist (test fixtures, published test vectors) applies
 
 Blocking = exit 2 with a reason on stderr (Claude Code's deny contract, the
 analogue of the opencode plugin's throw). Any other error path exits 0
@@ -33,6 +34,30 @@ def gitleaks_path():
     if resolved.returncode != 0:
         return None
     return resolved.stdout.strip() or None
+
+
+def repo_config(path: str):
+    """The repository root above `path` and its .gitleaks.toml, if any."""
+    directory = os.path.dirname(os.path.abspath(path))
+    while True:
+        config = os.path.join(directory, ".gitleaks.toml")
+        if os.path.isfile(config):
+            return directory, config
+        if os.path.exists(os.path.join(directory, ".git")):
+            return directory, None
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return None, None
+        directory = parent
+
+
+def scan_target(path: str, root):
+    """Where the content is written for scanning: its path inside the repository, so path allowlists match."""
+    if root:
+        relative = os.path.relpath(os.path.abspath(path), root)
+        if not relative.startswith(".."):
+            return relative
+    return os.path.basename(path) or "content.txt"
 
 
 def deny(msg: str) -> None:
@@ -75,24 +100,21 @@ def main() -> None:
     if content and not gitleaks:
         print("guard-secrets: gitleaks not on PATH or in mise; plaintext scan skipped. Pin it in .mise.toml.", file=sys.stderr)
     if gitleaks:
-        tmp = None
+        root, config = repo_config(path)
+        scratch = tempfile.mkdtemp(prefix="guard-secrets-")
         try:
-            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            target = os.path.join(scratch, scan_target(path, root))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as fh:
                 fh.write(content)
-                tmp = fh.name
-            scan = subprocess.run(
-                [gitleaks, "detect", "--no-banner", "--no-git", "--redact", "-s", tmp],
-                capture_output=True,
-            )
+            command = [gitleaks, "detect", "--no-banner", "--no-git", "--redact", "-s", scratch]
+            if config:
+                command += ["--config", config]
+            scan = subprocess.run(command, capture_output=True)
             if scan.returncode == 1:
                 deny(f"gitleaks flagged a likely plaintext secret in {base}. Use a SOPS secret + Helm value wiring (existingSecret/envFromSecret).")
         finally:
-            if tmp:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-
+            shutil.rmtree(scratch, ignore_errors=True)
 
 if __name__ == "__main__":
     main()

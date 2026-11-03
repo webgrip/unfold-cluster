@@ -21,7 +21,11 @@ when it would leak a plaintext secret. Same rule set in both tools.
    `sops --encrypt`.
 3. **No plaintext secrets in any file.** When `gitleaks` is installed, the
    content is scanned and a positive hit is refused (best-effort — skipped
-   with a warning without gitleaks).
+   with a warning without gitleaks). The scan uses the repository's own
+   `.gitleaks.toml` when there is one, at the file's path inside the
+   repository, so its allowlist applies: test fixtures and published test
+   vectors are allowlisted there by path, never by splitting a value to dodge
+   the scan.
 
 ## The compliant path
 
