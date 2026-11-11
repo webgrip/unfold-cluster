@@ -80,7 +80,7 @@ groups:
       - alert: UnfoldUnsignedWebgripImage
         expr: |
           sum by (policy_name, resource_namespace) (
-            increase(kyverno_image_validating_policy_results_total{cluster="unfold", policy_name=~"webgrip-image-signatures.*", result=~"fail|error"}[1h])
+            increase(kyverno_image_validating_policy_results_total{cluster="unfold", policy_name=~"(webgrip|unfold-hq)-image-signatures.*", result=~"fail|error"}[1h])
           ) > 0
         for: 0m
         labels:
@@ -88,8 +88,8 @@ groups:
           cluster: unfold
           team: platform
         annotations:
-          summary: "A webgrip image without the estate's cosign signature was admitted in {{ $labels.resource_namespace }} ({{ $labels.policy_name }})"
-          description: "The signature policy runs in Audit: it reports and lets the pod start. Find the pod in the Warn line of the client that applied it (Flux shows it in its events), or in the Kyverno admission controller's log; there are no PolicyReports since 2026-10-26. A webgrip image must be signed by the OpenBao Transit key cosign-webgrip before it runs on Unfold; until every webgrip image here passes, the policy cannot move to Deny. Runbook: unfold-cluster docs/runbooks/image-signatures.md."
+          summary: "An image without the cosign signature its policy requires was admitted in {{ $labels.resource_namespace }} ({{ $labels.policy_name }})"
+          description: "The signature policy runs in Audit: it reports and lets the pod start. Find the pod in the Warn line of the client that applied it (Flux shows it in its events), or in the Kyverno admission controller's log; there are no PolicyReports since 2026-10-26. A webgrip image must be signed by the OpenBao Transit key cosign-webgrip, and an unfold-hq image keyless by the unfold-hq/unfold release workflow, before it runs on Unfold; until every such image here passes, the policy cannot move to Deny. Runbook: unfold-cluster docs/runbooks/image-signatures.md."
       - alert: UnfoldSignatureWebhookAbsent
         expr: |
           (sum(up{cluster="unfold", job="kyverno", component="admission-controller"}) or vector(0)) == 0
