@@ -28,7 +28,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: kyverno-admission-controller
 spec:
-  description: The API server calls the admission webhook on 9443. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too. To check a webgrip image's cosign signature the controller reads the image's manifest and signature from the registry that serves it, over HTTPS for ghcr.io and forgejo.webgrip.dev and over plain HTTP for Zot inside the cluster. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
+  description: The API server calls the admission webhook on 9443. In tunnel mode a call from a control plane reaches the pod from that node's tunnel address, which Cilium labels host or remote-node rather than kube-apiserver, so the webhook port admits those identities too. To check a webgrip image's cosign signature the controller reads the image's manifest and signature from the registry that serves it, over HTTPS for ghcr.io and forgejo.webgrip.dev and over plain HTTP for Zot inside the cluster. To check an unfold-hq image's keyless signature it also fetches Sigstore's trusted root (Fulcio and transparency log keys) from the TUF repository tuf-repo-cdn.sigstore.dev, and reads the Rekor log at rekor.sigstore.dev for a signature that does not carry its own log entry. Its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/component: admission-controller
@@ -57,11 +57,15 @@ spec:
               - matchName: ghcr.io
               - matchName: pkg-containers.githubusercontent.com
               - matchName: forgejo.webgrip.dev
+              - matchName: tuf-repo-cdn.sigstore.dev
+              - matchName: rekor.sigstore.dev
               - matchPattern: "*.cluster.local"
     - toFQDNs:
         - matchName: ghcr.io
         - matchName: pkg-containers.githubusercontent.com
         - matchName: forgejo.webgrip.dev
+        - matchName: tuf-repo-cdn.sigstore.dev
+        - matchName: rekor.sigstore.dev
       toPorts:
         - ports:
             - port: "443"

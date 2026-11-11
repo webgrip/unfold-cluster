@@ -1,0 +1,41 @@
+---
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: unfold-hq-image-signatures
+spec:
+  validationActions:
+    - Audit
+    - Warn
+  failurePolicy: Ignore
+  webhookConfiguration:
+    timeoutSeconds: 15
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    - glob: "ghcr.io/unfold-hq/*"
+  credentials:
+    allowInsecureRegistry: false
+  validationConfigurations:
+    required: true
+    verifyDigest: true
+    mutateDigest: false
+  attestors:
+    - name: unfoldRelease
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subjectRegExp: '^https://github\.com/unfold-hq/unfold/\.github/workflows/on_release_published\.yml@refs/tags/unfold-v0\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
+        ctlog:
+          url: https://rekor.sigstore.dev
+  validations:
+    - expression: >-
+        images.containers.all(image, verifyImageSignatures(image, [attestors.unfoldRelease]) > 0)
+        && images.?initContainers.orValue([]).all(image, verifyImageSignatures(image, [attestors.unfoldRelease]) > 0)
+        && images.?ephemeralContainers.orValue([]).all(image, verifyImageSignatures(image, [attestors.unfoldRelease]) > 0)
+      message: every unfold-hq image must carry a keyless cosign signature from the unfold-hq/unfold release workflow (GitHub Actions OIDC, recorded in Rekor)

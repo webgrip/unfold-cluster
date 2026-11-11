@@ -44,7 +44,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Unfold supply chain** (unfold-cluster). Trivy Operator scans every running image for HIGH and CRITICAL vulnerabilities and baked-in secrets, audits workload config and RBAC, and keeps an SBOM per image; Kyverno checks that webgrip images carry the estate's cosign signature (Audit). Runbooks: unfold-cluster `docs/runbooks/vulnerability-scanning.md` and `docs/runbooks/image-signatures.md`."
+        "content": "**Unfold supply chain** (unfold-cluster). Trivy Operator scans every running image for HIGH and CRITICAL vulnerabilities and baked-in secrets, audits workload config and RBAC, and keeps an SBOM per image; Kyverno checks that webgrip images carry the estate's cosign signature and unfold-hq images the unfold-hq/unfold release workflow's keyless one (Audit). Runbooks: unfold-cluster `docs/runbooks/vulnerability-scanning.md` and `docs/runbooks/image-signatures.md`."
       }
     },
     {
@@ -368,8 +368,8 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "Unsigned webgrip images, 24 h",
-      "description": "Pods whose webgrip image failed the cosign signature check in the last 24 hours. Audit: they were admitted.",
+      "title": "Unsigned images, 24 h",
+      "description": "Pods whose webgrip or unfold-hq image failed the cosign signature check in the last 24 hours. Audit: they were admitted.",
       "datasource": {
         "type": "prometheus",
         "uid": "unfold-prometheus"
@@ -387,7 +387,7 @@
             "type": "prometheus",
             "uid": "unfold-prometheus"
           },
-          "expr": "sum(increase(kyverno_image_validating_policy_results_total{cluster=\"unfold\", policy_name=~\"webgrip-image-signatures.*\", result=~\"fail|error\"}[24h])) or vector(0)",
+          "expr": "sum(increase(kyverno_image_validating_policy_results_total{cluster=\"unfold\", policy_name=~\"(webgrip|unfold-hq)-image-signatures.*\", result=~\"fail|error\"}[24h])) or vector(0)",
           "instant": true,
           "range": false
         }

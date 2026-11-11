@@ -102,6 +102,15 @@ tests:
           - exp_labels: {severity: warning, cluster: unfold, team: platform, policy_name: webgrip-image-signatures, resource_namespace: zot}
   - interval: 5m
     input_series:
+      - series: 'kyverno_image_validating_policy_results_total{cluster="unfold",policy_name="unfold-hq-image-signatures",resource_namespace="unfold-staging",result="fail"}'
+        values: "0x6 1x10"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldUnsignedWebgripImage
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, policy_name: unfold-hq-image-signatures, resource_namespace: unfold-staging}
+  - interval: 5m
+    input_series:
       - series: 'kyverno_image_validating_policy_results_total{cluster="unfold",policy_name="webgrip-image-signatures",resource_namespace="zot",result="pass"}'
         values: "0+1x16"
     alert_rule_test:
