@@ -22,15 +22,21 @@ policy (plain HTTP inside the cluster):
 A wrongly signed image is also proven against the real registry: the signed
 fixture must fail once the policy trusts a different key.
 
+The unfold-hq policy trusts a keyless signature from the unfold-hq/unfold
+release workflow. No unfold-hq image exists to test it against yet, so a copy
+of it that matches ghcr.io/ploeg-hq/* and trusts ploeg-hq/ploeg's release
+workflow must admit a ploegd release signed that way; the policy itself must
+refuse that image as signed by someone else, and must refuse it by tag alone.
+
   --mutation-test  also neutralise each policy (its validation becomes true
-                   and required becomes false) and require every refused case
-                   to pass; a refused case that still fails was never testing
-                   the policy. Then remove each of the two gates alone and
+                   and required becomes false) and require every refused case,
+                   the keyless one included, to pass; a refused case that
+                   still fails was never testing the policy. Then remove each of the two gates alone and
                    require the other to still refuse an unsigned image.
 
 Downloads the Kyverno CLI, cosign and crane at the pinned versions below,
 checksum-verified, into a cache directory. Needs curl, sha256sum, tar, sed,
-awk and network access to ghcr.io."
+awk and network access to ghcr.io and tuf-repo-cdn.sigstore.dev."
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly repo_root
@@ -38,6 +44,10 @@ readonly policy_dir="${repo_root}/kubernetes/platform/kyverno/policies"
 readonly fixture_dir="${repo_root}/tests/image-signatures"
 readonly public_policy="${policy_dir}/webgrip-image-signatures.yaml"
 readonly zot_policy="${policy_dir}/webgrip-image-signatures-zot.yaml"
+readonly unfold_hq_policy="${policy_dir}/unfold-hq-image-signatures.yaml"
+readonly keyless_signed_image="ghcr.io/ploeg-hq/ploegd@sha256:3ef1912b91ca7edef845b471ed44c7aba10f8aed31cdb87e59d8bd4a4ae528e0"
+readonly keyless_signed_tag="ghcr.io/ploeg-hq/ploegd:0.2.0-rc.104"
+readonly keyless_signer_sed_escaped='^https://github\\.com/ploeg-hq/ploeg/\\.github/workflows/release\\.yml@refs/heads/development$'
 readonly zot_address="zot.zot.svc.cluster.local:5000"
 
 # renovate: datasource=github-releases depName=kyverno/kyverno
@@ -172,7 +182,7 @@ fixtures_named() {
 
 check_real_registry() {
   local policy_set="${work_dir}/policies.yaml" fixture
-  cat "${public_policy}" "${zot_policy}" >"${policy_set}"
+  cat "${public_policy}" "${zot_policy}" "${unfold_hq_policy}" >"${policy_set}"
   [ -n "$(fixtures_named refused)" ] && [ -n "$(fixtures_named admitted)" ] \
     || record_failure "tests/image-signatures needs at least one refused-*.yaml and one admitted-*.yaml"
   while read -r fixture; do
@@ -231,6 +241,28 @@ start_registry() {
   exit 1
 }
 
+trusting_ploeg_releases() {
+  sed -E \
+    -e 's|"ghcr\.io/unfold-hq/\*"|"ghcr.io/ploeg-hq/*"|' \
+    -e "s|^( *subjectRegExp: ).*$|\\1'${keyless_signer_sed_escaped}'|" \
+    "$1"
+}
+
+check_keyless() {
+  pod_for keyless-signed "${keyless_signed_image}" "${work_dir}/keyless-signed.yaml"
+  pod_for keyless-tag "${keyless_signed_tag}" "${work_dir}/keyless-tag.yaml"
+  trusting_ploeg_releases "${unfold_hq_policy}" >"${work_dir}/ploeg-releases.yaml"
+  grep -q "ghcr.io/ploeg-hq/\*" "${work_dir}/ploeg-releases.yaml" \
+    || record_failure "the unfold-hq policy no longer names ghcr.io/unfold-hq/*"
+  expect pass "${work_dir}/ploeg-releases.yaml" "${work_dir}/keyless-signed.yaml" \
+    "keyless, the unfold-hq policy trusting ploeg-hq releases admits a ploegd release"
+  expect fail "${work_dir}/ploeg-releases.yaml" "${work_dir}/keyless-tag.yaml" \
+    "keyless, the same image by tag alone"
+  sed 's|"ghcr\.io/unfold-hq/\*"|"ghcr.io/ploeg-hq/*"|' "${unfold_hq_policy}" >"${work_dir}/unfold-hq-on-ploeg.yaml"
+  expect fail "${work_dir}/unfold-hq-on-ploeg.yaml" "${work_dir}/keyless-signed.yaml" \
+    "keyless, the unfold-hq release identity refuses an image another workflow signed"
+}
+
 check_throwaway_registry() {
   start_registry
   local format signed unsigned other
@@ -267,6 +299,9 @@ mutation_cases() {
     "mutation, neutralised policy that trusts another key"
   expect pass "${work_dir}/zot-neutralised.yaml" "${work_dir}/zot-unsigned.yaml" "mutation, neutralised zot policy, unsigned"
   expect pass "${work_dir}/zot-neutralised.yaml" "${work_dir}/zot-other-key-bundle.yaml" "mutation, neutralised zot policy, another key"
+  neutralised "${work_dir}/unfold-hq-on-ploeg.yaml" >"${work_dir}/unfold-hq-neutralised.yaml"
+  expect pass "${work_dir}/unfold-hq-neutralised.yaml" "${work_dir}/keyless-signed.yaml" \
+    "mutation, neutralised unfold-hq policy, another signer"
 
   without_expression_gate "${public_policy}" >"${work_dir}/public-required-only.yaml"
   without_required_gate "${public_policy}" >"${work_dir}/public-expression-only.yaml"
@@ -282,6 +317,7 @@ install_binaries
 "${cosign_bin}" signing-config create --out "${work_dir}/no-tlog-signing-config.json" >/dev/null 2>&1
 
 check_real_registry
+check_keyless
 check_throwaway_registry
 if [ "${mutation_test}" = true ]; then
   mutation_cases
@@ -291,4 +327,4 @@ if [ "${#failures[@]}" -gt 0 ]; then
   echo "${#failures[@]} image signature check(s) failed" >&2
   exit 1
 fi
-echo "every webgrip image is judged by its signature: signed passes, unsigned and wrongly signed fail"
+echo "every webgrip and unfold-hq image is judged by its signature: signed passes, unsigned and wrongly signed fail"

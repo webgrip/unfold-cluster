@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - webgrip-image-signatures.yaml
   - webgrip-image-signatures-zot.yaml
+  - unfold-hq-image-signatures.yaml
