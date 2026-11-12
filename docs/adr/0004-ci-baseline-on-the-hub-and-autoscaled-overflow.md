@@ -73,3 +73,7 @@ capacity may come and go with the queue (option 5).
 * The autoscaler image (v1.36.1) is one minor version behind Kubernetes 1.37 until 1.37 is released.
   The chart comes from an HTTP Helm repository, so Flux pins its version, not a digest; the image is
   pinned by digest.
+
+## History
+
+* 2026-11-12: [RFC 0005](../rfc/0005-take-ci-load-off-the-homelab.md) gives the `ci` pool one fixed CPX42, `unfold-ci-1`, until the dedicated metal CI node can be installed. Runners prefer it over the hub worker; the autoscaler still adds a CPX42 when both are full.

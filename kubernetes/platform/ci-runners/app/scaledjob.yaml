@@ -50,14 +50,14 @@ spec:
                     - key: node.webgrip.io/pool
                       operator: In
                       values:
-                        - unfold
+                        - ci
               - weight: 50
                 preference:
                   matchExpressions:
                     - key: node.webgrip.io/pool
                       operator: In
                       values:
-                        - ci
+                        - unfold
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
