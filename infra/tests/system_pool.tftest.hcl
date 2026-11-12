@@ -115,8 +115,8 @@ run "the_plan_adds_one_cpx32_in_its_role_and_changes_no_other_node" {
   }
 
   assert {
-    condition     = sort(keys(hcloud_server.worker)) == sort(["unfold-app-1", "unfold-system-1"]) && hcloud_server.worker["unfold-app-1"].server_type == "cx33"
-    error_message = "the system node joins the hub worker, which stays as it is"
+    condition     = sort(keys(hcloud_server.worker)) == sort(["unfold-app-1", "unfold-ci-1", "unfold-system-1"]) && hcloud_server.worker["unfold-app-1"].server_type == "cx33"
+    error_message = "the system node joins the hub worker, which stays as it is, and the fixed CI node"
   }
 
   assert {

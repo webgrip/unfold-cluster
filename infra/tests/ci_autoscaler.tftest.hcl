@@ -267,8 +267,8 @@ run "the_hub_worker_is_the_ci_baseline_under_gvisor" {
 
 
   assert {
-    condition     = var.worker_pools["unfold"].node_count == 1 && var.worker_pools["ci"].node_count == 0 && contains(var.autoscaled_worker_pools, "ci")
-    error_message = "the baseline is the one hub worker; the CI pool has no fixed node and grows only through the autoscaler"
+    condition     = var.worker_pools["unfold"].node_count == 1 && var.worker_pools["ci"].node_count == 1 && var.worker_pools["ci"].server_type == "cpx42" && contains(var.autoscaled_worker_pools, "ci")
+    error_message = "the baseline is the one hub worker and one fixed CPX42 in the CI pool, which the autoscaler grows when CI overflows them"
   }
 }
 
