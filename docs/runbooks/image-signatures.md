@@ -16,8 +16,9 @@ takes the first rule that matches its registry and repository:
 | Rule | Images | Effect |
 | --- | --- | --- |
 | `publicKey` | `ghcr.io/webgrip/*`, `forgejo.webgrip.dev/webgrip/*`, and one path level deeper | pulled only with a valid signature from `infra/keys/cosign-webgrip.pub` |
+| `keyless` | `ghcr.io/unfold-hq/*` | pulled only with a keyless signature from the unfold-hq/unfold release workflow, the issuer and subject Kyverno checks ([below](#keyless-unfold-hq-releases)) |
 
-Anything else, `ghcr.io/unfold-hq/*` included, pulls as before. Talos checks only when it pulls: an
+Anything else pulls as before. Talos checks only when it pulls: an
 image already on the node is not checked again. There is no audit mode.
 
 A refused image leaves the pod in `ErrImagePull`, with the event `failed to verify image`; after 10

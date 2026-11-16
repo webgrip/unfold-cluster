@@ -97,3 +97,10 @@ for a week without refusing an image that should run. That pull request supersed
   `cosign verify --key infra/keys/cosign-webgrip.pub --insecure-ignore-tlog` now passes for the
   pinned `0.2.0@sha256:c0703b8e…` on both registries; earlier the same day the Forgejo copy had no
   signature. No webgrip image is exempt any more.
+* 2026-11-16: a third rule verifies `ghcr.io/unfold-hq/*` keyless: issuer
+  `https://token.actions.githubusercontent.com` and the subject regexp of the Kyverno policy
+  `unfold-hq-image-signatures`, which `infra/tests/image_verification.tftest.hcl` keeps equal.
+  Unfold is released from github.com/unfold-hq/unfold since `unfold-v0.4.0-rc.132`;
+  `talosctl` 1.14.4 accepts the rule (`talosctl validate`), and `cosign verify` passes for that
+  release's `unfold` and `unfold-agent` digests. Not yet proven on a node: that Talos verifies a
+  keyless signature through Zot and reaches Sigstore's trusted root and Rekor from the host.

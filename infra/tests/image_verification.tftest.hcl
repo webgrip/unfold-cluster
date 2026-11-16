@@ -97,6 +97,16 @@ run "every_node_refuses_an_unsigned_webgrip_image_at_pull" {
   }
 
   assert {
+    condition = length([
+      for rule in yamldecode(local.image_verification_patch).rules : rule
+      if rule.image == "ghcr.io/unfold-hq/*"
+      && try(rule.keyless.issuer, "") == "https://token.actions.githubusercontent.com"
+      && try(rule.keyless.subjectRegex, "") == yamldecode(file("${path.module}/../kubernetes/platform/kyverno/policies/unfold-hq-image-signatures.yaml")).spec.attestors[0].cosign.keyless.identities[0].subjectRegExp
+    ]) == 1
+    error_message = "ghcr.io/unfold-hq images must verify keyless against the unfold-hq/unfold release workflow, with the same subject as the Kyverno policy unfold-hq-image-signatures"
+  }
+
+  assert {
     condition     = startswith(local.cosign_webgrip_public_key, "-----BEGIN PUBLIC KEY-----") && endswith(local.cosign_webgrip_public_key, "-----END PUBLIC KEY-----")
     error_message = "infra/keys/cosign-webgrip.pub must hold one PEM public key, the public half of the OpenBao Transit key cosign-webgrip"
   }
