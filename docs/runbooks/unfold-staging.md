@@ -6,7 +6,7 @@ Unfold staging runs in this cluster at `https://staging-app.unfoldhq.dev`, publi
 
 | Namespace | What | Placement |
 | --- | --- | --- |
-| `unfold-staging` | The `unfold` HelmRelease (`oci://ghcr.io/webgrip/charts/unfold`, pinned by digest): the Unfold workbench and ploegd, with Ploeg's executor off; `ploeg-db` (CNPG, one instance, database `app`, owner `ploeg`); `vikunja-relay` | hub (`node.webgrip.io/pool=unfold`) |
+| `unfold-staging` | The `unfold` HelmRelease (`oci://ghcr.io/unfold-hq/charts/unfold`, pinned by digest; it pins `ghcr.io/unfold-hq/unfold`, `ghcr.io/unfold-hq/unfold-agent` and the Ploeg chart it was tested with by digest, [image signatures](image-signatures.md#keyless-unfold-hq-releases)): the Unfold workbench and ploegd, with Ploeg's executor off; `ploeg-db` (CNPG, one instance, database `app`, owner `ploeg`); `vikunja-relay` | hub (`node.webgrip.io/pool=unfold`) |
 | `unfold-staging-workspaces` | Unfold's agent workspaces, one pod each, `runtimeClassName: gvisor`; labelled `ploeg.webgrip.dev/isolation-class: hardened`, so `sandboxed-workloads` refuses any pod without gVisor and with a mounted token | hub, through the `gvisor` RuntimeClass |
 | `litellm-staging` | LiteLLM (`ghcr.io/berriai/litellm-non_root`, app-template chart) with staging's own provider keys and budgets; `litellm-db` (CNPG) | hub |
 | `unfold-staging-edge` | `cloudflared`, two replicas, the tunnel connector | hub |
@@ -93,7 +93,7 @@ From [ADR 0017's confirmation](../adr/0017-staging-runs-here-with-agents-under-g
 * A pod in `unfold-staging-workspaces` without `runtimeClassName: gvisor` is refused by `sandboxed-workloads`:
 
   ```sh
-  kubectl -n unfold-staging-workspaces run probe --image=ghcr.io/webgrip/unfold-agent:0.4.0-rc.127@sha256:88c31734e975594287d41cfe6d38e3f12bfa25c43d335d2ded9a98fbe67adf41 --dry-run=server
+  kubectl -n unfold-staging-workspaces run probe --image=ghcr.io/unfold-hq/unfold-agent:0.4.0-rc.132@sha256:7c8bb8f4028a0648b8c8805546736939044aa8a1a484b760c29c6fedb4a88b24 --dry-run=server
   ```
 
 * A running workspace reports gVisor's kernel: `kubectl -n unfold-staging-workspaces exec <pod> -- dmesg | head -1` starts with "Starting gVisor".

@@ -344,7 +344,7 @@
         "kubernetes/apps/unfold-staging/unfold/ocirepository.yaml"
       ],
       "matchPackageNames": [
-        "ghcr.io/webgrip/charts/unfold"
+        "ghcr.io/unfold-hq/charts/unfold"
       ],
       "versioning": "semver",
       "allowedVersions": "/^0\\./",
