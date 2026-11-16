@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: keyless-signed-unfold-hq-images
+  namespace: image-signature-test
+spec:
+  containers:
+    - name: unfold
+      image: ghcr.io/unfold-hq/unfold:0.4.0-rc.132@sha256:e2fe8a711b78ee5a57bd200765931e129b4894d8d75e165cb34f5e2036285d9b
+    - name: workspace
+      image: ghcr.io/unfold-hq/unfold-agent:0.4.0-rc.132@sha256:7c8bb8f4028a0648b8c8805546736939044aa8a1a484b760c29c6fedb4a88b24

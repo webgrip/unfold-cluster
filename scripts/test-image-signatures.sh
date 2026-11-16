@@ -23,10 +23,12 @@ A wrongly signed image is also proven against the real registry: the signed
 fixture must fail once the policy trusts a different key.
 
 The unfold-hq policy trusts a keyless signature from the unfold-hq/unfold
-release workflow. No unfold-hq image exists to test it against yet, so a copy
-of it that matches ghcr.io/ploeg-hq/* and trusts ploeg-hq/ploeg's release
-workflow must admit a ploegd release signed that way; the policy itself must
-refuse that image as signed by someone else, and must refuse it by tag alone.
+release workflow. The released unfold and unfold-agent images in
+tests/image-signatures/ pass it by digest and fail it by tag alone, and fail
+once the policy trusts ploeg-hq/ploeg's release workflow instead. A copy of the
+policy that matches ghcr.io/ploeg-hq/* and trusts that workflow must admit a
+ploegd release signed that way; the policy itself must refuse that image as
+signed by someone else, and must refuse it by tag alone.
 
   --mutation-test  also neutralise each policy (its validation becomes true
                    and required becomes false) and require every refused case,
@@ -261,6 +263,9 @@ check_keyless() {
   sed 's|"ghcr\.io/unfold-hq/\*"|"ghcr.io/ploeg-hq/*"|' "${unfold_hq_policy}" >"${work_dir}/unfold-hq-on-ploeg.yaml"
   expect fail "${work_dir}/unfold-hq-on-ploeg.yaml" "${work_dir}/keyless-signed.yaml" \
     "keyless, the unfold-hq release identity refuses an image another workflow signed"
+  sed -E "s|^( *subjectRegExp: ).*$|\\1'${keyless_signer_sed_escaped}'|" "${unfold_hq_policy}" >"${work_dir}/unfold-hq-other-signer.yaml"
+  expect fail "${work_dir}/unfold-hq-other-signer.yaml" "${fixture_dir}/admitted-keyless-signed-unfold-hq-images.yaml" \
+    "keyless, the released unfold-hq images under a policy that trusts another workflow"
 }
 
 check_throwaway_registry() {
@@ -302,6 +307,9 @@ mutation_cases() {
   neutralised "${work_dir}/unfold-hq-on-ploeg.yaml" >"${work_dir}/unfold-hq-neutralised.yaml"
   expect pass "${work_dir}/unfold-hq-neutralised.yaml" "${work_dir}/keyless-signed.yaml" \
     "mutation, neutralised unfold-hq policy, another signer"
+  neutralised "${work_dir}/unfold-hq-other-signer.yaml" >"${work_dir}/unfold-hq-other-signer-neutralised.yaml"
+  expect pass "${work_dir}/unfold-hq-other-signer-neutralised.yaml" "${fixture_dir}/admitted-keyless-signed-unfold-hq-images.yaml" \
+    "mutation, neutralised unfold-hq policy that trusts another workflow"
 
   without_expression_gate "${public_policy}" >"${work_dir}/public-required-only.yaml"
   without_required_gate "${public_policy}" >"${work_dir}/public-expression-only.yaml"
