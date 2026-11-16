@@ -71,15 +71,25 @@ Only a release tag `unfold-v0.x.y` or `unfold-v0.x.y-rc.n` of that one workflow 
 from a branch, a fork or another workflow fails. Kyverno takes Sigstore's trusted root (Fulcio and
 log keys) from `tuf-repo-cdn.sigstore.dev`, which its network policy allows by name together with
 `rekor.sigstore.dev`. The chart is not checked here: Kyverno sees pods, not the chart Flux pulls.
-Nothing in the cluster runs from `ghcr.io/unfold-hq` yet; Flux moves to it after the first release
-from GitHub. `pinned-approved-images` does not list those prefixes yet either, and refuses them.
-To check a release by hand:
+The first release from GitHub is `unfold-v0.4.0-rc.132`; `pinned-approved-images` admits
+`ghcr.io/unfold-hq/unfold` and `ghcr.io/unfold-hq/unfold-agent`, and Unfold staging moves to that
+chart in the pull request after it ([unfold-staging](unfold-staging.md)). The release also carries
+a CycloneDX SBOM (`https://cyclonedx.org/bom`) and a CVE budget
+(`https://unfoldhq.dev/attestations/cve-budget/v1`) as attestations signed by the same identity;
+the policy does not check them. To check a release by hand:
 
 ```sh
 cosign verify ghcr.io/unfold-hq/unfold@<digest> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/unfold-hq/unfold/\.github/workflows/on_release_published\.yml@refs/tags/unfold-v0\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
+cosign verify-attestation --type https://unfoldhq.dev/attestations/cve-budget/v1 \
+  ghcr.io/unfold-hq/unfold@<digest> \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/unfold-hq/unfold/\.github/workflows/on_release_published\.yml@refs/tags/unfold-v0\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
 ```
+
+The chart verifies the same way: `cosign verify ghcr.io/unfold-hq/charts/unfold@<digest>` with the
+same two flags.
 
 When the release workflow's file name or tag format changes, the subject in
 `unfold-hq-image-signatures.yaml` changes with it, in a pull request merged before the first release
@@ -139,16 +149,19 @@ request that touches the policies:
 - against ghcr.io with the real key: the signed `ghcr.io/webgrip/unfold` index passes; its unsigned
   `linux/amd64` manifest fails as a container, as an init container and next to a signed one; a
   third-party image is not judged; the signed image fails once the policy trusts another key;
-- keyless, against ghcr.io: no unfold-hq image exists yet, so a copy of
-  `unfold-hq-image-signatures` that matches `ghcr.io/ploeg-hq/*` and trusts ploeg-hq/ploeg's
-  release workflow admits a keyless-signed `ploegd` release by digest and refuses it by tag; the
-  policy as written refuses that image, because another workflow signed it;
+- keyless, against ghcr.io: the released `unfold` and `unfold-agent` images of
+  `unfold-v0.4.0-rc.132` pass by digest, fail by tag alone, and fail once the policy trusts
+  ploeg-hq/ploeg's release workflow instead; a copy of `unfold-hq-image-signatures` that matches
+  `ghcr.io/ploeg-hq/*` and trusts that workflow admits a keyless-signed `ploegd` release by digest
+  and refuses it by tag; the policy as written refuses that image, because another workflow signed
+  it;
 - against a throwaway registry on loopback with throwaway keys, for the Zot policy over HTTP: signed
   passes, unsigned and signed-with-another-key fail, both for cosign 3's Sigstore bundle (an OCI
   referrer, signed with a signing config that has no transparency log) and for the legacy `.sig` tag
   the estate's signing jobs write;
-- mutation: with both gates removed every refused case passes, the keyless one included, and with
-  either gate removed alone the other still refuses.
+- mutation: with both gates removed every refused case passes, the keyless ones included, and with
+  either gate removed alone the other still refuses. A tag-only image stays refused with both
+  gates removed, because `verifyDigest: true` refuses it on its own.
 
 ## SBOM and provenance from CI
 
