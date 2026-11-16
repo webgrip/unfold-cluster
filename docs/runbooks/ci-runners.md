@@ -241,6 +241,18 @@ Three more ScaledJobs, `forgejo-php-runner`, `forgejo-rust-runner` and `forgejo-
 
 Each pool runs at most three jobs. KEDA counts waiting jobs at `/waiting-jobs/<label>` on the homelab runner-queue, which answers for these labels once its `RUNNER_LABELS` lists them. A new runner image version is a new digest here and in the workflow's `runner-image` default, in one Renovate pull request each.
 
+### The release pool: `release-ci`
+
+A fourth ScaledJob, `forgejo-release-runner`, serves release jobs with `runs-on: release-ci`. Its main container is the `semantic-release` toolchain image the `semantic-release` workflows of `webgrip/workflows` pin as `toolchain-image`, copied from Harbor to `forgejo.webgrip.dev/webgrip/semantic-release` with its signature, at the same tag and digest. Steps run in host mode inside it, like the other toolchain pools.
+
+| | `release-ci` |
+| --- | --- |
+| Requests | 500m CPU, 1 GiB (limit 2 GiB) |
+| Writable paths | `/work` (`HOME`, `TMPDIR`) and `/tmp`; `PATH` keeps the image's `/opt/semrel/node_modules/.bin`, where `webgrip-release` lives |
+| Egress beyond `forgejo-runner-toolchains` | none: a release pushes its tag and creates its release on Forgejo, which `forgejo-runner` allows, and the optional install of the caller's npm lockfile reads `registry.npmjs.org`, which `forgejo-runner-toolchains` allows |
+
+The pool runs at most two jobs. The image copy lands in Forgejo's registry before this pool merges; without it every pod fails to pull.
+
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,
