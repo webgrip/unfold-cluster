@@ -229,6 +229,18 @@ The image comes from Forgejo's registry because this cluster cannot reach Harbor
 
 Three checks stay on the homelab's `docker` runners. `observability-check` and `ops-consoles-check` run Alloy and Envoy release binaries, which are linked against glibc and cannot start in the Alpine-based `infra-runner` (`cannot execute: required file not found`); they move once the image carries `gcompat` or a glibc base. `infra-check`'s `token-mask-canary` and `token-mask-proof` prove the masks of the runner that runs `plan-or-apply`, so they run on the same kind of runner, and the proof reads the canary's log through the homelab's in-cluster Forgejo address.
 
+## The toolchain pools: `php-ci`, `rust-ci`, `node-ci`
+
+Three more ScaledJobs, `forgejo-php-runner`, `forgejo-rust-runner` and `forgejo-node-runner`, serve the shared quality workflows of `webgrip/workflows` (`laravel-quality`, `rust-quality`, `moon-ci`, `spa-preview`) when a caller passes `runs-on: php-ci`, `rust-ci` or `node-ci` ([RFC 0005](../rfc/0005-take-ci-load-off-the-homelab.md), section 4). Each is the `unfold-check` pod with another main container: the `php-ci-runner`, `rust-ci-runner` or `node-ci-runner` image the workflow's `runner-image` names, copied from Harbor to `forgejo.webgrip.dev/webgrip/*` with its signature. Steps run in host mode inside that image, so the workflows leave out `container:` on these labels.
+
+| | `php-ci`, `node-ci` | `rust-ci` |
+| --- | --- | --- |
+| Requests | 1 CPU, 2 GiB (limit 4 GiB) | 2 CPU, 4 GiB (limit 8 GiB) |
+| Writable paths | `/work` (`HOME`, `TMPDIR`) and `/tmp` | the same, with `CARGO_HOME=/work/home/.cargo` because the image's `/usr/local/cargo` is read-only |
+| Egress beyond `forgejo-runner-toolchains` | Composer: `repo.packagist.org`, `packagist.org`, `codeload.github.com` (policy `forgejo-toolchain-runner-packages`) | Cargo and rustup: `index.crates.io`, `static.crates.io`, `static.rust-lang.org` (same policy) |
+
+Each pool runs at most three jobs. KEDA counts waiting jobs at `/waiting-jobs/<label>` on the homelab runner-queue, which answers for these labels once its `RUNNER_LABELS` lists them. A new runner image version is a new digest here and in the workflow's `runner-image` default, in one Renovate pull request each.
+
 ## Writing a workflow for `unfold-ci`
 
 - `runs-on: unfold-ci`. Steps run in `node:24` (Debian bookworm) as uid 1000 with `node`, `git`,

@@ -1,0 +1,53 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-toolchain-runner-packages
+  namespace: ci
+spec:
+  description: A job on a toolchain runner (runs-on php-ci, rust-ci or node-ci, the shared quality workflows of webgrip/workflows) adds to the forgejo-runner and forgejo-runner-toolchains policies the package registries its lockfile installs from. Composer reads metadata from repo.packagist.org and packagist.org and downloads dist archives from codeload.github.com; Cargo reads the sparse index at index.crates.io and downloads crates from static.crates.io, and rustup adds components from static.rust-lang.org. npm, pnpm, GitHub and its release CDNs are already in forgejo-runner-toolchains. Every package is pinned by lockfile.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - php-ci
+          - rust-ci
+          - node-ci
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: repo.packagist.org
+              - matchName: packagist.org
+              - matchName: codeload.github.com
+              - matchName: index.crates.io
+              - matchName: static.crates.io
+              - matchName: static.rust-lang.org
+    - toFQDNs:
+        - matchName: repo.packagist.org
+        - matchName: packagist.org
+        - matchName: codeload.github.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: index.crates.io
+        - matchName: static.crates.io
+        - matchName: static.rust-lang.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

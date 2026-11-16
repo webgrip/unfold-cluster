@@ -8,10 +8,17 @@ resources:
   - registration.externalsecret.yaml
   - runner-config.configmap.yaml
   - check-runner-config.configmap.yaml
+  - php-runner-config.configmap.yaml
+  - rust-runner-config.configmap.yaml
+  - node-runner-config.configmap.yaml
   - buildkitd-config.configmap.yaml
   - scaledjob.yaml
   - check-scaledjob.yaml
+  - php-scaledjob.yaml
+  - rust-scaledjob.yaml
+  - node-scaledjob.yaml
   - networkpolicy.yaml
   - check-networkpolicy.yaml
   - toolchain-networkpolicy.yaml
+  - toolchain-runner-packages.networkpolicy.yaml
   - zot-push-credentials.rolebinding.yaml
