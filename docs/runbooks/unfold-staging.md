@@ -26,6 +26,19 @@ The `unfold-staging` Flux Kustomization sets two variables in `kubernetes/apps/u
 
 The project id keeps its double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold as a number. ploegd finds the same project by its name, *Ploeg Staging*.
 
+## How a release reaches staging
+
+Every `unfold-v0.x.y-rc.N` release the `unfold-hq/unfold` release train publishes reaches staging without a person:
+
+1. Renovate (the homelab's `webgrip-forgejo` job, hourly) opens a pull request that moves the chart's tag and digest in `kubernetes/apps/unfold-staging/unfold/ocirepository.yaml`. The chart pins the Unfold image, the agent image and the Ploeg chart by digest, so this one line moves all of them.
+2. `unfold-release-check` downloads that chart, refuses it unless its manifest has the pinned digest, and renders it with the HelmRelease's values and the Kustomization's substitutions (`scripts/check-unfold-release.sh`). A release that needs a value staging does not give it, renames one or changes its type fails here.
+3. Forgejo merges the pull request once every required check of `main` passed (`platformAutomerge`), and Flux upgrades the HelmRelease.
+4. An upgrade that fails in the cluster, for example on a Secret the release needs and `unfold/secrets.yaml` does not yet hold, is retried three times and rolled back to the previous release (`upgrade.remediation`); `UnfoldFluxReconcileFailing` fires.
+
+When the check fails, the pull request stays open: read the release notes and add the change to `helmrelease.yaml` on Renovate's branch or in a pull request of its own. To hold staging on a release, close Renovate's pull request; Renovate offers the next release again.
+
+The check renders neither Flux's post-renderers nor the cluster's admission policies; a release that trips one of those fails its upgrade and is rolled back as in step 4.
+
 ## Secrets the owner seeds
 
 Every value lives in the homelab OpenBao; External Secrets reads it through `openbao-homelab`. Seed them from a homelab-cluster checkout with `just secret-set <path> <key>`: it logs in to OpenBao if needed, asks for the value without echoing it, keeps the other keys at the path and leaves nothing in shell history.
