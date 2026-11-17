@@ -46,7 +46,13 @@ which also checks the Fireworks key against its API before writing ([External Se
 
 The tunnel token is written by the `infra` apply that declares the tunnel, not by hand; until it exists `cloudflared` does not start. OpenBao's role `unfold-main-external-secrets` must allow `secret/unfold-main/staging/*`; it already allows `secret/unfold-main/*`.
 
-Generated in the cluster, never in OpenBao (External Secrets `Password` generators, `refreshInterval: "0"`): `litellm-generated` in `litellm-staging` (`LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`; the executor reads the master key from there through the `litellm-staging` SecretStore, whose service account may get that one Secret and nothing else, and for which External Secrets may mint a token through `external-secrets-litellm-master-reader-token`), and `unfold-credentials` (`PLOEG_OPERATOR_UNFOLD_TOKEN`, the token Unfold presents to ploegd, and `UNFOLD_ADMIN_PASSWORD`, the first administrator's password). Read the password once with `kubectl -n unfold-staging get secret unfold-credentials -o jsonpath='{.data.UNFOLD_ADMIN_PASSWORD}' | base64 -d`. The store key that encrypts Unfold's stored links and credentials is the file the workbench writes next to its database on the encrypted `unfold-data` volume.
+Generated in the cluster, never in OpenBao (External Secrets `Password` generators, `refreshInterval: "0"`): `litellm-generated` in `litellm-staging` (`LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`; the executor reads the master key from there through the `litellm-staging` SecretStore, whose service account may get that one Secret and nothing else, and for which External Secrets may mint a token through `external-secrets-litellm-master-reader-token`), and `unfold-credentials` (`PLOEG_OPERATOR_UNFOLD_TOKEN`, the token Unfold presents to ploegd, and `UNFOLD_ADMIN_PASSWORD`, the first administrator's password). Reading it takes the break-glass kubeconfig, because `unfold-admins` may not read Secrets ([kubernetes-login](kubernetes-login.md#who-may-do-what)): `kubectl -n unfold-staging get secret unfold-credentials -o jsonpath='{.data.UNFOLD_ADMIN_PASSWORD}' | base64 -d`. People sign in through Authentik instead ([Sign-in](#sign-in)). The store key that encrypts Unfold's stored links and credentials is the file the workbench writes next to its database on the encrypted `unfold-data` volume.
+
+## Sign-in
+
+Until the identity broker of Unfold's ADR-0058 runs, people sign in to staging with the homelab Authentik, as on production Unfold. The client is `unfold-staging`, public with PKCE, made by the homelab access plane (homelab-cluster `kubernetes/apps/security/access-plane/tofu/broker/applications.tf`) and open to the `unfold-admin` capability. Unfold's `config.auth.oidc` in `kubernetes/apps/unfold-staging/unfold/helmrelease.yaml` makes `unfold-app-admins` an admin. There is no client secret.
+
+Authentik answers on the homelab LAN only, so the sign-in works from a browser on the LAN or the tailnet, after Cloudflare Access. The workbench makes its code and refresh-token exchanges through `vikunja-relay`, which forwards `authentik.webgrip.dev:443` next to `vikunja.webgrip.dev:443`, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) take through their own relay. Local sign-in (`auth.localLogin`) stays on until a person has signed in through Authentik as an admin; then it goes off in its own pull request.
 
 ## Vikunja
 
@@ -68,7 +74,7 @@ Every namespace starts from the cluster's default deny ([egress by name](egress-
 | `cloudflared` | ploegd | 8080, **`POST /webhooks/.*` only** (Cilium's L7 rule) | tracker and forge webhooks |
 | Unfold | ploegd 8080, LiteLLM 4000, the Kubernetes API, `vikunja-relay` 3128, `forgejo.webgrip.dev` 443 | | the workbench creates workspace pods and reads the repositories |
 | ploegd | `ploeg-db` 5432, LiteLLM 4000, `vikunja-relay` 3128, `forgejo.webgrip.dev` 443 | | the chart's own NetworkPolicy plus `ploegd` |
-| `vikunja-relay` | `unfold-gateway.webgrip.dev` | 443 | the homelab gateway, `tag:hub` only on the tailnet |
+| `vikunja-relay` | `unfold-gateway.webgrip.dev` | 443 | the homelab gateway, `tag:hub` only on the tailnet; it forwards `vikunja.webgrip.dev` and `authentik.webgrip.dev` |
 | LiteLLM | `litellm-db` 5432, `api.fireworks.ai` 443, `inference.hetzner.com` 443 | | models |
 | a workspace | Unfold 4080, LiteLLM 4000, `forgejo.webgrip.dev` 443 | | nothing else |
 

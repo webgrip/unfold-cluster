@@ -147,7 +147,7 @@ at its row.
 | `headscale.webgrip.dev`, `headscale-drill.webgrip.dev` | E25, E26, E12 |
 | `forgejo.webgrip.dev` | E02, E04, E06 |
 | `harbor.webgrip.dev` | E09 |
-| `authentik.webgrip.dev` | E13 |
+| `authentik.webgrip.dev` | E13; staging's Unfold signs people in through it, by `vikunja-relay` and the homelab gateway's 443 |
 | `s3-offsite.webgrip.dev` | E24 |
 | `github.com` | E05, E41, E42 |
 | `api.hetzner.cloud` | E29 |

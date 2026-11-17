@@ -14,11 +14,12 @@ static_resources:
                 upgrade_configs:
                   - upgrade_type: CONNECT
                 route_config:
-                  name: vikunja-only
+                  name: vikunja-and-authentik-only
                   virtual_hosts:
                     - name: vikunja
                       domains:
                         - vikunja.webgrip.dev:443
+                        - authentik.webgrip.dev:443
                       routes:
                         - match:
                             connect_matcher: {}
@@ -36,13 +37,13 @@ static_resources:
                           direct_response:
                             status: 403
                             body:
-                              inline_string: "vikunja-relay opens vikunja.webgrip.dev:443 and nothing else\n"
+                              inline_string: "vikunja-relay opens vikunja.webgrip.dev:443 and authentik.webgrip.dev:443 and nothing else\n"
                         - match:
                             connect_matcher: {}
                           direct_response:
                             status: 403
                             body:
-                              inline_string: "vikunja-relay opens vikunja.webgrip.dev:443 and nothing else\n"
+                              inline_string: "vikunja-relay opens vikunja.webgrip.dev:443 and authentik.webgrip.dev:443 and nothing else\n"
                 http_filters:
                   - name: envoy.filters.http.router
                     typed_config:
