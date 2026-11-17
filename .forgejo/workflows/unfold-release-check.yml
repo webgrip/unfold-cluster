@@ -1,0 +1,22 @@
+---
+name: unfold-release-check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/apps/unfold-staging/**
+      - scripts/check-unfold-release.sh
+      - .forgejo/workflows/unfold-release-check.yml
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: unfold-check
+    steps:
+      - uses: https://forgejo.webgrip.dev/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Render the pinned Unfold release with staging's values, and prove the check refuses a wrong digest, an unknown value and a wrong type
+        run: ./scripts/check-unfold-release.sh --mutation-test

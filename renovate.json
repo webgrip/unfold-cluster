@@ -339,7 +339,7 @@
       "overridePackageName": "harbor.webgrip.dev/webgrip/agent-runner"
     },
     {
-      "description": "The Unfold chart follows 0.x release candidates. Docker versioning reads everything after '-' as a variant suffix and offers only tags with the same suffix, so 0.4.0-rc.127 was never an update of 0.4.0-rc.119; semver versioning orders the rc numbers. The update opens its pull request without a dashboard tick and never merges itself: a release can need new values or secrets in this cluster.",
+      "description": "The Unfold chart follows 0.x release candidates. Docker versioning reads everything after '-' as a variant suffix and offers only tags with the same suffix, so 0.4.0-rc.127 was never an update of 0.4.0-rc.119; semver versioning orders the rc numbers. The update opens its pull request without a dashboard tick and merges itself: platformAutomerge hands the merge to Forgejo once main's required checks pass, among them unfold-release-check, which renders the pinned chart with staging's values. A release that needs a value staging lacks fails that check and waits for a person; one that needs a missing Secret fails its upgrade, is rolled back by the HelmRelease's remediation and raises UnfoldFluxReconcileFailing.",
       "matchFileNames": [
         "kubernetes/apps/unfold-staging/unfold/ocirepository.yaml"
       ],
@@ -350,7 +350,9 @@
       "allowedVersions": "/^0\\./",
       "ignoreUnstable": false,
       "dependencyDashboardApproval": false,
-      "automerge": false
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
     }
   ]
 }
