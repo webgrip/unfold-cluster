@@ -123,7 +123,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref=">=0.0.0-0 <1.0.0-0",revision="0.4.0-rc.136@sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
         values: "1x60"
       - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.135+8ba259d5f2d9",reason="UpgradeSucceeded",ready="True",suspended="False"}'
         values: "1x60"
@@ -135,7 +135,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref=">=0.0.0-0 <1.0.0-0",revision="0.4.0-rc.136@sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
         values: "1x60"
       - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.136+cba789fdf5f0",reason="UpgradeSucceeded",ready="True",suspended="False"}'
         values: "1x60"
@@ -146,7 +146,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref=">=0.0.0-0 <1.0.0-0",revision="0.4.0-rc.136@sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
         values: "1x60"
       - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.136+cba789fdf5f0",reason="UpgradeFailed",ready="False",suspended="False"}'
         values: "1x60"

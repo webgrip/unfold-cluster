@@ -33,6 +33,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 | source-controller | `release-assets.githubusercontent.com`, `objects.githubusercontent.com` | 443 | those three indexes point their chart archives at GitHub release downloads on `github.com`, which redirect to the first host today and to the second before GitHub moved them |
 | source-controller | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | OCI charts on ghcr.io (Zot, External Secrets, Kyverno, CloudNativePG, Flux operator charts); blob downloads redirect to the second host |
 | source-controller | `quay.io`, `*.quay.io` | 443 | the Cilium chart; blob downloads redirect to `cdn*.quay.io` |
+| source-controller | `tuf-repo-cdn.sigstore.dev`, `rekor.sigstore.dev` | 443 | the `unfold` OCIRepository in `unfold-staging` verifies each release candidate's keyless cosign signature: Sigstore's trusted root comes from the TUF repository, and the transparency log from Rekor when a signature does not carry its own entry |
 | flux-operator | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | the `flux-operator-manifests` distribution artifact |
 | flux-operator | notification-controller | 9090 | its Kubernetes events |
 | notification-controller | Alertmanager in `observability` | 9093 | the `unfold-staging` rollout events of the Flux Alert `unfold-rollout` ([staging rollouts](staging-rollouts.md)); Alertmanager's own policy admits it |

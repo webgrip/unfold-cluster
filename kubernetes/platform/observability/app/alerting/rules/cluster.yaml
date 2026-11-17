@@ -156,7 +156,7 @@ groups:
           description: "The resource has failed to reconcile for 15 minutes; the cluster no longer matches Git for it."
       - alert: UnfoldStagingRolloutLagging
         expr: |
-          max by (chart) (label_replace(flux_resource_info{cluster="unfold",kind="OCIRepository",exported_namespace="unfold-staging",name="unfold",ready="True"}, "chart", "$1", "ref", "(.+)"))
+          max by (chart) (label_replace(flux_resource_info{cluster="unfold",kind="OCIRepository",exported_namespace="unfold-staging",name="unfold",ready="True"}, "chart", "$1", "revision", "([^@]+)@sha256:.+"))
           unless on (chart)
           max by (chart) (label_replace(flux_resource_info{cluster="unfold",kind="HelmRelease",exported_namespace="unfold-staging",name="unfold",ready="True"}, "chart", "$1", "revision", "([^+]+).*"))
         for: 30m
