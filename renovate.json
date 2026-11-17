@@ -339,7 +339,15 @@
       "overridePackageName": "harbor.webgrip.dev/webgrip/agent-runner"
     },
     {
-      "description": "The Unfold chart follows 0.x release candidates. Docker versioning reads everything after '-' as a variant suffix and offers only tags with the same suffix, so 0.4.0-rc.127 was never an update of 0.4.0-rc.119; semver versioning orders the rc numbers. The update opens its pull request without a dashboard tick, in a group of its own so it never rides along with other charts, and waits for the owner: only ryangr0 may deploy to this cluster (identity-and-access G-01) and core repositories need one approval (homelab-cluster ADR-0083). unfold-release-check renders the pinned chart with staging's values before that approval.",
+      "description": "Nothing in this repository merges itself except the Unfold staging release below. Renovate may merge to main only for that one exception (identity-and-access G-01, amended 2026-11-17), so this rule takes back the automerge the shared presets give Webgrip's own packages and preset bumps: a merge here deploys to production. Repository rules come after every preset rule, so this one wins over them.",
+      "matchPackageNames": [
+        "*"
+      ],
+      "automerge": false,
+      "platformAutomerge": false
+    },
+    {
+      "description": "The Unfold chart follows 0.x release candidates. Docker versioning reads everything after '-' as a variant suffix and offers only tags with the same suffix, so 0.4.0-rc.127 was never an update of 0.4.0-rc.119; semver versioning orders the rc numbers. The update opens its pull request without a dashboard tick, in a group of its own so it never rides along with other charts, and merges itself: the owner decided on 2026-11-17 that every release candidate reaches staging without a person, for staging only (identity-and-access G-01 amendment; production stays a manual bump, Unfold ADR-0040). platformAutomerge hands the merge to Forgejo once main's required checks pass. The safeguards are unfold-release-check, which renders the pinned chart with staging's values and is a required check of main once homelab-cluster#1080 applies, the same change that lets Renovate merge here; the HelmRelease's upgrade remediation, which rolls a failed upgrade back to the previous release; and UnfoldFluxReconcileFailing, which fires when it does.",
       "matchFileNames": [
         "kubernetes/apps/unfold-staging/unfold/ocirepository.yaml"
       ],
@@ -352,7 +360,9 @@
       "dependencyDashboardApproval": false,
       "groupName": "Unfold release",
       "groupSlug": "unfold-release",
-      "automerge": false
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
     },
     {
       "description": "Both Renovate's flux manager and the gitops preset's OCIRepository regex manager read every ocirepository.yaml, so each chart update opened two pull requests for the same line (Unfold 0.4.0-rc.134 as #217 and #218 on 2026-11-17). The preset's manager also follows spec.ref.digest and groups the charts, so the flux manager stays off for these files.",

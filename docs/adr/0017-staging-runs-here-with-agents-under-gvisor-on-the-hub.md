@@ -67,3 +67,8 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
   so Cloudflare's free Universal SSL covers it and Advanced Certificate Manager is not needed.
   Wherever this record says `staging.app.unfoldhq.dev`, read `staging-app.unfoldhq.dev`; production
   stays `app.unfoldhq.dev`. The `unfold_staging_hostname` variable refuses a deeper name.
+* 2026-11-17: The owner decided that every Unfold release candidate reaches staging without a
+  person: Renovate's `Unfold release` pull request merges itself once `main`'s required checks,
+  `unfold-release-check` among them, pass. This is a staging-only exception to identity-and-access
+  G-01; production stays a manual bump (Unfold ADR-0040). The safeguards and the homelab rule
+  that lets Renovate merge are in [identity-and-access](../architecture/identity-and-access.md#2026-11-17-renovate-merges-unfold-release-candidates-to-staging).

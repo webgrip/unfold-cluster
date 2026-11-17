@@ -28,14 +28,14 @@ The project id keeps its double quotes inside the single quotes (`'"123"'`). Flu
 
 ## How a release reaches staging
 
-Every `unfold-v0.x.y-rc.N` release the `unfold-hq/unfold` release train publishes reaches staging after one approval by the owner, the only one who may deploy to this cluster (identity-and-access G-01, homelab-cluster ADR-0083):
+Every `unfold-v0.x.y-rc.N` release the `unfold-hq/unfold` release train publishes reaches staging without a person. The owner decided this on 2026-11-17 as a staging-only exception to "only the owner deploys to this cluster" ([identity-and-access G-01](../architecture/identity-and-access.md#2026-11-17-renovate-merges-unfold-release-candidates-to-staging), [ADR 0017](../adr/0017-staging-runs-here-with-agents-under-gvisor-on-the-hub.md#history)). Production stays a manual bump (Unfold ADR-0040).
 
-1. Renovate (the homelab's `webgrip-forgejo` job, hourly) opens a pull request that moves the chart's tag and digest in `kubernetes/apps/unfold-staging/unfold/ocirepository.yaml`. The chart pins the Unfold image, the agent image and the Ploeg chart by digest, so this one line moves all of them.
+1. Renovate (the homelab's `webgrip-forgejo` job, hourly) opens a pull request that moves the chart's tag and digest in `kubernetes/apps/unfold-staging/unfold/ocirepository.yaml`: `Unfold release`, branch `renovate/unfold-release`. The chart pins the Unfold image, the agent image and the Ploeg chart by digest, so this one line moves all of them.
 2. `unfold-release-check` downloads that chart, refuses it unless its manifest has the pinned digest, and renders it with the HelmRelease's values and the Kustomization's substitutions (`scripts/check-unfold-release.sh`). A release that needs a value staging does not give it, renames one or changes its type fails here.
-3. The owner reads the release notes, approves and merges Renovate's pull request, `Unfold release` with branch `renovate/unfold-release`, and Flux upgrades the HelmRelease.
+3. Forgejo merges the pull request once every required check of `main` passed, `unfold-release-check / render` among them (`platformAutomerge`), and Flux upgrades the HelmRelease. Renovate may merge only because homelab-cluster's repo-config model lists `renovate` as a merger of `main` with no approval ([homelab-cluster#1080](https://forgejo.webgrip.dev/webgrip/homelab-cluster/pulls/1080); until it applies, the owner merges these pull requests as before); every other Renovate update in this repository has `automerge: false` in `renovate.json` and waits for the owner.
 4. An upgrade that fails in the cluster, for example on a Secret the release needs and `unfold/secrets.yaml` does not yet hold, is retried three times and rolled back to the previous release (`upgrade.remediation`); `UnfoldFluxReconcileFailing` fires.
 
-When the check fails, the pull request stays open: read the release notes and add the change to `helmrelease.yaml` on Renovate's branch or in a pull request of its own. To hold staging on a release, close Renovate's pull request; Renovate offers the next release again.
+When the check fails, the pull request stays open: read the release notes and add the change to `helmrelease.yaml` on Renovate's branch or in a pull request of its own. To hold staging on a release, close Renovate's pull request; Renovate offers the next release again. To stop staging following releases altogether, set `automerge: false` on the Unfold rule in `renovate.json`.
 
 The check renders neither Flux's post-renderers nor the cluster's admission policies; a release that trips one of those fails its upgrade and is rolled back as in step 4.
 
