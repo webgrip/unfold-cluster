@@ -35,6 +35,7 @@ A pod's DNS lookups go to kube-dns, or for a pod with `dnsPolicy: Default` to th
 | source-controller | `quay.io`, `*.quay.io` | 443 | the Cilium chart; blob downloads redirect to `cdn*.quay.io` |
 | flux-operator | `ghcr.io`, `pkg-containers.githubusercontent.com` | 443 | the `flux-operator-manifests` distribution artifact |
 | flux-operator | notification-controller | 9090 | its Kubernetes events |
+| notification-controller | Alertmanager in `observability` | 9093 | the `unfold-staging` rollout events of the Flux Alert `unfold-rollout` ([staging rollouts](staging-rollouts.md)); Alertmanager's own policy admits it |
 | kustomize-controller, helm-controller | source-controller | 9090 | artifacts, through the `source-controller` Service |
 
 Forgejo is not on the list: Flux reads this repository from GitHub. A new Flux source on another host adds that host here in the same pull request; `scripts/check-flux-source-egress.sh` (workflow `flux-source-egress-check`, on pull requests and on pushes to `main`) fails when a GitRepository, HelmRepository, OCIRepository or Bucket names a host the policy does not. Redirect targets such as CDNs cannot be read from the tree, so they stay a review item.

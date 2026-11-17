@@ -475,7 +475,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: alertmanager
 spec:
-  description: Alertmanager takes alerts from the three vmalerts and sends them to ntfy and the dead-man's switch over HTTPS by name; its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses. Grafana and alloy-metrics read it.
+  description: Alertmanager takes alerts from the three vmalerts and Flux's notification-controller and sends them to ntfy and the dead-man's switch over HTTPS by name; its DNS lookups go through Cilium's DNS proxy, which is how the policy learns those addresses. Grafana and alloy-metrics read it.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: alertmanager
@@ -491,6 +491,9 @@ spec:
             app.kubernetes.io/name: alloy-metrics
         - matchLabels:
             app: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
       toPorts:
         - ports:
             - port: "9093"

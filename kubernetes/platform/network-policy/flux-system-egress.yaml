@@ -190,7 +190,7 @@ metadata:
   name: notification-controller-egress
   namespace: flux-system
 spec:
-  description: 'notification-controller has no alert provider yet and talks only to the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'notification-controller talks to the API server and sends the unfold-staging rollout events to Alertmanager in observability, its only alert provider. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: notification-controller
@@ -212,3 +212,11 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
