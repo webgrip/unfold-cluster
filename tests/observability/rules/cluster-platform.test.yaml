@@ -123,6 +123,41 @@ tests:
 
   - interval: 1m
     input_series:
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+        values: "1x60"
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.135+8ba259d5f2d9",reason="UpgradeSucceeded",ready="True",suspended="False"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldStagingRolloutLagging
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, chart: 0.4.0-rc.136}
+
+  - interval: 1m
+    input_series:
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+        values: "1x60"
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.136+cba789fdf5f0",reason="UpgradeSucceeded",ready="True",suspended="False"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldStagingRolloutLagging
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="OCIRepository",name="unfold",ref="0.4.0-rc.136",revision="sha256:cba789fdf5f086828e427839444673ae327973a6f5f0bd8732591dc33b3dbdbb",reason="Succeeded",ready="True",suspended="False"}'
+        values: "1x60"
+      - series: 'flux_resource_info{cluster="unfold",namespace="flux-system",exported_namespace="unfold-staging",kind="HelmRelease",name="unfold",revision="0.4.0-rc.136+cba789fdf5f0",reason="UpgradeFailed",ready="False",suspended="False"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UnfoldStagingRolloutLagging
+        exp_alerts:
+          - exp_labels: {severity: warning, cluster: unfold, team: platform, chart: 0.4.0-rc.136}
+
+  - interval: 1m
+    input_series:
       - series: 'up{cluster="unfold",job="kubelet"}'
         values: "1x60"
     alert_rule_test:
