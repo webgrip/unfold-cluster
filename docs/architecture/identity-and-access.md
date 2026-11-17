@@ -344,6 +344,8 @@ comes from a rendered `unfold-admins` group yet.
 
 ### 2026-11-17: Renovate merges Unfold release candidates to staging
 
+Superseded the same day by [Flux follows Unfold release candidates](#2026-11-17-flux-follows-unfold-release-candidates-to-staging): Renovate no longer merges anything here.
+
 The owner decided that every Unfold release candidate reaches staging without a person. This is
 an exception to G-01 for staging only: the owner stays the only person who merges to `main`, and
 production stays a manual bump (Unfold ADR-0040).
@@ -361,3 +363,22 @@ one through the administrator override (#217, #220 and #221 have no review). Ren
 identity that can land a commit Flux applies with cluster-admin; what it may land is decided by
 `renovate.json`, which only the owner merges. To withdraw the exception, set `automerge: false`
 on the Unfold rule and take `renovate` off the merge list in the model.
+
+### 2026-11-17: Flux follows Unfold release candidates to staging
+
+The owner decided ("flux overal") that staging follows every Unfold release candidate through
+Flux, as the homelab does, instead of through a Renovate pull request. Nothing lands on `main`
+for a release, so G-01 is back to its 2026-10-26 state: only the owner merges.
+
+| What | Where |
+| --- | --- |
+| Staging installs the newest `0.x.y-rc.N` chart Flux finds, never a per-architecture tag | `ref.semver` and `ref.semverFilter: '^0\.\d+\.\d+-rc\.\d+$'` in `uc:kubernetes/apps/unfold-staging/unfold/ocirepository.yaml` |
+| Only a chart the `unfold-hq/unfold` release workflow signed for an `unfold-v0.x.y-rc.N` tag is installed | `verify.matchOIDCIdentity` on that OCIRepository: issuer GitHub Actions, subject `on_release_published.yml@refs/tags/unfold-v0.x.y-rc.N`, checked by source-controller against Sigstore's public instance (external dependency E49) |
+| Renovate does not touch the chart | `uc:renovate.json`: the Unfold staging chart rule has `enabled: false`; the catch-all `automerge: false` stays |
+| Renovate merges nothing on `main`, and `main` no longer requires `unfold-release-check / render` | `hl:repo-config/model/repos.yaml` back to `merge: [ryangr0]` and one approval; homelab-cluster ADR-0083, amended again 2026-11-17. Until that applies, Renovate stays on the merge list, but no rule here asks it to merge |
+| A release that fails in the cluster goes back to the previous release | `upgrade.remediation` and `test.enable` in `uc:kubernetes/apps/unfold-staging/unfold/helmrelease.yaml`; ntfy gets every rollout event ([staging rollouts](../runbooks/staging-rollouts.md)) |
+
+The cost: whoever can cut a signed release candidate in `unfold-hq/unfold` now changes what runs in
+staging, with no review in this repository. The chart pins every image by digest, and Kyverno
+checks the same signature on each `ghcr.io/unfold-hq/*` image (Audit for now, E49). Production stays a manual bump
+(Unfold ADR-0040). To withdraw it, put `ref.tag` and `ref.digest` back on the OCIRepository.
