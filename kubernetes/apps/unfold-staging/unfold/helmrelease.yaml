@@ -17,6 +17,9 @@ spec:
     remediation:
       retries: 3
       remediateLastFailure: true
+  test:
+    enable: true
+    timeout: 5m
   postRenderers:
     - kustomize:
         patches:
