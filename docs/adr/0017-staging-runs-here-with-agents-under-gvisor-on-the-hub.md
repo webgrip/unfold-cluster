@@ -72,3 +72,7 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
   `unfold-release-check` among them, pass. This is a staging-only exception to identity-and-access
   G-01; production stays a manual bump (Unfold ADR-0040). The safeguards and the homelab rule
   that lets Renovate merge are in [identity-and-access](../architecture/identity-and-access.md#2026-11-17-renovate-merges-unfold-release-candidates-to-staging).
+* 2026-11-17, later: Flux follows the candidates itself instead. The `unfold` OCIRepository names a
+  semver range limited to `0.x.y-rc.N` and verifies each chart's keyless signature from the
+  `unfold-hq/unfold` release workflow; Renovate no longer opens or merges a pull request for it and
+  `unfold-release-check` is retired. Details in [identity-and-access](../architecture/identity-and-access.md#2026-11-17-flux-follows-unfold-release-candidates-to-staging).

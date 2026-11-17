@@ -1,0 +1,26 @@
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: alertmanager
+spec:
+  type: alertmanager
+  address: http://alertmanager.observability.svc.cluster.local:9093/api/v2/alerts
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: unfold-rollout
+spec:
+  providerRef:
+    name: alertmanager
+  eventSeverity: info
+  eventSources:
+    - kind: HelmRelease
+      name: unfold
+    - kind: OCIRepository
+      name: unfold
+  eventMetadata:
+    summary: Unfold staging rollout
+    cluster: unfold
+    rollout: unfold-staging

@@ -5,7 +5,7 @@ metadata:
   name: source-controller-egress
   namespace: flux-system
 spec:
-  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub and, as the warm fallback source, from Forgejo; the Hetzner and Cilium chart indexes and archives from charts.hetzner.cloud and helm.cilium.io; the KEDA, kube-state-metrics, node-exporter, cluster-autoscaler, Trivy and metrics-server chart indexes from their github.io pages, whose archives (except KEDA) are GitHub release assets that redirect to release-assets.githubusercontent.com or objects.githubusercontent.com; and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'source-controller sends its events to notification-controller and fetches this repository from GitHub and, as the warm fallback source, from Forgejo; the Hetzner and Cilium chart indexes and archives from charts.hetzner.cloud and helm.cilium.io; the KEDA, kube-state-metrics, node-exporter, cluster-autoscaler, Trivy and metrics-server chart indexes from their github.io pages, whose archives (except KEDA) are GitHub release assets that redirect to release-assets.githubusercontent.com or objects.githubusercontent.com; and OCI charts and artifacts from ghcr.io and quay.io, whose blobs are served from their CDNs; and Sigstore''s trusted root from tuf-repo-cdn.sigstore.dev and its transparency log from rekor.sigstore.dev, to verify the keyless signature of each Unfold release candidate the unfold-staging OCIRepository follows. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: source-controller
@@ -50,6 +50,8 @@ spec:
         - matchName: pkg-containers.githubusercontent.com
         - matchName: quay.io
         - matchPattern: "*.quay.io"
+        - matchName: tuf-repo-cdn.sigstore.dev
+        - matchName: rekor.sigstore.dev
       toPorts:
         - ports:
             - port: "443"
@@ -190,7 +192,7 @@ metadata:
   name: notification-controller-egress
   namespace: flux-system
 spec:
-  description: 'notification-controller has no alert provider yet and talks only to the API server. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
+  description: 'notification-controller talks to the API server and sends the unfold-staging rollout events to Alertmanager in observability, its only alert provider. Staged: enableDefaultDeny egress is false, so this policy names the flows without blocking any other until it is flipped.'
   endpointSelector:
     matchLabels:
       app: notification-controller
@@ -212,3 +214,11 @@ spec:
               - matchPattern: "*"
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP

@@ -154,6 +154,19 @@ groups:
         annotations:
           summary: "Flux {{ $labels.kind }} {{ $labels.namespace }}/{{ $labels.name }} is not Ready ({{ $labels.reason }})"
           description: "The resource has failed to reconcile for 15 minutes; the cluster no longer matches Git for it."
+      - alert: UnfoldStagingRolloutLagging
+        expr: |
+          max by (chart) (label_replace(flux_resource_info{cluster="unfold",kind="OCIRepository",exported_namespace="unfold-staging",name="unfold",ready="True"}, "chart", "$1", "revision", "([^@]+)@sha256:.+"))
+          unless on (chart)
+          max by (chart) (label_replace(flux_resource_info{cluster="unfold",kind="HelmRelease",exported_namespace="unfold-staging",name="unfold",ready="True"}, "chart", "$1", "revision", "([^+]+).*"))
+        for: 30m
+        labels:
+          severity: warning
+          cluster: unfold
+          team: platform
+        annotations:
+          summary: "Unfold staging does not run chart {{ $labels.chart }} 30 minutes after Flux fetched it"
+          description: "OCIRepository unfold-staging/unfold holds chart {{ $labels.chart }}, but HelmRelease unfold-staging/unfold is not Ready on that version: the upgrade failed and was rolled back, is still retrying, or is stuck. Runbook: docs/runbooks/staging-rollouts.md."
       - alert: UnfoldFluxMetricsAbsent
         expr: absent(flux_resource_info{cluster="unfold"}) and on() count(up{cluster="unfold"}) > 0
         for: 30m
