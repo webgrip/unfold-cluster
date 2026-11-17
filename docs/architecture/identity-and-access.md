@@ -341,3 +341,23 @@ comes from a rendered `unfold-admins` group yet.
 | G-16 | The colleague reads the Unfold audit log and metrics through his homelab Grafana edit role | Low | Unfold folder and datasources restricted to `unfold-*` groups, or moved to Unfold's Grafana | S |
 | G-17 | RFC 0001 still describes Google as the issuer while the cluster runs Authentik | Low | ADR 0014 records the actual and target state; RFC 0001 links it | S |
 | G-18 | Client tenants have no IdP | n/a until the first client | Product IdP ADR with the tenant model | L |
+
+### 2026-11-17: Renovate merges Unfold release candidates to staging
+
+The owner decided that every Unfold release candidate reaches staging without a person. This is
+an exception to G-01 for staging only: the owner stays the only person who merges to `main`, and
+production stays a manual bump (Unfold ADR-0040).
+
+| What | Where |
+| --- | --- |
+| Renovate merges to `main` with no approval, and `main` requires `unfold-release-check / render (pull_request)` | `hl:repo-config/model/repos.yaml` (`unfold-cluster.main`: `merge: [ryangr0, renovate]`, `required_approvals: 0`); homelab-cluster ADR-0083, amended 2026-11-17, [homelab-cluster#1080](https://forgejo.webgrip.dev/webgrip/homelab-cluster/pulls/1080). Until it applies, the live rule is `merge: [ryangr0]`, one approval, and the render check is not required |
+| Only the Unfold staging chart merges itself; every other Renovate update in this repository, Webgrip's own packages and preset bumps included, waits for the owner | `uc:renovate.json`: a catch-all `automerge: false`, then the `Unfold release` rule for `kubernetes/apps/unfold-staging/unfold/ocirepository.yaml` with `automerge`, `automergeType: pr` and `platformAutomerge` |
+| A release that needs a value staging lacks, renames one or changes its type does not merge | `unfold-release-check` renders the pinned chart with the HelmRelease's values (`uc:scripts/check-unfold-release.sh`) |
+| A release that merges but fails in the cluster goes back to the previous release | `upgrade.remediation` in `uc:kubernetes/apps/unfold-staging/unfold/helmrelease.yaml`, and `UnfoldFluxReconcileFailing` fires |
+
+The cost: Forgejo protects a branch, not a file, so the homelab rule no longer asks an approval
+for any pull request to `main`, the owner's own included. In practice he already merged without
+one through the administrator override (#217, #220 and #221 have no review). Renovate becomes an
+identity that can land a commit Flux applies with cluster-admin; what it may land is decided by
+`renovate.json`, which only the owner merges. To withdraw the exception, set `automerge: false`
+on the Unfold rule and take `renovate` off the merge list in the model.
