@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: unfold
 spec:
-  description: The workbench answers the tunnel connector and its own agent workspaces on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
+  description: The workbench answers the tunnel connector and its own agent workspaces on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja and the homelab Authentik only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: unfold
@@ -117,7 +117,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: vikunja-relay
 spec:
-  description: The relay carries ploegd's and the workbench's Vikunja API calls to the homelab gateway, which only the hub's tailnet tag may open on 443 (ADR 0006). It forwards one authority, vikunja.webgrip.dev:443. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
+  description: The relay carries ploegd's and the workbench's Vikunja API calls to the homelab gateway, which only the hub's tailnet tag may open on 443 (ADR 0006). It forwards two authorities, vikunja.webgrip.dev:443 and, for the workbench's sign-in, authentik.webgrip.dev:443. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vikunja-relay

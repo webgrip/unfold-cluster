@@ -128,6 +128,23 @@ spec:
     decider:
       enabled: false
     config:
+      auth:
+        oidc:
+          issuer: https://authentik.webgrip.dev/application/o/unfold-staging/
+          clientId: unfold-staging
+          displayName: Homelab login
+          scopes:
+            - openid
+            - email
+            - profile
+            - groups
+            - offline_access
+          groupsClaim: groups
+          roles:
+            admin:
+              - unfold-app-admins
+            operator: []
+            viewer: []
       maxConcurrentSessions: 1
       maxBudgetUsd: 0.50
       ploeg:
