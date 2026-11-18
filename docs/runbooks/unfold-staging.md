@@ -179,7 +179,7 @@ A post-renderer on the HelmRelease gives each worker CronJob's `worker-bin` volu
 
 Ploeg finds pull request merges by itself every 10 minutes, so staging needs no Forgejo webhook.
 
-The executor is on since 2026-11-18. Its Runs use Ploeg's own agent image, `ghcr.io/ploeg-hq/agent-runner` (Ploeg ADR-0200), pinned by tag and digest in `executor.runnerImage`; the admission policy `pinned-approved-images` admits that repository. To stop all Runs, set `executor.enabled: false` in a pull request.
+The executor is off again since 2026-11-18. Its first worker pods were admitted and pulled `ghcr.io/ploeg-hq/agent-runner` (Ploeg ADR-0200), but every worker stopped after two minutes with `no harness launcher connected to /run/ploeg/launcher/launcher.sock`: under gVisor the Unix socket the harness container creates in the shared `harness-launcher` volume does not reach the worker container, so no Run could start. Ploeg is moving that connection from the socket to TCP on the pod's loopback, which works under gVisor, Kata and runc alike; once a Ploeg release carries it, turn the executor on again with that release's agent image by digest in `executor.runnerImage`. The admission policy `pinned-approved-images` already admits the image.
 
 ## Checks
 

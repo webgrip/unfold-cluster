@@ -293,7 +293,7 @@ spec:
             assignees:
               - ${UNFOLD_STAGING_CLICKUP_AGENT}
       executor:
-        enabled: true
+        enabled: false
         type: cronjob
         namespace: unfold-staging-workers
         forge: forgejo
