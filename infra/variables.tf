@@ -377,6 +377,17 @@ variable "homelab_gateway_key_generation" {
   default     = 1
 }
 
+variable "homelab_gateway_tailnet_ipv4" {
+  description = "The homelab gateway's tailnet address. Headscale's extra_records answer authentik.webgrip.dev with it, so a person's device signs in to OpenBao, Kubernetes and Headscale through the gateway's 443 instead of a VPN to the homelab LAN. Headscale keeps it while the gateway keeps its node; after the gateway re-joins (a new key generation or a new Headscale) read it from `tailscale status` and set it here."
+  type        = string
+  default     = "100.64.0.6"
+
+  validation {
+    condition     = can(cidrhost("${var.homelab_gateway_tailnet_ipv4}/32", 0)) && cidrcontains("100.64.0.0/10", var.homelab_gateway_tailnet_ipv4)
+    error_message = "homelab_gateway_tailnet_ipv4 must be an address in the tailnet's 100.64.0.0/10"
+  }
+}
+
 variable "headscale_generation" {
   description = "The generation of unfold-headscale. Raising it replaces the server through a reviewed plan: the apply lifts its delete protection first (scripts/lift-headscale-protection.sh), the new server starts from the current cloud-init, and every node, the homelab gateway included, re-joins with a fresh key the same apply hands it. Generation 3 replaced the server of 2026-10-25, whose program and sudoers rule predate the apply's install and policy steps. Generation 4 adds the disk KMS (disk-kms.tf), which only a new server's cloud-init installs."
   type        = number

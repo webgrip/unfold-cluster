@@ -16,7 +16,8 @@ The Grafana dashboards for the same features are in `kubernetes/platform/ops-con
 
 ```
 browser on the tailnet
-  │  DNS: Headscale's extra_records answer *.ops.unfoldhq.dev with 10.64.0.10 (tailnet clients only)
+  │  DNS: Headscale's extra_records answer *.ops.unfoldhq.dev with 10.64.0.10 (tailnet clients only),
+  │       and authentik.webgrip.dev, where the consoles' OIDC login goes, with the homelab gateway
   ▼
 10.64.0.10:443, the API address, held by one control plane; the control planes route 10.64.0.0/24 to the tailnet
   │  Talos host firewall: 443 open to the tailnet prefixes and 10.64.0.0/16 only (infra/host-firewall.tf)

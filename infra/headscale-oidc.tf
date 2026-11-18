@@ -26,6 +26,9 @@ locals {
   ops_console_records = [
     for host in local.ops_console_hosts : { name = "${host}.${local.ops_console_domain}", type = "A", value = local.api_vip }
   ]
+  homelab_sign_in_records = [
+    for host in ["authentik.webgrip.dev"] : { name = host, type = "A", value = var.homelab_gateway_tailnet_ipv4 }
+  ]
 
   headscale_config = templatefile("${path.module}/templates/headscale-config.yaml.tftpl", {
     hostname                = var.headscale_hostname
@@ -36,7 +39,7 @@ locals {
     oidc_client_id          = local.headscale_oidc.client_id
     oidc_client_secret_path = local.headscale_oidc.client_secret_path
     oidc_allowed_groups     = local.headscale_oidc.allowed_groups
-    ops_console_records     = local.ops_console_records
+    extra_records           = concat(local.ops_console_records, local.homelab_sign_in_records)
   })
 
   headscale_oidc_client_secret_given = nonsensitive(var.headscale_oidc_client_secret != "")

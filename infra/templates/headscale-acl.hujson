@@ -21,7 +21,7 @@
         "${tag}:*",
 %{ endfor ~}
         "tag:headscale:*",
-        "tag:homelab-gateway:8200,8427,9150",
+        "tag:homelab-gateway:443,8200,8427,9150",
         "${node_route}:*"
       ]
     },

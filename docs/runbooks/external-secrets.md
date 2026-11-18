@@ -104,7 +104,7 @@ Each ExternalSecret carries [wellhead](https://github.com/wellhead-dev/wellhead)
 | `preserve` | written once, never regenerated | the `hcloud-luks` passphrase: restore the escrowed value, never a new one |
 | `projected` | another ExternalSecret | `agent-litellm-master`, copied from `litellm-generated` |
 
-From a device on the tailnet, logged in to the homelab OpenBao (`bao login`, or `BAO_TOKEN`),
+From a device on the tailnet (`tailscale ping 100.64.0.6` answers; no VPN to the homelab is needed, see [signing in from the tailnet](headscale-browser-login.md#signing-in-to-the-homelab-from-the-tailnet)), logged in to the homelab OpenBao (`BAO_ADDR=http://unfold-gateway.webgrip.dev:8200 bao login -method=oidc`, or `BAO_TOKEN`),
 `missing` lists every value the vault does not hold, and `seed` fills one: it shows `how`, asks
 without echo, runs the checks, writes with check-and-set, records who seeded it and when, and makes
 External Secrets sync. The mise task runs the version pinned in `scripts/wellhead.sh`, downloaded on

@@ -7,7 +7,7 @@ pre-auth keys the apply mints, and never expire.
 
 ## Joining a device
 
-You need the homelab LAN or its WireGuard VPN, because the Authentik login page is not public.
+The first time, and when the device expired, you need the homelab LAN or its VPN, because the Authentik login page is not public and an expired device is off the tailnet. Once the device is on the tailnet it reaches Authentik through the homelab gateway ([below](#signing-in-to-the-homelab-from-the-tailnet)), and the VPN can stay off.
 
 ```sh
 tailscale up --login-server=https://headscale.webgrip.dev
@@ -38,9 +38,31 @@ The passkey is demanded by the application's authorization flow `webgrip-passkey
 every time), so an existing Authentik session without the passkey does not get through.
 
 Every device a person registers is `autogroup:member` in the tailnet policy and reaches every
-tagged node, the cluster's subnet and port 8200, 8427 and 9150 of the homelab gateway. Only
-`tag:headscale` reaches the gateway's port 443 (`infra/tests/headscale_oidc.tftest.hcl` fails on
-any rule, wildcard, range or prefix that would let anything else in).
+tagged node, the cluster's subnet and port 443, 8200, 8427 and 9150 of the homelab gateway. Besides
+the people's devices only `tag:headscale` and `tag:hub` reach the gateway's port 443
+(`infra/tests/headscale_oidc.tftest.hcl` fails on any rule, wildcard, range or prefix that would let
+anything else in).
+
+## Signing in to the homelab from the tailnet
+
+`bao login -method=oidc`, the Kubernetes login (kubelogin) and `mise run wellhead` all send the
+browser to `authentik.webgrip.dev`, which answers on the homelab LAN only. Headscale's
+`extra_records` answer that name with the homelab gateway's tailnet address
+(`homelab_gateway_tailnet_ipv4`, `infra/variables.tf`), and the gateway forwards its 443 to the
+homelab's internal gateway, so a device on the tailnet signs in without a VPN to the homelab LAN:
+
+```
+browser ──MagicDNS: authentik.webgrip.dev = gateway's tailnet IPv4──▶ tailnet,
+  ACL autogroup:member → tag:homelab-gateway:443 ──▶ envoy-internal.network:443 ──▶ Authentik
+```
+
+The device must use Tailscale's DNS (the default; `tailscale up --accept-dns`). Before such a
+login, check the tailnet: `tailscale ping 100.64.0.6` answers `pong`. A VPN on the same Mac that
+holds every network extension's traffic, such as OpenVPN Connect, keeps Tailscale from reaching its
+relay: the node shows as connected but answers no ping. Turn the VPN off; it is not needed.
+
+When the gateway re-joins the tailnet (a new key generation or a new Headscale), its address can
+change: read it from `tailscale status` and set `homelab_gateway_tailnet_ipv4` in a pull request.
 
 ## How Headscale reaches a LAN-only Authentik
 

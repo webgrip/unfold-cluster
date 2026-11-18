@@ -72,7 +72,7 @@ variables {
   admin_cidrs          = ["203.0.113.7/32"]
 }
 
-run "only_headscale_and_the_hub_reach_the_identity_provider_behind_the_gateways_443" {
+run "only_people_headscale_and_the_hub_reach_the_identity_provider_behind_the_gateways_443" {
   command = plan
 
   assert {
@@ -93,8 +93,8 @@ run "only_headscale_and_the_hub_reach_the_identity_provider_behind_the_gateways_
           ])
         )
       ])
-    ] == [["tag:headscale"], ["tag:hub"]]
-    error_message = "exactly two rules may reach the homelab gateway's port 443, which leads to the homelab's internal gateway: tag:headscale for the tailnet's browser login and tag:hub, where authentik-relay carries the consoles' OIDC exchanges (ADR 0006); no wildcard, port range, tailnet prefix, admin or other node rule may cover it"
+    ] == [["autogroup:member"], ["tag:headscale"], ["tag:hub"]]
+    error_message = "exactly three rules may reach the homelab gateway's port 443, which leads to the homelab's internal gateway: the people's devices, which sign in to OpenBao, Kubernetes and Headscale through Authentik there instead of a VPN to the homelab LAN; tag:headscale for the tailnet's browser login; and tag:hub, where authentik-relay carries staging's OIDC exchanges (ADR 0006). No wildcard, port range, tailnet prefix or other node rule may cover it"
   }
 
   assert {
@@ -222,5 +222,19 @@ run "nothing_new_on_headscale_answers_the_internet_but_its_own_tailnet_transport
       "udp/41641",
     ])
     error_message = "from the internet Headscale answers only HTTPS, the ACME challenge, STUN and the WireGuard port of its own tailnet node"
+  }
+}
+
+run "a_persons_device_finds_authentik_at_the_homelab_gateway" {
+  command = plan
+
+  assert {
+    condition     = contains(yamldecode(local.headscale_config).dns.extra_records, { name = "authentik.webgrip.dev", type = "A", value = "100.64.0.6" })
+    error_message = "Headscale must answer authentik.webgrip.dev with the homelab gateway's tailnet address, so a device on the tailnet signs in without a VPN to the homelab LAN"
+  }
+
+  assert {
+    condition     = contains(one([for rule in jsondecode(local.headscale_policy).acls : rule if rule.src == ["autogroup:member"]]).dst, "tag:homelab-gateway:443,8200,8427,9150")
+    error_message = "a person's device must reach the gateway's 443, where the homelab's internal gateway serves Authentik"
   }
 }
