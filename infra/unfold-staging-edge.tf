@@ -100,6 +100,15 @@ locals {
   ]
 
   unfold_staging_access_session = "8h"
+
+  unfold_staging_editor_token_lifetime = "8760h"
+  unfold_staging_editor_token_kv_path  = "cloudflare/unfold-staging-access"
+}
+
+variable "unfold_staging_editor_token_generation" {
+  description = "Raise to replace the Access service token an editor or another client without a browser presents to Unfold staging. The old client id and secret stop working in the same apply, the new pair gets a fresh lifetime, and the apply writes it to OpenBao secret/cloudflare/unfold-staging-access (docs/runbooks/unfold-staging-edge.md)."
+  type        = number
+  default     = 1
 }
 
 variable "unfold_staging_tunnel_generation" {
@@ -210,6 +219,36 @@ resource "cloudflare_zero_trust_access_policy" "unfold_staging_webhooks" {
   include    = [{ everyone = {} }]
 }
 
+resource "terraform_data" "unfold_staging_editor_token_generation" {
+  for_each = local.unfold_staging_edge
+
+  input = var.unfold_staging_editor_token_generation
+}
+
+resource "cloudflare_zero_trust_access_service_token" "unfold_staging_editors" {
+  for_each = local.unfold_staging_edge
+
+  account_id = var.cloudflare_account_id
+  name       = "unfold-staging editors ${var.unfold_staging_editor_token_generation}"
+  duration   = local.unfold_staging_editor_token_lifetime
+
+  lifecycle {
+    create_before_destroy = true
+    replace_triggered_by  = [terraform_data.unfold_staging_editor_token_generation[each.key]]
+  }
+}
+
+resource "cloudflare_zero_trust_access_policy" "unfold_staging_editors" {
+  for_each = local.unfold_staging_edge
+
+  account_id = var.cloudflare_account_id
+  name       = "unfold-staging editors"
+  decision   = "non_identity"
+  include = [
+    { service_token = { token_id = cloudflare_zero_trust_access_service_token.unfold_staging_editors[each.key].id } },
+  ]
+}
+
 resource "cloudflare_zero_trust_access_application" "unfold_staging" {
   for_each = local.unfold_staging_edge
 
@@ -226,6 +265,7 @@ resource "cloudflare_zero_trust_access_application" "unfold_staging" {
   same_site_cookie_attribute = "lax"
   policies = [
     { id = cloudflare_zero_trust_access_policy.unfold_staging_people[each.key].id, precedence = 1 },
+    { id = cloudflare_zero_trust_access_policy.unfold_staging_editors[each.key].id, precedence = 2 },
   ]
 }
 
@@ -270,4 +310,34 @@ resource "terraform_data" "unfold_staging_tunnel_token" {
       TUNNEL_TOKEN = local.unfold_staging_tunnel_token[each.key]
     }
   }
+}
+
+resource "terraform_data" "unfold_staging_editor_token" {
+  for_each = local.unfold_staging_edge
+
+  depends_on = [cloudflare_zero_trust_access_application.unfold_staging]
+
+  triggers_replace = [
+    cloudflare_zero_trust_access_service_token.unfold_staging_editors[each.key].id,
+    cloudflare_zero_trust_access_service_token.unfold_staging_editors[each.key].client_secret_version,
+  ]
+
+  provisioner "local-exec" {
+    command = "printf '%s\\n' \"$CLIENT_ID\" | ${path.module}/../scripts/openbao-kv.sh put access-client-id ${local.unfold_staging_editor_token_kv_path} CF_ACCESS_CLIENT_ID"
+    environment = {
+      CLIENT_ID = cloudflare_zero_trust_access_service_token.unfold_staging_editors[each.key].client_id
+    }
+  }
+
+  provisioner "local-exec" {
+    command = "printf '%s\\n' \"$CLIENT_SECRET\" | ${path.module}/../scripts/openbao-kv.sh put access-client-secret ${local.unfold_staging_editor_token_kv_path} CF_ACCESS_CLIENT_SECRET"
+    environment = {
+      CLIENT_SECRET = cloudflare_zero_trust_access_service_token.unfold_staging_editors[each.key].client_secret
+    }
+  }
+}
+
+output "unfold_staging_editor_token_expires_at" {
+  description = "When the Access service token of Unfold staging stops working; null without the staging edge. Raise unfold_staging_editor_token_generation before then (docs/runbooks/unfold-staging-edge.md)."
+  value       = one([for token in cloudflare_zero_trust_access_service_token.unfold_staging_editors : token.expires_at])
 }
