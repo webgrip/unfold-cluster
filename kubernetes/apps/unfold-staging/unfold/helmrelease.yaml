@@ -293,7 +293,7 @@ spec:
             assignees:
               - ${UNFOLD_STAGING_CLICKUP_AGENT}
       executor:
-        enabled: false
+        enabled: true
         type: cronjob
         namespace: unfold-staging-workers
         forge: forgejo
@@ -302,7 +302,7 @@ spec:
           node.webgrip.io/pool: unfold
         forgeTokenIsolation: proxy
         harnessOutputInLog: false
-        runnerImage: ghcr.io/webgrip/agent-runner:1.4.2@sha256:7e66896383de9ecf7b425896bfa33b3d7f46f30053fdcacd835bb5a20a5742b2
+        runnerImage: ghcr.io/ploeg-hq/agent-runner:0.2.0-rc.121@sha256:d7d136d037edc8f2968d835517636e9236c236c506752b545bf2406c71b54e93
         litellm:
           baseUrl: http://litellm.litellm-staging.svc.cluster.local:4000/v1
           adminUrl: http://litellm.litellm-staging.svc.cluster.local:4000
