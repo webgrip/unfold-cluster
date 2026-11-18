@@ -82,17 +82,17 @@ spec:
     errorReports:
       environment: staging
     extraEnv:
-      - name: UNFOLD_TASK_VIKUNJA_TOKEN
+      - name: UNFOLD_TASK_CLICKUP_TOKEN
         valueFrom:
           secretKeyRef:
-            name: ploeg-vikunja-bot
-            key: VIKUNJA_API_TOKEN
+            name: clickup-bot
+            key: CLICKUP_API_TOKEN
       - name: NODE_USE_ENV_PROXY
         value: "1"
       - name: HTTPS_PROXY
-        value: http://vikunja-relay.unfold-staging.svc.cluster.local:3128
+        value: http://authentik-relay.unfold-staging.svc.cluster.local:3128
       - name: NO_PROXY
-        value: localhost,127.0.0.1,.svc,.cluster.local,forgejo.webgrip.dev,10.66.0.0/16,10.65.0.0/16
+        value: localhost,127.0.0.1,.svc,.cluster.local,forgejo.webgrip.dev,api.clickup.com,10.66.0.0/16,10.65.0.0/16
     workspaceNamespace: unfold-staging-workspaces
     createWorkspaceNamespace: false
     workspaceProvisioner: pod
@@ -179,12 +179,12 @@ spec:
             - --check
       taskSources:
         - id: ploeg-staging
-          name: Ploeg Staging
-          provider: vikunja
-          baseUrl: https://vikunja.webgrip.dev/api/v1
-          project: ${UNFOLD_STAGING_VIKUNJA_PROJECT_ID}
+          name: Staging fixture
+          provider: clickup
+          baseUrl: https://api.clickup.com/api/v2
+          project: ${UNFOLD_STAGING_CLICKUP_LIST_ID}
           repositoryId: ploeg-bench-world
-          tokenEnv: UNFOLD_TASK_VIKUNJA_TOKEN
+          tokenEnv: UNFOLD_TASK_CLICKUP_TOKEN
           executionOwner: ploeg
           ploeg:
             target:
@@ -220,8 +220,7 @@ spec:
           peers:
             - podSelector:
                 matchLabels:
-                  app.kubernetes.io/name: vikunja-relay
-          port: "3128"
+                  ploeg.webgrip.dev/egress: cilium-fqdn
         ploegd:
           ingressFrom:
             - podSelector:
@@ -240,20 +239,24 @@ spec:
         existingSecret:
           name: ploeg-db-app
           key: uri
-      webhook:
-        existingSecret:
-          name: ploeg-webhook-secret
-          key: PLOEG_VIKUNJA_SECRET
       tracker:
-        url: https://vikunja.webgrip.dev/api/v1
-        tokenSecret:
-          name: ploeg-vikunja-bot
-          key: VIKUNJA_API_TOKEN
+        clickup:
+          tokenSecret:
+            name: clickup-bot
+            key: CLICKUP_API_TOKEN
+          webhookSecret:
+            name: clickup-webhook
+            key: PLOEG_CLICKUP_SECRET
+          workspaceId: ${UNFOLD_STAGING_CLICKUP_WORKSPACE_ID}
+          webhookUrl: https://${UNFOLD_STAGING_HOSTNAME}/webhooks/tracker/clickup
+          statuses:
+            active: in progress
+            awaiting_review: in review
+            needs_human: needs you
+            done: done
       env:
         PLOEG_DEFAULT_TEAM: staging
         PLOEG_LEASE_TTL: 15m
-        HTTPS_PROXY: http://vikunja-relay.unfold-staging.svc.cluster.local:3128
-        NO_PROXY: localhost,127.0.0.1,.svc,.cluster.local,forgejo.webgrip.dev,10.66.0.0/16,10.65.0.0/16
       operator:
         consumers:
           - name: unfold
@@ -271,17 +274,20 @@ spec:
             branch: main
             forge: forgejo
         trackers:
-          vikunja:
+          clickup:
+            agents:
+              - ${UNFOLD_STAGING_CLICKUP_AGENT}
             projects:
-              - name: Ploeg Staging
-                id: ${UNFOLD_STAGING_VIKUNJA_PROJECT_ID}
+              - name: Staging fixture
+                id: ${UNFOLD_STAGING_CLICKUP_LIST_ID}
                 team: staging
                 repo: webgrip/ploeg-bench-world
                 branch: main
                 forge: forgejo
         teams:
           staging:
-            assignees: []
+            assignees:
+              - ${UNFOLD_STAGING_CLICKUP_AGENT}
       executor:
         enabled: false
         type: keda

@@ -116,7 +116,7 @@ to the configuration in a pull request, apply, then remove the block.
 ## Checks after an apply
 
 * `https://staging-app.unfoldhq.dev/` redirects to Google (or asks for a one-time PIN before the Google client exists), and only an allowed domain or address gets in.
-* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja`
+* `curl -sS -o /dev/null -w '%{http_code}' -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/clickup`
   answers 401 from ploegd, not an Access redirect.
 * `curl -sS -o /dev/null -w '%{http_code}' -H 'Host: other.unfoldhq.dev' …` through the tunnel answers 404.
 * The tunnel shows two healthy connectors in Zero Trust → Networks → Tunnels.
