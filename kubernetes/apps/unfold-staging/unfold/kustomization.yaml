@@ -11,6 +11,6 @@ resources:
   - notifications.yaml
   - executor
 configMapGenerator:
-  - name: vikunja-relay
+  - name: authentik-relay
     files:
-      - vikunja-relay.yaml
+      - authentik-relay.yaml

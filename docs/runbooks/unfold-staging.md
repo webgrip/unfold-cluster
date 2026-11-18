@@ -6,7 +6,7 @@ Unfold staging runs in this cluster at `https://staging-app.unfoldhq.dev`, publi
 
 | Namespace | What | Placement |
 | --- | --- | --- |
-| `unfold-staging` | The `unfold` HelmRelease (`oci://ghcr.io/unfold-hq/charts/unfold`, pinned by digest; it pins `ghcr.io/unfold-hq/unfold`, `ghcr.io/unfold-hq/unfold-agent` and the Ploeg chart it was tested with by digest, [image signatures](image-signatures.md#keyless-unfold-hq-releases)): the Unfold workbench and ploegd, with Ploeg's executor off; `ploeg-db` (CNPG, one instance, database `app`, owner `ploeg`); `vikunja-relay` | hub (`node.webgrip.io/pool=unfold`) |
+| `unfold-staging` | The `unfold` HelmRelease (`oci://ghcr.io/unfold-hq/charts/unfold`, pinned by digest; it pins `ghcr.io/unfold-hq/unfold`, `ghcr.io/unfold-hq/unfold-agent` and the Ploeg chart it was tested with by digest, [image signatures](image-signatures.md#keyless-unfold-hq-releases)): the Unfold workbench and ploegd, with Ploeg's executor off; `ploeg-db` (CNPG, one instance, database `app`, owner `ploeg`); `authentik-relay` | hub (`node.webgrip.io/pool=unfold`) |
 | `unfold-staging-workspaces` | Unfold's agent workspaces, one pod each, `runtimeClassName: gvisor`; labelled `ploeg.webgrip.dev/isolation-class: hardened`, so `sandboxed-workloads` refuses any pod without gVisor and with a mounted token | hub, through the `gvisor` RuntimeClass |
 | `litellm-staging` | LiteLLM (`ghcr.io/berriai/litellm-non_root`, app-template chart) with staging's own provider keys and budgets; `litellm-db` (CNPG) | hub |
 | `unfold-staging-edge` | `cloudflared`, two replicas, the tunnel connector | hub |
@@ -17,14 +17,16 @@ A `LimitRange` in `unfold-staging` and in `unfold-staging-workspaces` gives ever
 
 ### Substitutions
 
-The `unfold-staging` Flux Kustomization sets two variables in `kubernetes/apps/unfold-staging/ks.yaml`:
+The `unfold-staging` Flux Kustomization sets these variables in `kubernetes/apps/unfold-staging/ks.yaml`:
 
 | Variable | Value | Used for |
 | --- | --- | --- |
-| `UNFOLD_STAGING_HOSTNAME` | `staging-app.unfoldhq.dev` | Unfold's `baseUrl` |
-| `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` | `'"154"'`, *Fixture · Ploeg Staging (unfold-cluster)* | the Vikunja project id of Unfold's task source |
+| `UNFOLD_STAGING_HOSTNAME` | `staging-app.unfoldhq.dev` | Unfold's `baseUrl` and the ClickUp webhook ploegd looks for |
+| `UNFOLD_STAGING_CLICKUP_WORKSPACE_ID` | `'"1500520000009653"'` | the ClickUp Workspace whose webhooks ploegd checks |
+| `UNFOLD_STAGING_CLICKUP_LIST_ID` | `'"1500520000176822"'`, the List *Staging fixture* (Unfold › Engineering) | Unfold's task source and ploegd's board |
+| `UNFOLD_STAGING_CLICKUP_AGENT` | the bot member's email address | the only assignee that dispatches, and the `staging` Team's tracker user |
 
-The project id keeps its double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold as a number. ploegd finds the same project by its name, *Ploeg Staging*.
+The ids keep their double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold and ploegd as a number.
 
 ## How a release reaches staging
 
@@ -69,16 +71,39 @@ Generated in the cluster, never in OpenBao (External Secrets `Password` generato
 
 Until the identity broker of Unfold's ADR-0058 runs, people sign in to staging with the homelab Authentik, as on production Unfold. The client is `unfold-staging`, public with PKCE, made by the homelab access plane (homelab-cluster `kubernetes/apps/security/access-plane/tofu/broker/applications.tf`) and open to the `unfold-admin` capability. Unfold's `config.auth.oidc` in `kubernetes/apps/unfold-staging/unfold/helmrelease.yaml` makes `unfold-app-admins` an admin. There is no client secret.
 
-Authentik answers on the homelab LAN only, so the sign-in works from a browser on the LAN or the tailnet, after Cloudflare Access. The workbench makes its code and refresh-token exchanges through `vikunja-relay`, which forwards `authentik.webgrip.dev:443` next to `vikunja.webgrip.dev:443`, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) take through their own relay. Local sign-in is off (`auth.localLogin: false`) since 2026-11-17, after the owner signed in through Authentik; only `unfold-app-admins` can sign in at all, so that sign-in was an admin's. Unfold offers only Homelab login, refuses `POST /api/login` and creates no administrator from `UNFOLD_ADMIN_PASSWORD`. Off the LAN and the tailnet nobody can sign in to staging until the broker runs. To get a password sign-in back, set `auth.localLogin: true` in a pull request.
+Authentik answers on the homelab LAN only, so the sign-in works from a browser on the LAN or the tailnet, after Cloudflare Access. The workbench makes its code and refresh-token exchanges through `authentik-relay`, an Envoy CONNECT proxy that forwards `authentik.webgrip.dev:443` and nothing else to the homelab gateway's 443, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) take through their own relay. Local sign-in is off (`auth.localLogin: false`) since 2026-11-17, after the owner signed in through Authentik; only `unfold-app-admins` can sign in at all, so that sign-in was an admin's. Unfold offers only Homelab login, refuses `POST /api/login` and creates no administrator from `UNFOLD_ADMIN_PASSWORD`. Off the LAN and the tailnet nobody can sign in to staging until the broker runs. To get a password sign-in back, set `auth.localLogin: true` in a pull request.
 
-## Vikunja
+## ClickUp
 
-1. The project is *Fixture · Ploeg Staging (unfold-cluster)*, id 154. Never point staging at a board the homelab's ploegd watches: both would dispatch the same ticket ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
-2. Give `bot-ploeg` access to it and put a token in `secret/unfold-main/staging/vikunja` (above).
-3. Its id is `UNFOLD_STAGING_VIKUNJA_PROJECT_ID` in `ks.yaml`, written as `'"154"'`.
-4. The homelab's `unfold-staging-board-wiring` CronJob (homelab-cluster `kubernetes/apps/vikunja/vikunja/app/`) shares the project with `bot-ploeg` and registers the webhook `https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja` with `webhook-secret`, which it generates and pushes to OpenBao itself. For now `api-token` is a copy of `bot-ploeg`'s homelab token, so it can write every board that bot is on; a separate staging bot is the follow-up.
+Staging's board is the ClickUp List [Staging fixture](https://app.clickup.com/1500520000009653/v/l/li/1500520000176822) in the Unfold space, under Engineering. It holds test work for `webgrip/ploeg-bench-world` only. Never point staging at a List another ploegd watches: both would dispatch the same task ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)). It replaced the homelab Vikunja project *Fixture · Ploeg Staging* on 2026-11-18, so staging no longer depends on the homelab for its work.
 
-ploegd and the workbench reach Vikunja's API through `vikunja-relay`, an Envoy CONNECT proxy that forwards `vikunja.webgrip.dev:443` and nothing else to the homelab gateway's 443, the same path [the ops consoles](ops-consoles.md#how-the-logins-reach-authentik) use for Authentik. Both pods send `HTTPS_PROXY` to it and keep Forgejo and the cluster's own names in `NO_PROXY`. Before relying on it, check from the relay's side that the homelab gateway routes `vikunja.webgrip.dev` like it routes Authentik: `kubectl -n unfold-staging logs deploy/vikunja-relay` shows nothing on success, and ploegd's log names the tracker error otherwise.
+Unfold reads the List as its task source and hands a task to Ploeg by assigning the bot member. ploegd dispatches on that assignment only (`trackers.clickup.agents`), so a person assigning themselves starts nothing. It moves the task to `in progress` when a Shift opens, `in review` when a pull request waits, `needs you` when a person must decide and `done` when the work is finished; `backlog` and `ready` stay a person's. A ClickUp Work Item's branch is `agent/CU-<task id>`.
+
+Both reach `api.clickup.com` directly over HTTPS by name ([Network](#network)); nothing goes through the homelab.
+
+### Setting it up
+
+1. **The bot member.** Invite a member for Unfold staging to the Workspace, with the email address in `UNFOLD_STAGING_CLICKUP_AGENT`, and give it access to *Staging fixture* only.
+2. **Its token.** Signed in as the bot, create a personal API token (Settings, Apps) and store it:
+
+   ```sh
+   just secret-set unfold-main/staging/clickup api-token
+   ```
+
+   from a homelab-cluster checkout. `clickup-bot` gives it to Unfold (`UNFOLD_TASK_CLICKUP_TOKEN`) and ploegd (`PLOEG_CLICKUP_TOKEN`). `mise run wellhead -- verify` checks it against `GET /api/v2/user`.
+3. **The webhook.** ClickUp returns a webhook's signing secret once, in the response that creates it, and ploegd recognises only webhooks its own token created. Create it with the bot's token and write the secret straight to OpenBao, from this repository with `bao` logged in:
+
+   ```sh
+   token="$(bao kv get -field=api-token secret/unfold-main/staging/clickup)"
+   curl -fsS -X POST https://api.clickup.com/api/v2/team/1500520000009653/webhook \
+     -H "Authorization: ${token}" -H 'Content-Type: application/json' \
+     -d '{"endpoint":"https://staging-app.unfoldhq.dev/webhooks/tracker/clickup","events":["taskAssigneeUpdated","taskStatusUpdated","taskUpdated"],"list_id":1500520000176822}' \
+     | jq -j .webhook.secret | bao kv patch secret/unfold-main/staging/clickup webhook-secret=- >/dev/null
+   unset token
+   ```
+
+   `clickup-webhook` gives it to ploegd as `PLOEG_CLICKUP_SECRET`. To rotate it, delete the webhook in ClickUp and run the command again.
+4. **Check.** ploegd checks the webhook at start and hourly and reports the count under `clickupWebhooks` in `/readyz`: `kubectl get --raw /api/v1/namespaces/unfold-staging/services/ploeg:8080/proxy/readyz`. Then assign the bot on a task in the List: the task moves to `in progress` and its Work Item appears in Unfold.
 
 ## Network
 
@@ -89,15 +114,15 @@ Every namespace starts from the cluster's default deny ([egress by name](egress-
 | `cloudflared` | Cloudflare's tunnel edge (`*.v2.argotunnel.com`), `api.cloudflare.com` | 7844 UDP and TCP, 443 | the tunnel |
 | `cloudflared` | Unfold | 4080 | every path but `/webhooks/` |
 | `cloudflared` | ploegd | 8080, **`POST /webhooks/.*` only** (Cilium's L7 rule) | tracker and forge webhooks |
-| Unfold | ploegd 8080, LiteLLM 4000, the Kubernetes API, `vikunja-relay` 3128, `forgejo.webgrip.dev` 443 | | the workbench creates workspace pods and reads the repositories |
-| ploegd | `ploeg-db` 5432, LiteLLM 4000, `vikunja-relay` 3128, `forgejo.webgrip.dev` 443 | | the chart's own NetworkPolicy plus `ploegd` |
-| `vikunja-relay` | `unfold-gateway.webgrip.dev` | 443 | the homelab gateway, `tag:hub` only on the tailnet; it forwards `vikunja.webgrip.dev` and `authentik.webgrip.dev` |
+| Unfold | ploegd 8080, LiteLLM 4000, the Kubernetes API, `authentik-relay` 3128, `forgejo.webgrip.dev` 443, `api.clickup.com` 443 | | the workbench creates workspace pods, reads the repositories and the board, and signs people in |
+| ploegd | `ploeg-db` 5432, LiteLLM 4000, `forgejo.webgrip.dev` 443, `api.clickup.com` 443 | | the chart's own NetworkPolicy plus `ploegd` |
+| `authentik-relay` | `unfold-gateway.webgrip.dev` | 443 | the homelab gateway, `tag:hub` only on the tailnet; it forwards `authentik.webgrip.dev` |
 | LiteLLM | `litellm-db` 5432, `api.fireworks.ai` 443, `inference.hetzner.com` 443 | | models |
 | a workspace | Unfold 4080, LiteLLM 4000, `forgejo.webgrip.dev` 443 | | nothing else |
 
 The workspace namespace is left out of the cluster's `default-dns`; its own policy answers only names under `cluster.local` and `forgejo.webgrip.dev`, so an agent cannot carry data out in DNS lookups. `unfold-staging` still has `default-dns`, which matters once Ploeg's workers run there (below).
 
-Ploeg's chart renders its own default-deny NetworkPolicies, which profile P1 requires. Its forge peer points at a label no pod carries (`ploeg.webgrip.dev/egress: cilium-fqdn`), so the chart never opens `0.0.0.0/0`; the Cilium policies add Forgejo by name.
+Ploeg's chart renders its own default-deny NetworkPolicies, which profile P1 requires. Its forge and tracker peers point at a label no pod carries (`ploeg.webgrip.dev/egress: cilium-fqdn`), so the chart never opens `0.0.0.0/0`; the Cilium policies add Forgejo and ClickUp by name.
 
 ## Turning Ploeg's executor on
 
@@ -120,7 +145,7 @@ From [ADR 0017's confirmation](../adr/0017-staging-runs-here-with-agents-under-g
   ```
 
 * A running workspace reports gVisor's kernel: `kubectl -n unfold-staging-workspaces exec <pod> -- dmesg | head -1` starts with "Starting gVisor".
-* From outside: `https://staging-app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/vikunja` answers 401; a port scan of the nodes' public addresses finds nothing open.
+* From outside: `https://staging-app.unfoldhq.dev/` asks for Cloudflare Access; `curl -X POST https://staging-app.unfoldhq.dev/webhooks/tracker/clickup` answers 401; a port scan of the nodes' public addresses finds nothing open.
 * ploegd migrated its database (`kubectl -n unfold-staging logs deploy/ploeg | grep -i migrat`), Unfold answers `/healthz`, and a LiteLLM call is metered against a staging key's budget.
 
 ## Not wired yet

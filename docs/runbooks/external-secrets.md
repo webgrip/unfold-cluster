@@ -100,7 +100,7 @@ Each ExternalSecret carries [wellhead](https://github.com/wellhead-dev/wellhead)
 | `wellhead.dev/origin` | Who writes the value | Here |
 | --- | --- | --- |
 | `minted` | a controller: an External Secrets generator in this cluster, or a homelab job or PushSecret | every generator-backed ExternalSecret; the Forgejo, Cloudflare, ntfy, query and OIDC values the homelab pushes; the tunnel token the `infra` apply writes |
-| `provided` | a person, with `wellhead.dev/how` saying where to get it and `wellhead.dev/verify` how it is checked | LiteLLM's provider keys, the Vikunja bot token, the backup bucket keys, the dead-man URL |
+| `provided` | a person, with `wellhead.dev/how` saying where to get it and `wellhead.dev/verify` how it is checked | LiteLLM's provider keys, the ClickUp bot token, the backup bucket keys, the dead-man URL |
 | `preserve` | written once, never regenerated | the `hcloud-luks` passphrase: restore the escrowed value, never a new one |
 | `projected` | another ExternalSecret | `agent-litellm-master`, copied from `litellm-generated` |
 

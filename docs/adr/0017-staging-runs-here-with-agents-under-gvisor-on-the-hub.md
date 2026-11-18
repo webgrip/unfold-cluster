@@ -76,3 +76,9 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
   semver range limited to `0.x.y-rc.N` and verifies each chart's keyless signature from the
   `unfold-hq/unfold` release workflow; Renovate no longer opens or merges a pull request for it and
   `unfold-release-check` is retired. Details in [identity-and-access](../architecture/identity-and-access.md#2026-11-17-flux-follows-unfold-release-candidates-to-staging).
+* 2026-11-18: Staging's board moved from the homelab Vikunja project *Ploeg Staging* to the ClickUp
+  List *Staging fixture*, because the owner's work moved to ClickUp and staging should not depend on
+  the homelab for its work. Point 6 holds for the List as it did for the project. ploegd and Unfold
+  reach `api.clickup.com` directly; the relay keeps only Authentik and is now `authentik-relay`, and
+  the unsigned-webhook check uses `/webhooks/tracker/clickup`. Setup in
+  [unfold-staging](../runbooks/unfold-staging.md#clickup).

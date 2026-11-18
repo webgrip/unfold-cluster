@@ -28,7 +28,7 @@ changed. Where a row says "unverified", only the source was read.
 | Colleague | Yon, forge user `yon` | homelab `people.yaml` id `yon`, role `developer`, **no Unfold grant** |
 | Future client users | People of a paying tenant, in the Unfold app only | nothing yet; the homelab role `client` exists for previews |
 | CI jobs | Forgejo Actions runs of `webgrip/unfold-cluster` and the image repositories | Forgejo OIDC tokens, exchanged at the homelab OpenBao (`auth/forgejo`) |
-| Agents and Runs | Ploeg Runs (model-written code), Claude Code on the owner's workstation, the Forgejo bots `agent-builder` and `agent-reviewer`, Vikunja `bot-ploeg` | Runs: per-Run LiteLLM keys and a proxy-held forge token (RFC 0003 G2, G6). Claude Code: acts as the owner (`delegates_to`) |
+| Agents and Runs | Ploeg Runs (model-written code), Claude Code on the owner's workstation, the Forgejo bots `agent-builder` and `agent-reviewer`, the ClickUp bot member of Unfold staging | Runs: per-Run LiteLLM keys and a proxy-held forge token (RFC 0003 G2, G6). Claude Code: acts as the owner (`delegates_to`) |
 | Service accounts | In-cluster workloads: Flux, External Secrets, cert-manager, CNPG, the CI runners, Zot's credential Job | Kubernetes ServiceAccounts; the cluster's service-account key is trusted by the homelab OpenBao at `auth/jwt-unfold-main` |
 
 ## Access matrix

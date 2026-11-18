@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: unfold
 spec:
-  description: The workbench answers the tunnel connector, its own agent workspaces and the chart's Helm test pod on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja and the homelab Authentik only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
+  description: The workbench answers the tunnel connector, its own agent workspaces and the chart's Helm test pod on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo and the ClickUp API over HTTPS by name, and the homelab Authentik only through authentik-relay. Its lookups go through Cilium's DNS proxy so the FQDN rules learn Forgejo's and ClickUp's addresses.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: unfold
@@ -38,6 +38,7 @@ spec:
             dns:
               - matchPattern: "**.cluster.local"
               - matchName: forgejo.webgrip.dev
+              - matchName: api.clickup.com
     - toEntities:
         - kube-apiserver
     - toEndpoints:
@@ -58,13 +59,14 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            app.kubernetes.io/name: vikunja-relay
+            app.kubernetes.io/name: authentik-relay
       toPorts:
         - ports:
             - port: "3128"
               protocol: TCP
     - toFQDNs:
         - matchName: forgejo.webgrip.dev
+        - matchName: api.clickup.com
       toPorts:
         - ports:
             - port: "443"
@@ -75,7 +77,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: ploegd
 spec:
-  description: Adds to the chart's NetworkPolicy what it cannot express. The tunnel connector may only POST to /webhooks/, so Cloudflare Access and Unfold's sign-in are not bypassed through ploegd's other routes. ploegd reaches Forgejo over HTTPS by name, through Cilium's DNS proxy.
+  description: Adds to the chart's NetworkPolicy what it cannot express. The tunnel connector may only POST to /webhooks/, so Cloudflare Access and Unfold's sign-in are not bypassed through ploegd's other routes. ploegd reaches Forgejo and the ClickUp API over HTTPS by name, through Cilium's DNS proxy.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: ploeg
@@ -108,8 +110,10 @@ spec:
             dns:
               - matchPattern: "**.cluster.local"
               - matchName: forgejo.webgrip.dev
+              - matchName: api.clickup.com
     - toFQDNs:
         - matchName: forgejo.webgrip.dev
+        - matchName: api.clickup.com
       toPorts:
         - ports:
             - port: "443"
@@ -118,20 +122,17 @@ spec:
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: vikunja-relay
+  name: authentik-relay
 spec:
-  description: The relay carries ploegd's and the workbench's Vikunja API calls to the homelab gateway, which only the hub's tailnet tag may open on 443 (ADR 0006). It forwards two authorities, vikunja.webgrip.dev:443 and, for the workbench's sign-in, authentik.webgrip.dev:443. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
+  description: The relay carries the workbench's sign-in calls to the homelab Authentik through the homelab gateway, which only the hub's tailnet tag may open on 443 (ADR 0006). It forwards one authority, authentik.webgrip.dev:443. It resolves unfold-gateway.webgrip.dev through Cilium's DNS proxy, which is how the FQDN rule learns the gateway's tailnet address, and may open nothing else.
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: vikunja-relay
+      app.kubernetes.io/name: authentik-relay
   ingress:
     - fromEndpoints:
         - matchLabels:
             app.kubernetes.io/name: unfold
             app.kubernetes.io/instance: unfold
-        - matchLabels:
-            app.kubernetes.io/name: ploeg
-            ploeg.webgrip.dev/component: daemon
       toPorts:
         - ports:
             - port: "3128"
