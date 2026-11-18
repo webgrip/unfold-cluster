@@ -44,6 +44,7 @@ Nothing renders a candidate with staging's values before it is installed: a rele
 - **Hold staging on a release, or skip a bad one:** exclude it in the range, `semver: ">=0.0.0-0 <1.0.0-0, !=0.4.0-rc.137"`, in a pull request. The next candidate is picked up as usual.
 - **Stop following candidates:** replace `ref.semver` and `ref.semverFilter` with `ref.tag` and `ref.digest` of the release to keep (the `ref` of the OCIRepository is the pin; keep `verify`).
 - **Pick up a candidate at once:** `flux -n unfold-staging reconcile source oci unfold`.
+- **Unstick a release whose rollback failed too.** When an upgrade fails and the rollback to the previous release fails as well, for example because the same pull request removed a Secret the old release needs, helm-controller keeps retrying that rollback and never the upgrade, even after the cause is gone. Operators may not patch the HelmRelease, so set a new value in both `reconcile.fluxcd.io/requestedAt` and `reconcile.fluxcd.io/forceAt` on it in `helmrelease.yaml`, in a pull request: Flux then runs the upgrade once more. On 2026-11-18 the move to ClickUp needed this, because its Secrets were seeded after the merge that removed Vikunja's.
 
 ## Secrets the owner seeds
 
