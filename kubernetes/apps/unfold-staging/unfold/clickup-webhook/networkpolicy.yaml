@@ -1,0 +1,33 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: clickup-webhook
+spec:
+  description: The job that keeps staging's ClickUp webhook registered reaches the ClickUp API over HTTPS by name and the Kubernetes API, where it writes the clickup-webhook Secret and restarts ploegd. Its lookups go through Cilium's DNS proxy so the FQDN rule learns ClickUp's address. Nothing reaches it.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: clickup-webhook
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "**.cluster.local"
+              - matchName: api.clickup.com
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchName: api.clickup.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -10,6 +10,7 @@ resources:
   - helmrelease.yaml
   - notifications.yaml
   - executor
+  - clickup-webhook
 configMapGenerator:
   - name: authentik-relay
     files:
