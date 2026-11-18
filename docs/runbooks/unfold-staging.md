@@ -75,27 +75,70 @@ Authentik answers on the homelab LAN only, so the sign-in works from a browser o
 
 ## ClickUp
 
-Staging's board is the ClickUp List [Staging fixture](https://app.clickup.com/1500520000009653/v/l/li/1500520000176822) in the Unfold space, under Engineering. It holds test work for `webgrip/ploeg-bench-world` only. Never point staging at a List another ploegd watches: both would dispatch the same task ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)). It replaced the homelab Vikunja project *Fixture · Ploeg Staging* on 2026-11-18, so staging no longer depends on the homelab for its work.
+### What is connected to what
 
-Unfold reads the List as its task source and hands a task to Ploeg by assigning the bot member. ploegd dispatches on that assignment only (`trackers.clickup.agents`), so a person assigning themselves starts nothing. It moves the task to `in progress` when a Shift opens, `in review` when a pull request waits, `needs you` when a person must decide and `done` when the work is finished; `backlog` and `ready` stay a person's. A ClickUp Work Item's branch is `agent/CU-<task id>`.
+| | Value |
+| --- | --- |
+| ClickUp Workspace | WebGrip, `1500520000009653` |
+| List | Unfold › Engineering › [Staging fixture](https://app.clickup.com/1500520000009653/v/l/li/1500520000176822) (`1500520000176822`), test work for `webgrip/ploeg-bench-world` only |
+| Bot | the Workspace member *Unfold*, `ryan+unfold-agent@webgrip.nl` (user `105726150`, `UNFOLD_STAGING_CLICKUP_AGENT` in `ks.yaml`) |
+| The bot's token, original | homelab OpenBao `secret/clickup/ploeg`, field `api_token`, written by `just clickup-token` in homelab-cluster |
+| The bot's token, staging's copy | the same OpenBao, `secret/unfold-main/staging/clickup`, field `api-token` |
+| Read by | ExternalSecret `clickup-bot` in `unfold-staging` on this cluster, for Unfold (`UNFOLD_TASK_CLICKUP_TOKEN`), ploegd (`PLOEG_CLICKUP_TOKEN`) and the webhook job |
+| Webhook | `https://staging-app.unfoldhq.dev/webhooks/tracker/clickup`, on the List only, registered and kept by the CronJob `clickup-webhook` in `unfold-staging` |
 
-Both reach `api.clickup.com` directly over HTTPS by name ([Network](#network)); nothing goes through the homelab.
+The same bot works two environments, each on its own Lists:
+
+| Environment | Cluster | Lists its ploegd dispatches from |
+| --- | --- | --- |
+| Homelab Unfold and Ploeg | homelab-cluster | Unfold › Agency integrations, Agency pilot, Hosted billing |
+| Unfold staging | this cluster | Unfold › Engineering › Staging fixture |
+| Production | not built yet | |
+
+A task assigned to the bot starts work only in the environment whose Lists hold it, so never add *Staging fixture* to the homelab's routing or a homelab List here: both would dispatch the same task ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)). The bot's token can still write every List the bot is a member of, the homelab's included; a staging bot of its own can follow once Ploeg registers ClickUp webhooks itself ([the Ploeg ticket](https://app.clickup.com/t/1ampw4tmy1p)).
+
+The List replaced the homelab Vikunja project *Fixture · Ploeg Staging* on 2026-11-18.
+
+### How work flows
+
+Unfold reads the List as its task source and hands a task to Ploeg by assigning the bot. ploegd dispatches on that assignment only (`trackers.clickup.agents`), so a person assigning themselves starts nothing. It moves the task to `in progress` when a Shift opens, `in review` when a pull request waits, `needs you` when a person must decide and `done` when the work is finished; `backlog` and `ready` stay a person's. A ClickUp Work Item's branch is `agent/CU-<task id>`. Both reach `api.clickup.com` directly over HTTPS by name ([Network](#network)).
 
 ### Setting it up
 
-Staging acts as the Ploeg bot that also works the homelab's Lists, the member *Unfold* (`ryan+unfold-agent@webgrip.nl`, `UNFOLD_STAGING_CLICKUP_AGENT`). Its token reaches every List the bot is on; only *Staging fixture* dispatches on staging. Everything below happens in this repository and this cluster.
+Once per cluster, or after the bot's token changed. Everything else is automatic.
 
-1. **The token**, once. Seed the bot's personal API token from this repository:
+**Before you start.** Tailscale is connected and `tailscale ping 100.64.0.6` answers `pong`: the homelab gateway, which carries OpenBao on 8200 to this repository's tools. Turn off OpenVPN Connect or any other VPN on a Mac: it keeps Tailscale from reaching its relay, and Tailscale then shows connected but answers no ping ([Headscale browser login](headscale-browser-login.md)). Authentik is public ([homelab ADR-0092](https://forgejo.webgrip.dev/webgrip/homelab-cluster/src/branch/main/docs/techdocs/docs/adr/adr-0092-authentik-sign-in-is-public-through-the-tunnel.md)), so no VPN to the homelab LAN is needed.
 
-   ```sh
-   mise run wellhead -- seed unfold-staging/clickup-bot
-   ```
+From a checkout of this repository, on `main`:
 
-   wellhead asks for it without echoing, checks it against `GET /api/v2/user` and writes it to `secret/unfold-main/staging/clickup` (`api-token`). `clickup-bot` gives it to Unfold (`UNFOLD_TASK_CLICKUP_TOKEN`), ploegd (`PLOEG_CLICKUP_TOKEN`) and the webhook job.
-2. **The webhook** needs nothing. The CronJob `clickup-webhook` (`unfold/clickup-webhook/`) runs every 10 minutes with the bot's token. When the Secret `clickup-webhook` names no webhook ClickUp still has, it deletes the bot's other webhooks to the same endpoint, registers a new one on the List, stores the secret ClickUp returns in that Secret (`PLOEG_CLICKUP_SECRET`, `webhook-id`) and restarts ploegd so it reads it. A webhook ClickUp suspended after failed deliveries is reactivated. The secret never leaves the cluster, so a rebuilt cluster registers a new webhook by itself. ploegd does not start before the job's first run has written the Secret.
-3. **Check.** `kubectl -n unfold-staging logs job/<latest clickup-webhook job>` says which webhook it keeps or registered. ploegd checks the webhook at start and hourly and reports the count under `clickupWebhooks` in `/readyz`: `kubectl get --raw /api/v1/namespaces/unfold-staging/services/ploeg:8080/proxy/readyz`. Then assign the bot on a task in the List: the task moves to `in progress` and its Work Item appears in Unfold.
+```sh
+BAO_ADDR=http://unfold-gateway.webgrip.dev:8200 bao login -method=oidc
+```
 
-Once Ploeg registers ClickUp webhooks itself ([the Ploeg ticket](https://app.clickup.com/t/1ampw4tmy1p)), the job goes.
+Signs you in to the homelab OpenBao through Authentik (Google, then your security key) and caches the token in `~/.vault-token`. Now `bao` and wellhead may read and write `secret/unfold-main/*`.
+
+```sh
+BAO_ADDR=http://unfold-gateway.webgrip.dev:8200 bao kv get -field=api_token secret/clickup/ploeg | pbcopy
+```
+
+Copies the bot's token from the homelab's path to the clipboard without printing it.
+
+```sh
+mise run wellhead -- seed unfold-staging/clickup-bot
+```
+
+Shows where the value comes from, asks for it without echo (paste, Enter), checks it against ClickUp's `GET /api/v2/user`, writes it to `secret/unfold-main/staging/clickup` (`api-token`) and makes External Secrets sync `clickup-bot` at once. It signs in to this cluster through kubelogin, which may open the browser once more. Clear the clipboard afterwards.
+
+**What you have then.** The Secret `clickup-bot` exists in `unfold-staging`. Within 10 minutes the CronJob `clickup-webhook` registers the webhook on the List, stores the secret ClickUp returns in the Secret `clickup-webhook` and restarts ploegd, which then starts with the token and the webhook secret. Staging takes work from *Staging fixture*.
+
+**The webhook** needs nothing after that. Every 10 minutes the job checks it: when the Secret `clickup-webhook` names no webhook ClickUp still has, it deletes the bot's other webhooks to the same endpoint, registers a new one and restarts ploegd; a webhook ClickUp suspended after failed deliveries is reactivated. The secret never leaves the cluster, so a rebuilt cluster registers a new webhook by itself.
+
+**Check.**
+
+* `kubectl -n unfold-staging get externalsecret clickup-bot` is `SecretSynced`.
+* `kubectl -n unfold-staging logs job/<latest clickup-webhook job>` names the webhook it registered or keeps.
+* `kubectl get --raw /api/v1/namespaces/unfold-staging/services/ploeg:8080/proxy/readyz` counts the webhook under `clickupWebhooks`.
+* Assign the bot on a task in *Staging fixture*: the task moves to `in progress` and its Work Item appears in Unfold.
 
 ## Network
 
