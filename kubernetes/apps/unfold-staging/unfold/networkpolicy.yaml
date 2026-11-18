@@ -4,7 +4,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: unfold
 spec:
-  description: The workbench answers the tunnel connector and its own agent workspaces on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja and the homelab Authentik only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
+  description: The workbench answers the tunnel connector, its own agent workspaces and the chart's Helm test pod on 4080. It reaches ploegd, staging's LiteLLM, the Kubernetes API (it creates the workspace pods), Forgejo over HTTPS by name, and Vikunja and the homelab Authentik only through vikunja-relay. Its lookups go through Cilium's DNS proxy so the FQDN rule learns Forgejo's address.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: unfold
@@ -16,6 +16,9 @@ spec:
             app.kubernetes.io/name: cloudflared
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: unfold-staging-workspaces
+        - matchLabels:
+            app.kubernetes.io/name: unfold-smoke-test
+            app.kubernetes.io/instance: unfold
       toPorts:
         - ports:
             - port: "4080"
@@ -183,4 +186,24 @@ spec:
       toPorts:
         - ports:
             - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unfold-smoke-test
+spec:
+  description: The chart's Helm test pod, which Flux runs after every upgrade and rolls back on when it fails, asks the workbench for /readyz, /healthz and /api/auth/methods on 4080. Beyond that and default-dns, which resolves the workbench's Service name, it may open nothing.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: unfold-smoke-test
+      app.kubernetes.io/instance: unfold
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: unfold
+            app.kubernetes.io/instance: unfold
+      toPorts:
+        - ports:
+            - port: "4080"
               protocol: TCP
