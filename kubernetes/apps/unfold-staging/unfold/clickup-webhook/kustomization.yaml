@@ -5,7 +5,7 @@ resources:
   - cronjob.yaml
   - networkpolicy.yaml
 configMapGenerator:
-  - name: clickup-webhook
+  - name: clickup-webhook-script
     files:
       - ensure-webhook.mjs
     options:
