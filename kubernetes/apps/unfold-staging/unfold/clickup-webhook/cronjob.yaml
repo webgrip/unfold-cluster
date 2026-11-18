@@ -1,0 +1,113 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clickup-webhook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: clickup-webhook
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["clickup-webhook"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["ploeg"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: clickup-webhook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: clickup-webhook
+subjects:
+  - kind: ServiceAccount
+    name: clickup-webhook
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickup-webhook
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: clickup-webhook
+        spec:
+          restartPolicy: Never
+          serviceAccountName: clickup-webhook
+          enableServiceLinks: false
+          nodeSelector:
+            node.webgrip.io/pool: unfold
+          tolerations:
+            - key: node.webgrip.io/pool
+              operator: Equal
+              value: unfold
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ensure
+              image: docker.io/library/node:24.21.0-bookworm@sha256:3d27e5c11e5786e309ec3e03f93ae536eb36e6e5eb3714d5eb3300a36157add0
+              command: ["node", "/opt/clickup-webhook/ensure-webhook.mjs"]
+              env:
+                - name: CLICKUP_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickup-bot
+                      key: CLICKUP_API_TOKEN
+                - name: WORKSPACE_ID
+                  value: ${UNFOLD_STAGING_CLICKUP_WORKSPACE_ID}
+                - name: LIST_ID
+                  value: ${UNFOLD_STAGING_CLICKUP_LIST_ID}
+                - name: ENDPOINT
+                  value: https://${UNFOLD_STAGING_HOSTNAME}/webhooks/tracker/clickup
+                - name: SECRET_NAME
+                  value: clickup-webhook
+                - name: DEPLOYMENT
+                  value: ploeg
+                - name: NODE_EXTRA_CA_CERTS
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  memory: 128Mi
+                  ephemeral-storage: 16Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /opt/clickup-webhook
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: clickup-webhook
