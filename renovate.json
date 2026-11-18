@@ -329,16 +329,6 @@
       "enabled": false
     },
     {
-      "description": "ghcr.io/webgrip/agent-runner is private and Renovate's GitHub App token cannot read it. webgrip/infrastructure pushes the same image, with the same digests, to Harbor, where Renovate has a robot account; homelab-cluster tracks it there. The manifest keeps the ghcr.io path.",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchPackageNames": [
-        "ghcr.io/webgrip/agent-runner"
-      ],
-      "overridePackageName": "harbor.webgrip.dev/webgrip/agent-runner"
-    },
-    {
       "description": "Nothing in this repository merges itself: a merge here deploys to production, and only the owner merges to main (identity-and-access G-01). This rule takes back the automerge the shared presets give Webgrip's own packages and preset bumps. Repository rules come after every preset rule, so this one wins over them.",
       "matchPackageNames": [
         "*"
