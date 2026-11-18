@@ -110,4 +110,4 @@ spec:
           volumes:
             - name: script
               configMap:
-                name: clickup-webhook
+                name: clickup-webhook-script
