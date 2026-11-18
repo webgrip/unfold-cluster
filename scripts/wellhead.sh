@@ -49,4 +49,9 @@ if ! { [ -x "${binary}" ] && [ -f "${archive}" ] && echo "${sha256}  ${archive}"
   tar -xzf "${archive}" -C "${cache_dir}" wellhead
 fi
 
+if [ -n "${BAO_ADDR:-}" ] && ! curl -fsS -o /dev/null --max-time 5 "${BAO_ADDR}/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200"; then
+  echo "OpenBao at ${BAO_ADDR} does not answer. Join the tailnet first: tailscale ping 100.64.0.6 must answer pong (docs/runbooks/headscale-browser-login.md#signing-in-to-the-homelab-from-the-tailnet)." >&2
+  exit 2
+fi
+
 exec "${binary}" "$@"
