@@ -48,14 +48,15 @@ spec:
                         value: unfold
                         effect: NoSchedule
           - target:
-              group: keda.sh
-              kind: ScaledJob
+              group: batch
+              kind: CronJob
+              name: ploeg-worker-.*
             patch: |-
               - op: test
-                path: /spec/jobTargetRef/template/spec/volumes/0/name
+                path: /spec/jobTemplate/spec/template/spec/volumes/0/name
                 value: worker-bin
               - op: add
-                path: /spec/jobTargetRef/template/spec/volumes/0/emptyDir/sizeLimit
+                path: /spec/jobTemplate/spec/template/spec/volumes/0/emptyDir/sizeLimit
                 value: 256Mi
   values:
     mode: live
@@ -174,7 +175,7 @@ spec:
           name: Ploeg Bench World
           description: Staging fixture repository
           url: https://forgejo.webgrip.dev/webgrip/ploeg-bench-world.git
-          baseBranch: main
+          baseBranch: staging/smoke
           executionOwner: ploeg
           verify:
             - git
@@ -194,7 +195,7 @@ spec:
               forge: forgejo
               owner: webgrip
               repo: ploeg-bench-world
-              baseBranch: main
+              baseBranch: staging/smoke
     ploeg:
       enabled: true
       supportProfile: P1
@@ -274,7 +275,7 @@ spec:
         targets:
           ploeg-bench-world:
             repo: webgrip/ploeg-bench-world
-            branch: main
+            branch: staging/smoke
             forge: forgejo
         trackers:
           clickup:
@@ -285,7 +286,7 @@ spec:
                 id: ${UNFOLD_STAGING_CLICKUP_LIST_ID}
                 team: staging
                 repo: webgrip/ploeg-bench-world
-                branch: main
+                branch: staging/smoke
                 forge: forgejo
         teams:
           staging:
@@ -293,7 +294,8 @@ spec:
               - ${UNFOLD_STAGING_CLICKUP_AGENT}
       executor:
         enabled: false
-        type: keda
+        type: cronjob
+        namespace: unfold-staging-workers
         forge: forgejo
         runtimeClassName: gvisor
         nodeSelector:
@@ -327,10 +329,6 @@ spec:
           bootstrapSecret:
             name: ploeg-worker-bootstrap
             registryKey: registry.json
-        scaler:
-          host: ploeg-db-rw.unfold-staging.svc.cluster.local
-          dbName: app
-        pollingInterval: 15
         workerResources:
           requests: {cpu: 100m, memory: 768Mi}
           limits: {cpu: "1", memory: 768Mi, ephemeral-storage: 10Gi}
@@ -346,7 +344,7 @@ spec:
             budget: "0.50"
             repoOwner: webgrip
             repoName: ploeg-bench-world
-            baseBranch: main
+            baseBranch: staging/smoke
             maxReplicaCount: 1
             maxFixRounds: 1
             harness:

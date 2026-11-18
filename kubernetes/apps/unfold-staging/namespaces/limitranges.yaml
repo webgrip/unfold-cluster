@@ -24,3 +24,16 @@ spec:
         ephemeral-storage: 2Gi
       defaultRequest:
         ephemeral-storage: 64Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ephemeral-storage
+  namespace: unfold-staging-workers
+spec:
+  limits:
+    - type: Container
+      default:
+        ephemeral-storage: 2Gi
+      defaultRequest:
+        ephemeral-storage: 64Mi

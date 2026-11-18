@@ -8,6 +8,7 @@ Unfold staging runs in this cluster at `https://staging-app.unfoldhq.dev`, publi
 | --- | --- | --- |
 | `unfold-staging` | The `unfold` HelmRelease (`oci://ghcr.io/unfold-hq/charts/unfold`, pinned by digest; it pins `ghcr.io/unfold-hq/unfold`, `ghcr.io/unfold-hq/unfold-agent` and the Ploeg chart it was tested with by digest, [image signatures](image-signatures.md#keyless-unfold-hq-releases)): the Unfold workbench and ploegd, with Ploeg's executor off; `ploeg-db` (CNPG, one instance, database `app`, owner `ploeg`); `authentik-relay` | hub (`node.webgrip.io/pool=unfold`) |
 | `unfold-staging-workspaces` | Unfold's agent workspaces, one pod each, `runtimeClassName: gvisor`; labelled `ploeg.webgrip.dev/isolation-class: hardened`, so `sandboxed-workloads` refuses any pod without gVisor and with a mounted token | hub, through the `gvisor` RuntimeClass |
+| `unfold-staging-workers` | Ploeg's worker CronJobs (`executor.namespace`), `runtimeClassName: gvisor`, labelled `ploeg.webgrip.dev/isolation-class: hardened`; off while the executor is | hub, through the `gvisor` RuntimeClass |
 | `litellm-staging` | LiteLLM (`ghcr.io/berriai/litellm-non_root`, app-template chart) with staging's own provider keys and budgets; `litellm-db` (CNPG) | hub |
 | `unfold-staging-edge` | `cloudflared`, two replicas, the tunnel connector | hub |
 
@@ -163,13 +164,22 @@ Ploeg's chart renders its own default-deny NetworkPolicies, which profile P1 req
 
 ## Turning Ploeg's executor on
 
-The executor is configured for gVisor in the HelmRelease (`ploeg.executor`: team `staging`, a builder and a reviewer on `webgrip/ploeg-bench-world`, `runtimeClassName: gvisor`, both credential proxies, `security.workerAdmission` admitting only `gvisor`) and switched off. Before `executor.enabled: true`:
+The executor is configured and switched off (`ploeg.executor.enabled: false`): type `cronjob`, so each Team's Roles poll for work every two minutes and KEDA plays no part; team `staging` with a builder and a reviewer on `webgrip/ploeg-bench-world`, branch `staging/smoke`; `runtimeClassName: gvisor`, both credential proxies, and `security.workerAdmission` admitting only `gvisor`.
 
-1. **The agent image.** `agent-runner` exists only on the homelab's Harbor. Publish it to `ghcr.io/webgrip/agent-runner` (or push it into Zot's `webgrip/` namespace) and set the digest in `executor.runnerImage`; the value there now is the Harbor digest and only a guess.
-2. **The worker's unbounded `emptyDir`.** Ploeg chart 0.2.0-rc.81 renders `worker-bin` with no `sizeLimit`, which `resource-limits` refuses. A post-renderer on the HelmRelease sets it to 256Mi; its `test` step fails the release if a chart moves that volume, so drop the patch once Ploeg's chart sets a limit itself.
-3. **The forge webhook.** The executor's secrets in `unfold/executor/` are applied already, because Ploeg's chart hands ploegd every one of them whether the executor is on or not. `ploeg-forge-webhook` is generated in the cluster; add a Forgejo webhook on `webgrip/ploeg-bench-world` to `https://staging-app.unfoldhq.dev/webhooks/forge/forgejo` with its `PLOEG_FORGEJO_SECRET`.
-4. **KEDA.** The ScaledJob's scaler connects to `ploeg-db` as `ploeg_scaler` from the `keda` namespace: add the managed role (with `SELECT` on Ploeg's counting view only, RFC 0003 gate G8) and a client label rule for KEDA on `ploeg-db`'s policy.
-5. **DNS for workers.** Workers share `unfold-staging` with ploegd, so `default-dns` answers them any name. Move them to their own namespace or accept it for staging.
+The workers render into their own namespace, `unfold-staging-workers` (`executor.namespace`), labelled `ploeg.webgrip.dev/isolation-class: hardened`, so `sandboxed-workloads` refuses a worker without gVisor or with a mounted token. ploegd and its Secrets stay in `unfold-staging`. The Flux Kustomization `unfold-staging-workers` (`kubernetes/apps/unfold-staging/workers/`) gives the namespace what its pods read:
+
+| Secret | From |
+| --- | --- |
+| `agent-builder-token`, `agent-reader-token` | OpenBao `unfold-main/staging/forgejo`, like their copies in `unfold-staging` |
+| `ploeg-worker-bootstrap` (`staging--builder`, `staging--reviewer`) | the `registry.json` of `unfold-staging`'s `ploeg-worker-bootstrap`, read through the SecretStore `unfold-staging` as `ploeg-bootstrap-reader`, which may get that one Secret |
+
+The chart's worker NetworkPolicy reaches ploegd, staging's LiteLLM and DNS; the CiliumNetworkPolicy `ploeg-worker` there adds Forgejo by name. The chart's DNS rule has no name filter, so the workers' lookups are not narrowed the way the workspaces' are; that needs an option in Ploeg's chart.
+
+A post-renderer on the HelmRelease gives each worker CronJob's `worker-bin` volume a 256Mi `sizeLimit`, which `resource-limits` demands and Ploeg's chart does not set; its `test` step fails the release if the chart moves that volume.
+
+Ploeg finds pull request merges by itself every 10 minutes, so staging needs no Forgejo webhook.
+
+**Before `executor.enabled: true`** only the agent image is missing. `executor.runnerImage` names a webgrip build that this cluster cannot pull. Ploeg will publish its own, `ghcr.io/ploeg-hq/agent-runner`; set its digest in `executor.runnerImage` and turn the executor on in the same pull request.
 
 ## Checks
 
