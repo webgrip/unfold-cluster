@@ -3,6 +3,9 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: unfold
+  annotations:
+    reconcile.fluxcd.io/requestedAt: "2026-11-18-clickup"
+    reconcile.fluxcd.io/forceAt: "2026-11-18-clickup"
 spec:
   chartRef:
     kind: OCIRepository
