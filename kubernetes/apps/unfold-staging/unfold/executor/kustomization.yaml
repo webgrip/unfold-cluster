@@ -5,3 +5,4 @@ namespace: unfold-staging
 resources:
   - secrets.yaml
   - litellm-master-reader-token.rbac.yaml
+  - ploeg-bootstrap-reader.rbac.yaml
