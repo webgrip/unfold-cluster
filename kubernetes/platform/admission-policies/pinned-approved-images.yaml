@@ -69,7 +69,7 @@ spec:
         'ghcr.io/unfold-hq/unfold:',
         'ghcr.io/unfold-hq/unfold-agent@',
         'ghcr.io/unfold-hq/unfold-agent:',
-        'ghcr.io/webgrip/agent-runner:',
+        'ghcr.io/ploeg-hq/agent-runner:',
         'ghcr.io/ploeg-hq/ploegd:',
         'ghcr.io/ploeg-hq/ploeg-worker:',
         'ghcr.io/berriai/litellm-non_root:',
