@@ -96,8 +96,12 @@ run "the_edge_is_off_unless_asked_for_so_the_rebuild_drill_never_takes_the_hostn
       length(cloudflare_dns_record.unfold_staging) == 0,
       length(cloudflare_zero_trust_access_application.unfold_staging) == 0,
       length(terraform_data.unfold_staging_tunnel_token) == 0,
+      length(cloudflare_zero_trust_access_service_token.unfold_staging_editors) == 0,
+      length(cloudflare_zero_trust_access_policy.unfold_staging_editors) == 0,
+      length(terraform_data.unfold_staging_editor_token) == 0,
+      output.unfold_staging_editor_token_expires_at == null,
     ])
-    error_message = "without unfold_staging_edge_enabled the plan declares no tunnel, record, Access application or token write"
+    error_message = "without unfold_staging_edge_enabled the plan declares no tunnel, record, Access application, service token or token write"
   }
 }
 
@@ -174,8 +178,79 @@ run "access_guards_the_host_and_lets_only_webhooks_past" {
   }
 
   assert {
-    condition     = length([for policy in [cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"], cloudflare_zero_trust_access_policy.unfold_staging_webhooks["unfold-staging"]] : policy if policy.decision == "bypass"]) == 1
+    condition     = [for name, decision in { people = cloudflare_zero_trust_access_policy.unfold_staging_people["unfold-staging"].decision, editors = cloudflare_zero_trust_access_policy.unfold_staging_editors["unfold-staging"].decision, webhooks = cloudflare_zero_trust_access_policy.unfold_staging_webhooks["unfold-staging"].decision } : name if decision == "bypass"] == ["webhooks"]
     error_message = "exactly one policy bypasses Access, the webhook path's"
+  }
+}
+
+run "a_client_without_a_browser_passes_access_with_the_one_service_token_and_nothing_wider" {
+  command = plan
+
+  override_resource {
+    target = cloudflare_zero_trust_access_service_token.unfold_staging_editors
+    values = {
+      id = "f174e90a-fafe-4643-bbbc-4a0ed4fc8415"
+    }
+  }
+
+  override_resource {
+    target = cloudflare_zero_trust_access_policy.unfold_staging_people
+    values = {
+      id = "11111111-1111-4111-8111-111111111111"
+    }
+  }
+
+  override_resource {
+    target = cloudflare_zero_trust_access_policy.unfold_staging_editors
+    values = {
+      id = "22222222-2222-4222-8222-222222222222"
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      cloudflare_zero_trust_access_policy.unfold_staging_editors["unfold-staging"].decision == "non_identity",
+      length(cloudflare_zero_trust_access_policy.unfold_staging_editors["unfold-staging"].include) == 1,
+      [for rule in cloudflare_zero_trust_access_policy.unfold_staging_editors["unfold-staging"].include : [for kind, value in rule : kind if value != null]] == [["service_token"]],
+      [for rule in cloudflare_zero_trust_access_policy.unfold_staging_editors["unfold-staging"].include : try(rule.service_token.token_id, null)] == ["f174e90a-fafe-4643-bbbc-4a0ed4fc8415"],
+    ])
+    error_message = "the editors policy is Service Auth, never an allow or a bypass, and its only rule is the one service token this state declares: not every valid service token, not everyone, no address or email"
+  }
+
+  assert {
+    condition     = [for policy in cloudflare_zero_trust_access_application.unfold_staging["unfold-staging"].policies : [policy.id, policy.precedence]] == [["11111111-1111-4111-8111-111111111111", 1], ["22222222-2222-4222-8222-222222222222", 2]]
+    error_message = "the staging application carries the people policy first and the editors policy second, and no third"
+  }
+
+  assert {
+    condition     = length(cloudflare_zero_trust_access_application.unfold_staging_webhooks["unfold-staging"].policies) == 1
+    error_message = "the webhook application keeps its one bypass policy; the service token is not attached to it"
+  }
+}
+
+run "the_service_token_lives_a_year_names_its_generation_and_keeps_its_secret_out_of_the_plan_log" {
+  command = plan
+
+  variables {
+    unfold_staging_editor_token_generation = 3
+  }
+
+  assert {
+    condition = alltrue([
+      cloudflare_zero_trust_access_service_token.unfold_staging_editors["unfold-staging"].name == "unfold-staging editors 3",
+      terraform_data.unfold_staging_editor_token_generation["unfold-staging"].input == 3,
+    ])
+    error_message = "a raised generation reaches the token's name and the value whose change replaces the token, so the old pair is deleted and no two tokens share a name"
+  }
+
+  assert {
+    condition     = cloudflare_zero_trust_access_service_token.unfold_staging_editors["unfold-staging"].duration == "8760h"
+    error_message = "the service token expires a year after the apply that made it; a token that never expires would outlive everyone who was given it"
+  }
+
+  assert {
+    condition     = issensitive(cloudflare_zero_trust_access_service_token.unfold_staging_editors["unfold-staging"].client_secret)
+    error_message = "the client secret is half of what passes Access; it must stay out of the public plan log"
   }
 }
 

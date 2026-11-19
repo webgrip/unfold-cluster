@@ -98,6 +98,18 @@ expect "a tunnel token is written and masked" bash -c 'grep -qF "::add-mask::$1"
 expect "a tunnel token without a tunnel id is refused" bash -c '! printf "%s\n" "$(printf "{\"a\":\"x\",\"s\":\"y\"}" | base64 -w0)" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 expect "a value that is not base64 JSON is refused as a tunnel token" bash -c '! printf "hskey-auth-abc\n" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 
+access_client_id="$(printf 'canary-access-client-id' | sha256sum | cut -c1-32).access"
+access_client_secret="$(printf 'canary-access-client-secret' | sha256sum | cut -d' ' -f1)"
+printf '%s\n' "$access_client_id" | "$tool" put access-client-id cloudflare/unfold-staging-access CF_ACCESS_CLIENT_ID >"${work}/access-id-out" 2>&1
+printf '%s\n' "$access_client_secret" | "$tool" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >"${work}/access-secret-out" 2>&1
+expect "an Access service token is stored as the two values a client sends" test "$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_ID)/$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_SECRET)" = "${access_client_id}/${access_client_secret}"
+expect "the Access client secret is masked" grep -qF "::add-mask::${access_client_secret}" "${work}/access-secret-out"
+expect "the Access client secret is never printed outside its mask" bash -c '! grep -v "^::add-mask::" "$1" | grep -qF "$2"' _ "${work}/access-secret-out" "$access_client_secret"
+expect "a client secret is refused as an Access client id" bash -c '! printf "%s\n" "$1" | "$2" put access-client-id cloudflare/unfold-staging-access CF_ACCESS_CLIENT_ID >/dev/null 2>&1' _ "$access_client_secret" "$tool"
+expect "a client id is refused as an Access client secret" bash -c '! printf "%s\n" "$1" | "$2" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$access_client_id" "$tool"
+expect "an empty Access client secret is refused" bash -c '! printf "\n" | "$1" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$tool"
+expect "a refused Access value leaves the stored pair alone" test "$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_ID)/$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_SECRET)" = "${access_client_id}/${access_client_secret}"
+
 bundle=$'cluster:\n  id: abc\ncerts:\n  k8sserviceaccount:\n    key: LS0t\n'
 printf '%s' "$bundle" | "$tool" put talos-secrets unfold-cluster/talos-secrets bundle >/dev/null 2>&1
 expect "a secrets bundle is stored whole" test "$(stored unfold-cluster_talos-secrets bundle)" = "${bundle%$'\n'}"

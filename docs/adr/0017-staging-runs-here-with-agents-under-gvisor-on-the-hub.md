@@ -82,3 +82,10 @@ On 2026-10-28 the owner decided: "Let's deploy unfold properly. staging.app.unfo
   reach `api.clickup.com` directly; the relay keeps only Authentik and is now `authentik-relay`, and
   the unsigned-webhook check uses `/webhooks/tracker/clickup`. Setup in
   [unfold-staging](../runbooks/unfold-staging.md#clickup).
+* 2026-11-18, later: The owner decided that a client without a browser, the Unfold extension for
+  VS Code first, passes Access with a service token instead of Access being lifted from `/api/`.
+  Point 4's "every path except `/webhooks/*`" still holds: the application `Unfold staging` gains a
+  Service Auth policy for one token, and no path gains a bypass. For such a client the first control
+  is a secret its holders share and no longer an identity; Unfold's sign-in stays the second. The
+  pair, its lifetime and its rotation are in
+  [unfold-staging-edge](../runbooks/unfold-staging-edge.md#clients-without-a-browser).
