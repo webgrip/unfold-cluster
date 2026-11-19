@@ -25,7 +25,7 @@ The `unfold-staging` Flux Kustomization sets these variables in `kubernetes/apps
 | `UNFOLD_STAGING_HOSTNAME` | `staging-app.unfoldhq.dev` | Unfold's `baseUrl` and the ClickUp webhook ploegd looks for |
 | `UNFOLD_STAGING_CLICKUP_WORKSPACE_ID` | `'"1500520000009653"'` | the ClickUp Workspace whose webhooks ploegd checks |
 | `UNFOLD_STAGING_CLICKUP_LIST_ID` | `'"1500520000176822"'`, the List *Staging fixture* (Unfold › Engineering) | Unfold's task source and ploegd's board |
-| `UNFOLD_STAGING_CLICKUP_AGENT` | `ryan+unfold-agent@webgrip.nl`, the Ploeg bot | the only assignee that dispatches, and the `staging` Team's tracker user |
+| `UNFOLD_STAGING_CLICKUP_AGENT` | `staging-bot@unfoldhq.dev`, staging's own bot | the only assignee that dispatches, and the `staging` Team's tracker user |
 
 The ids keep their double quotes inside the single quotes (`'"123"'`). Flux substitutes into YAML text, and a bare `123` would reach Unfold and ploegd as a number.
 
@@ -83,21 +83,20 @@ Authentik answers on the homelab LAN only, so the sign-in works from a browser o
 | --- | --- |
 | ClickUp Workspace | WebGrip, `1500520000009653` |
 | List | Unfold › Engineering › [Staging fixture](https://app.clickup.com/1500520000009653/v/l/li/1500520000176822) (`1500520000176822`), test work for `webgrip/ploeg-bench-world` only |
-| Bot | the Workspace member *Unfold*, `ryan+unfold-agent@webgrip.nl` (user `105726150`, `UNFOLD_STAGING_CLICKUP_AGENT` in `ks.yaml`) |
-| The bot's token, original | homelab OpenBao `secret/clickup/ploeg`, field `api_token`, written by `just clickup-token` in homelab-cluster |
-| The bot's token, staging's copy | the same OpenBao, `secret/unfold-main/staging/clickup`, field `api-token` |
+| Bot | a Workspace member of its own, `staging-bot@unfoldhq.dev` (`UNFOLD_STAGING_CLICKUP_AGENT` in `ks.yaml`): a paid seat with access to *Staging fixture* only. Its mail reaches the owner through Cloudflare Email Routing on `unfoldhq.dev` |
+| The bot's token | homelab OpenBao `secret/unfold-main/staging/clickup`, field `api-token`, seeded with wellhead (below) |
 | Read by | ExternalSecret `clickup-bot` in `unfold-staging` on this cluster, for Unfold (`UNFOLD_TASK_CLICKUP_TOKEN`), ploegd (`PLOEG_CLICKUP_TOKEN`) and the webhook job |
 | Webhook | `https://staging-app.unfoldhq.dev/webhooks/tracker/clickup`, on the List only, registered and kept by the CronJob `clickup-webhook` in `unfold-staging` |
 
-The same bot works two environments, each on its own Lists:
+Each environment has its own bot and its own Lists:
 
-| Environment | Cluster | Lists its ploegd dispatches from |
-| --- | --- | --- |
-| Homelab Unfold and Ploeg | homelab-cluster | Unfold › Agency integrations, Agency pilot, Hosted billing |
-| Unfold staging | this cluster | Unfold › Engineering › Staging fixture |
-| Production | not built yet | |
+| Environment | Cluster | Bot | Lists its ploegd dispatches from |
+| --- | --- | --- | --- |
+| Homelab Unfold and Ploeg | homelab-cluster | *Unfold*, `ryan+unfold-agent@webgrip.nl` | Unfold › Agency integrations, Agency pilot, Hosted billing, and the other Unfold Lists it routes |
+| Unfold staging | this cluster | `staging-bot@unfoldhq.dev` | Unfold › Engineering › Staging fixture |
+| Production | not built yet | | |
 
-A task assigned to the bot starts work only in the environment whose Lists hold it, so never add *Staging fixture* to the homelab's routing or a homelab List here: both would dispatch the same task ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)). The bot's token can still write every List the bot is a member of, the homelab's included; a staging bot of its own can follow once Ploeg registers ClickUp webhooks itself ([the Ploeg ticket](https://app.clickup.com/t/1ampw4tmy1p)).
+Never share a bot between environments. A ploegd dispatches every assignment of its bot that its Workspace-wide webhook delivers, and puts a task from a List it does not route on its default team. On 2026-11-18, while staging still acted as *Unfold*, one assignment on *Staging fixture* started work on staging and on the homelab's team copper. Ploeg is to stop dispatching from unrouted Lists ([ticket](https://app.clickup.com/t/1500520000009653/1ampw4uau0m)); until then, separate bots are what keeps the environments apart. Never add *Staging fixture* to the homelab's routing, or a homelab List here ([RFC 0003](../rfc/0003-moving-unfold-and-ploeg-to-production.md#r1-double-dispatch)).
 
 The List replaced the homelab Vikunja project *Fixture · Ploeg Staging* on 2026-11-18.
 
@@ -119,11 +118,7 @@ BAO_ADDR=http://unfold-gateway.webgrip.dev:8200 bao login -method=oidc
 
 Signs you in to the homelab OpenBao through Authentik (Google, then your security key) and caches the token in `~/.vault-token`. Now `bao` and wellhead may read and write `secret/unfold-main/*`.
 
-```sh
-BAO_ADDR=http://unfold-gateway.webgrip.dev:8200 bao kv get -field=api_token secret/clickup/ploeg | pbcopy
-```
-
-Copies the bot's token from the homelab's path to the clipboard without printing it.
+Sign in to ClickUp as the bot and create its personal API token (Settings, Apps).
 
 ```sh
 mise run wellhead -- seed unfold-staging/clickup-bot

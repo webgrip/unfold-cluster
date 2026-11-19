@@ -142,7 +142,7 @@ spec:
       UNFOLD_STAGING_HOSTNAME: staging-app.unfoldhq.dev
       UNFOLD_STAGING_CLICKUP_WORKSPACE_ID: '"1500520000009653"'
       UNFOLD_STAGING_CLICKUP_LIST_ID: '"1500520000176822"'
-      UNFOLD_STAGING_CLICKUP_AGENT: ryan+unfold-agent@webgrip.nl
+      UNFOLD_STAGING_CLICKUP_AGENT: staging-bot@unfoldhq.dev
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
