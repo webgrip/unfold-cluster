@@ -34,4 +34,4 @@ on:
 
 jobs:
   agents-check:
-    uses: webgrip/workflows/.forgejo/workflows/agents-check.yml@53e9bd2265f4f19eb5bc74593133d49e43841958 # v4.1.1
+    uses: webgrip/workflows/.forgejo/workflows/agents-check.yml@3a75032957f7ec33325c3c3c5756520e933ff64f # v4.3.0
