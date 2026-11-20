@@ -96,20 +96,23 @@ tunnel_token="$(printf '{"a":"account","s":"c2VjcmV0","t":"tunnel-id"}' | base64
 printf '%s\n' "$tunnel_token" | "$tool" put tunnel-token unfold-main/staging/cloudflare-tunnel token >"${work}/tunnel-out" 2>&1
 expect "a tunnel token is written and masked" bash -c 'grep -qF "::add-mask::$1" "$2" && [ "$(jq -r .token "$3")" = "$1" ]' _ "$tunnel_token" "${work}/tunnel-out" "${work}/kv/unfold-main_staging_cloudflare-tunnel"
 secret_shape_out="$(printf 'Secret-Value_1\n' | "$tool" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET 2>&1 || true)"
-expect "a client secret that is not 64 hex characters is refused with its shape" grep -q "got 14 characters of a-zA-Z0-9 and other characters" <<<"$secret_shape_out"
+expect "a client secret in neither format is refused with its shape" grep -q "got 14 characters of a-zA-Z0-9 and other characters" <<<"$secret_shape_out"
 expect "the refused client secret is never printed" bash -c '! grep -q "Secret-Value_1" <<<"$1"' _ "$secret_shape_out"
 expect "an empty client secret is refused as empty" bash -c 'printf "\n" | "$1" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET 2>&1 | grep -q "got empty"' _ "$tool"
 expect "a tunnel token without a tunnel id is refused" bash -c '! printf "%s\n" "$(printf "{\"a\":\"x\",\"s\":\"y\"}" | base64 -w0)" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 expect "a value that is not base64 JSON is refused as a tunnel token" bash -c '! printf "hskey-auth-abc\n" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 
 access_client_id="$(printf 'canary-access-client-id' | sha256sum | cut -c1-32).access"
-access_client_secret="$(printf 'canary-access-client-secret' | sha256sum | cut -d' ' -f1)"
+access_client_secret="cfast_$(printf 'canary-access-client-secret' | sha256sum | cut -c1-40)Ab3_x-9Z"
+legacy_access_client_secret="$(printf 'canary-legacy-client-secret' | sha256sum | cut -d' ' -f1)"
 printf '%s\n' "$access_client_id" | "$tool" put access-client-id cloudflare/unfold-staging-access CF_ACCESS_CLIENT_ID >"${work}/access-id-out" 2>&1
 printf '%s\n' "$access_client_secret" | "$tool" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >"${work}/access-secret-out" 2>&1
 expect "an Access service token is stored as the two values a client sends" test "$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_ID)/$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_SECRET)" = "${access_client_id}/${access_client_secret}"
 expect "the Access client secret is masked" grep -qF "::add-mask::${access_client_secret}" "${work}/access-secret-out"
 expect "the Access client secret is never printed outside its mask" bash -c '! grep -v "^::add-mask::" "$1" | grep -qF "$2"' _ "${work}/access-secret-out" "$access_client_secret"
 expect "a client secret is refused as an Access client id" bash -c '! printf "%s\n" "$1" | "$2" put access-client-id cloudflare/unfold-staging-access CF_ACCESS_CLIENT_ID >/dev/null 2>&1' _ "$access_client_secret" "$tool"
+expect "a 64-hex client secret from before the cfast_ format is still accepted" bash -c 'printf "%s\n" "$1" | "$2" put access-client-secret cloudflare/legacy-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$legacy_access_client_secret" "$tool"
+expect "a cfast_ client secret one character short is refused" bash -c '! printf "%s\n" "${1%?}" | "$2" put access-client-secret cloudflare/legacy-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$access_client_secret" "$tool"
 expect "a client id is refused as an Access client secret" bash -c '! printf "%s\n" "$1" | "$2" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$access_client_id" "$tool"
 expect "an empty Access client secret is refused" bash -c '! printf "\n" | "$1" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET >/dev/null 2>&1' _ "$tool"
 expect "a refused Access value leaves the stored pair alone" test "$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_ID)/$(stored cloudflare_unfold-staging-access CF_ACCESS_CLIENT_SECRET)" = "${access_client_id}/${access_client_secret}"
