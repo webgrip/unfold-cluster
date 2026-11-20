@@ -59,6 +59,16 @@ is_public_ipv4() {
   return 0
 }
 
+value_shape() {
+  local value="$1" classes=""
+  [ -n "$value" ] || { echo "empty"; return; }
+  [[ "$value" =~ [a-z] ]] && classes+="a-z"
+  [[ "$value" =~ [A-Z] ]] && classes+="A-Z"
+  [[ "$value" =~ [0-9] ]] && classes+="0-9"
+  [[ "$value" =~ [^A-Za-z0-9] ]] && classes+=" and other characters"
+  echo "${#value} characters of ${classes}"
+}
+
 has_yaml_key() {
   local indent="$1" key="$2" document="$3"
   grep -qE "^${indent}(${key}|\"${key}\"):" <<<"$document"
@@ -90,7 +100,7 @@ checked_value() {
       ;;
     access-client-secret)
       value="$(tr -d '\r\n ')"
-      [[ "$value" =~ ^[0-9a-f]{64}$ ]] || fail "stdin holds no Access service token client secret"
+      [[ "$value" =~ ^[0-9a-f]{64}$ ]] || fail "stdin holds no Access service token client secret: 64 lower-case hex characters expected, got $(value_shape "$value")"
       echo "::add-mask::${value}" >&3
       ;;
     ipv4)

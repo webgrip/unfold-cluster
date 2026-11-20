@@ -95,6 +95,10 @@ expect "anything but a pre-auth key is refused" bash -c '! printf "tskey-auth-x\
 tunnel_token="$(printf '{"a":"account","s":"c2VjcmV0","t":"tunnel-id"}' | base64 -w0)"
 printf '%s\n' "$tunnel_token" | "$tool" put tunnel-token unfold-main/staging/cloudflare-tunnel token >"${work}/tunnel-out" 2>&1
 expect "a tunnel token is written and masked" bash -c 'grep -qF "::add-mask::$1" "$2" && [ "$(jq -r .token "$3")" = "$1" ]' _ "$tunnel_token" "${work}/tunnel-out" "${work}/kv/unfold-main_staging_cloudflare-tunnel"
+secret_shape_out="$(printf 'Secret-Value_1\n' | "$tool" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET 2>&1 || true)"
+expect "a client secret that is not 64 hex characters is refused with its shape" grep -q "got 14 characters of a-zA-Z0-9 and other characters" <<<"$secret_shape_out"
+expect "the refused client secret is never printed" bash -c '! grep -q "Secret-Value_1" <<<"$1"' _ "$secret_shape_out"
+expect "an empty client secret is refused as empty" bash -c 'printf "\n" | "$1" put access-client-secret cloudflare/unfold-staging-access CF_ACCESS_CLIENT_SECRET 2>&1 | grep -q "got empty"' _ "$tool"
 expect "a tunnel token without a tunnel id is refused" bash -c '! printf "%s\n" "$(printf "{\"a\":\"x\",\"s\":\"y\"}" | base64 -w0)" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 expect "a value that is not base64 JSON is refused as a tunnel token" bash -c '! printf "hskey-auth-abc\n" | "$1" put tunnel-token unfold-main/staging/cloudflare-tunnel token >/dev/null 2>&1' _ "$tool"
 
