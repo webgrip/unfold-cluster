@@ -20,7 +20,7 @@ put   writes stdin to PROPERTY and keeps the secret's other properties. It
                        a, t and s, masked in the log
         access-client-id      the client id of a Cloudflare Access service
                               token, 32 hex characters and .access
-        access-client-secret  that token's client secret, 64 hex characters,
+        access-client-secret  that token's client secret, cfast_ and 48 characters (64 hex before 2026-08-26),
                               masked in the log
         ipv4           a public IPv4 address, or an empty line to clear it
         talos-secrets  a talosctl secrets bundle
@@ -100,7 +100,7 @@ checked_value() {
       ;;
     access-client-secret)
       value="$(tr -d '\r\n ')"
-      [[ "$value" =~ ^[0-9a-f]{64}$ ]] || fail "stdin holds no Access service token client secret: 64 lower-case hex characters expected, got $(value_shape "$value")"
+      [[ "$value" =~ ^cfast_[A-Za-z0-9]{40}[A-Za-z0-9_-]{8}$ || "$value" =~ ^[0-9a-f]{64}$ ]] || fail "stdin holds no Access service token client secret: cfast_ and 48 characters, or 64 lower-case hex characters, expected, got $(value_shape "$value")"
       echo "::add-mask::${value}" >&3
       ;;
     ipv4)
